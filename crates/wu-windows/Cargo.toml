@@ -1,0 +1,43 @@
+[package]
+name = "wu-windows"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Windows side of the uninstall engine: registry, processes, privileges"
+
+[dependencies]
+wu-core = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Etw",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
+    "Win32_System_Registry",
+    "Win32_System_Restore",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# This crate is the one place that calls Win32 functions directly (job
+# objects, the process token, restore points, delete-on-restart, elevated
+# relaunch), so it cannot inherit the workspace's `unsafe_code = "forbid"`.
+# Every unsafe block carries a SAFETY comment, which clippy enforces.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+unwrap_used = "warn"
+expect_used = "warn"

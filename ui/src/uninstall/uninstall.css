@@ -1,0 +1,536 @@
+/* Generated from the module's original stylesheet by scope_css.py: every
+   rule is scoped to .un, and its colour tokens come from the suite's
+   (WattTask's) palette below. Edit this file directly from now on. */
+
+.un {
+  --panel: var(--surface);
+  --panel-2: var(--surface-2);
+  --line: var(--border);
+  --muted: var(--text-2);
+  --accent-soft: rgb(var(--accent-rgb) / 0.14);
+  --row-hover: var(--hover);
+  --row-selected: var(--selected);
+  --danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
+  --danger-text: #ffffff;
+  --ok-soft: color-mix(in srgb, var(--ok) 16%, transparent);
+  --warn-soft: color-mix(in srgb, var(--warn) 18%, transparent);
+  --focus: var(--accent);
+}
+
+:root[data-theme="dark"] .un {
+  --danger-text: #1a0b0c;
+}
+
+.un button,
+.un input,
+.un select {
+  font: inherit;
+  color: inherit;
+}
+
+.un :focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.un .view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+}
+
+.un #un-view-programs {
+  height: 100%;
+}
+
+.un .view-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.un h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.un h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.un .muted {
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+.un .toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.un input[type="search"],
+.un input:not([type]),
+.un select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.un input[type="search"] {
+  width: 260px;
+}
+
+.un button.primary,
+.un button.ghost,
+.un button.danger {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.un button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.un button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-text);
+  font-weight: 600;
+}
+
+.un button.ghost:hover {
+  background: var(--row-hover);
+}
+
+.un button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.un .table-wrap {
+  flex: 1 1 auto;
+  min-height: 200px;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.un table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.un thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.un thead th button {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  text-align: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.un th[aria-sort="ascending"] button::after {
+  content: " ▲";
+  font-size: 10px;
+}
+
+.un th[aria-sort="descending"] button::after {
+  content: " ▼";
+  font-size: 10px;
+}
+
+.un .num {
+  text-align: right;
+}
+
+.un tbody tr {
+  cursor: default;
+}
+
+.un tbody td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 340px;
+}
+
+.un tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.un tbody tr[aria-selected="true"] {
+  background: var(--row-selected);
+}
+
+.un .name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.un .avatar {
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: #fff;
+}
+
+.un .chip {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.un .details {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.un .details:empty {
+  display: none;
+}
+
+.un .details dt {
+  color: var(--muted);
+}
+
+.un .details dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.un .card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+.un .cards {
+  display: grid;
+  gap: 10px;
+}
+
+.un .form {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+}
+
+.un .form label {
+  display: grid;
+  gap: 6px;
+}
+
+.un .form label.check,
+.un label.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.un .error {
+  color: var(--danger);
+  margin: 0;
+  min-height: 1em;
+}
+
+.un .pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.un .pill.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.un .pill.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.un .pill.bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.un .entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 16px;
+  align-items: center;
+}
+
+.un .entry .meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.un .entry .actions {
+  display: flex;
+  gap: 8px;
+  grid-row: span 2;
+}
+
+.un .empty {
+  color: var(--muted);
+  padding: 30px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.un code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.un .backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(8 10 15 / 55%);
+  display: grid;
+  place-items: center;
+  z-index: 10;
+}
+
+.un .dialog {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  width: min(560px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.un .dialog.wide {
+  width: min(980px, calc(100vw - 40px));
+  height: calc(100vh - 60px);
+}
+
+.un .dialog header {
+  padding: 18px 22px 0;
+}
+
+.un .dialog .body {
+  padding: 14px 22px;
+  overflow: auto;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.un .dialog footer {
+  padding: 14px 22px 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.un .modes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.un .mode {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.un .mode:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.un .mode input {
+  grid-row: span 2;
+  margin-top: 3px;
+}
+
+.un .mode small {
+  color: var(--muted);
+}
+
+.un .steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.un .steps li {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.un .mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.un .mark.done {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--danger-text);
+}
+
+.un .mark.failed {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-text);
+}
+
+.un .mark.busy {
+  border: 2px solid var(--accent);
+  border-right-color: transparent;
+  animation: un-spin 0.9s linear infinite;
+}
+
+@keyframes un-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .un .mark.busy {
+    animation: none;
+  }
+}
+
+.un .leftover-group h3 {
+  margin: 4px 0 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.un .leftover {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 2px 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+
+.un .leftover .path {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.un .leftover .why {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.un .leftover .level {
+  grid-row: span 2;
+}
+
+.un .summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.un .stat {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.un .stat b {
+  display: block;
+  font-size: 20px;
+}
+
+.un .notice {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.un .notice.bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.un .dialog .body p {
+  white-space: pre-line;
+}
+
+.un .chip.traced {
+  color: var(--accent);
+  border-color: var(--accent);
+}

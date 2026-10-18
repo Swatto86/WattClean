@@ -1,0 +1,244 @@
+# Developer tools: editors, package caches and build output. Package caches
+# only hold copies that are downloaded again when a build needs them; build
+# output is made again by the next build.
+
+[[cleaner]]
+id = "vscode"
+name = "Visual Studio Code"
+description = "Code editor"
+category = "developer"
+template = "electron"
+vars = { root = '%APPDATA%\Code' }
+detect = ['{root}']
+running = ["code.exe"]
+
+[[cleaner.option]]
+id = "cached_data"
+name = "Compiled code cache"
+description = "Extension and editor code compiled ahead, and downloaded extension packages"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%APPDATA%\Code\CachedData' },
+  { op = "delete", search = "walk.all", path = '%APPDATA%\Code\CachedExtensionVSIXs' },
+  { op = "delete", search = "walk.all", path = '%APPDATA%\Code\CachedProfilesData' },
+]
+
+[[cleaner]]
+id = "cursor"
+name = "Cursor"
+description = "Code editor"
+category = "developer"
+template = "electron"
+vars = { root = '%APPDATA%\Cursor' }
+detect = ['{root}']
+running = ["cursor.exe"]
+
+[[cleaner]]
+id = "vscodium"
+name = "VSCodium"
+description = "Code editor"
+category = "developer"
+template = "electron"
+vars = { root = '%APPDATA%\VSCodium' }
+detect = ['{root}']
+running = ["vscodium.exe"]
+
+[[cleaner]]
+id = "github_desktop"
+name = "GitHub Desktop"
+description = "Git client"
+category = "developer"
+template = "electron"
+vars = { root = '%APPDATA%\GitHub Desktop' }
+detect = ['{root}']
+running = ["githubdesktop.exe"]
+
+[[cleaner]]
+id = "postman"
+name = "Postman"
+description = "API client"
+category = "developer"
+template = "electron"
+vars = { root = '%APPDATA%\Postman' }
+detect = ['{root}']
+running = ["postman.exe"]
+
+[[cleaner]]
+id = "jetbrains"
+name = "JetBrains IDEs"
+description = "IntelliJ IDEA, PyCharm, Rider, WebStorm and the others"
+category = "developer"
+detect = ['%LOCALAPPDATA%\JetBrains']
+running = ["idea64.exe", "pycharm64.exe", "rider64.exe", "webstorm64.exe", "clion64.exe", "goland64.exe", "rustrover64.exe"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "IDE log files"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\JetBrains\*\log' }]
+
+[[cleaner.option]]
+id = "caches"
+name = "Caches and indexes"
+description = "Project indexes and caches the IDEs build again"
+warning = "Each project is indexed again the next time it opens, which can take minutes."
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\JetBrains\*\caches' }]
+
+[[cleaner]]
+id = "npm"
+name = "npm"
+description = "Node.js package manager"
+category = "developer"
+detect = ['%LOCALAPPDATA%\npm-cache']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages and npm's logs"
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\npm-cache\_cacache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\npm-cache\_logs' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\npm-cache\_npx' },
+]
+
+[[cleaner]]
+id = "yarn"
+name = "Yarn"
+description = "Node.js package manager"
+category = "developer"
+detect = ['%LOCALAPPDATA%\Yarn\Cache']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages"
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Yarn\Cache' }]
+
+[[cleaner]]
+id = "pip"
+name = "pip"
+description = "Python package manager"
+category = "developer"
+detect = ['%LOCALAPPDATA%\pip\Cache']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages and built wheels"
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\pip\Cache' }]
+
+[[cleaner]]
+id = "nuget"
+name = "NuGet"
+description = ".NET package manager"
+category = "developer"
+detect = ['%LOCALAPPDATA%\NuGet', '%USERPROFILE%\.nuget']
+
+[[cleaner.option]]
+id = "http_cache"
+name = "Download cache"
+description = "NuGet's HTTP and plug-in caches"
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\NuGet\v3-cache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\NuGet\plugins-cache' },
+]
+
+[[cleaner.option]]
+id = "packages"
+name = "Global packages"
+description = "Every package restored for your projects"
+warning = "Each project downloads its packages again on its next restore or build."
+actions = [{ op = "delete", search = "walk.all", path = '%USERPROFILE%\.nuget\packages' }]
+
+[[cleaner]]
+id = "cargo"
+name = "Cargo"
+description = "Rust package manager"
+category = "developer"
+detect = ['%USERPROFILE%\.cargo\registry']
+
+[[cleaner.option]]
+id = "registry"
+name = "Crate downloads"
+description = "Downloaded crates and their unpacked sources"
+warning = "Builds download crates again, so building without internet fails until they have."
+actions = [
+  { op = "delete", search = "walk.all", path = '%USERPROFILE%\.cargo\registry\cache' },
+  { op = "delete", search = "walk.all", path = '%USERPROFILE%\.cargo\registry\src' },
+]
+
+[[cleaner]]
+id = "go"
+name = "Go"
+description = "Go toolchain"
+category = "developer"
+detect = ['%LOCALAPPDATA%\go-build']
+
+[[cleaner.option]]
+id = "build_cache"
+name = "Build cache"
+description = "Compiled packages Go builds again when needed"
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\go-build' }]
+
+[[cleaner]]
+id = "gradle"
+name = "Gradle"
+description = "Java build tool"
+category = "developer"
+detect = ['%USERPROFILE%\.gradle\caches']
+
+[[cleaner.option]]
+id = "caches"
+name = "Caches"
+description = "Downloaded dependencies and build caches"
+warning = "Builds download their dependencies again."
+actions = [{ op = "delete", search = "walk.all", path = '%USERPROFILE%\.gradle\caches' }]
+
+# Build output is found by the folder's name and the project file beside it
+# (a target folder beside Cargo.toml), never by the name alone. The search
+# covers your profile, skipping AppData, package caches and Git folders.
+
+[[cleaner]]
+id = "build_output"
+name = "Build output"
+description = "Files compilers make again on the next build, in your projects"
+category = "developer"
+
+[[cleaner.option]]
+id = "rust"
+name = "Rust build folders"
+description = "target folders beside a Cargo.toml, anywhere in your profile"
+warning = "Each Rust project is compiled from scratch on its next build, which can take many minutes. Searches your whole profile."
+actions = [
+  { op = "delete", search = "find.dirs", path = '%USERPROFILE%', names = 'target', beside = 'Cargo.toml', exclude = [
+    '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\.cargo',
+    '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle', '%USERPROFILE%\.m2',
+    '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode', '%ONEDRIVE%',
+  ] },
+]
+
+[[cleaner.option]]
+id = "dotnet"
+name = ".NET build folders"
+description = "bin and obj folders beside a .csproj, .fsproj or .vbproj file"
+warning = "Each .NET project is built from scratch on its next build. Searches your whole profile."
+actions = [
+  { op = "delete", search = "find.dirs", path = '%USERPROFILE%', names = 'bin;obj', beside = '*.csproj;*.fsproj;*.vbproj', exclude = [
+    '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\.cargo',
+    '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle', '%USERPROFILE%\.m2',
+    '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode', '%ONEDRIVE%',
+  ] },
+]
+
+[[cleaner.option]]
+id = "python"
+name = "Python bytecode"
+description = "__pycache__ folders, which Python fills again as it runs"
+actions = [
+  { op = "delete", search = "find.dirs", path = '%USERPROFILE%', names = '__pycache__', exclude = [
+    '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\.cargo',
+    '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle', '%USERPROFILE%\.m2',
+    '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode', '%ONEDRIVE%',
+  ] },
+]

@@ -1,0 +1,253 @@
+# Windows itself. Format: see ARCHITECTURE.md ("Cleaner definitions").
+# Paths take %VARIABLES% and * ? wildcards. Single-quoted strings are
+# literal, so backslashes need no escaping.
+
+[[cleaner]]
+id = "system"
+name = "System"
+description = "Temporary files, logs, crash data and caches Windows keeps"
+category = "system"
+
+[[cleaner.option]]
+id = "temp"
+name = "Temporary files"
+description = "Your temporary folder and Windows' own, leaving anything changed in the last day"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%TEMP%', older_than_days = 1 },
+  { op = "delete", search = "walk.all", path = '%WINDIR%\Temp', older_than_days = 1 },
+  { op = "delete", search = "walk.all", path = '%WINDIR%\SystemTemp', older_than_days = 1 },
+]
+
+[[cleaner.option]]
+id = "recycle_bin"
+name = "Recycle Bin"
+description = "Empty the Recycle Bin on every drive"
+actions = [{ op = "recycle-bin" }]
+
+[[cleaner.option]]
+id = "clipboard"
+name = "Clipboard"
+description = "Clear whatever was last copied"
+actions = [{ op = "clipboard" }]
+
+[[cleaner.option]]
+id = "error_reports"
+name = "Error reports"
+description = "Problem reports Windows Error Reporting has kept or not yet sent"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Windows\WER' },
+  { op = "delete", search = "walk.all", path = '%PROGRAMDATA%\Microsoft\Windows\WER\ReportArchive' },
+  { op = "delete", search = "walk.all", path = '%PROGRAMDATA%\Microsoft\Windows\WER\ReportQueue' },
+  { op = "delete", search = "walk.all", path = '%PROGRAMDATA%\Microsoft\Windows\WER\Temp' },
+]
+
+[[cleaner.option]]
+id = "memory_dumps"
+name = "Memory dumps"
+description = "Crash dumps of Windows and of programs, used only to diagnose crashes"
+actions = [
+  { op = "delete", path = '%WINDIR%\MEMORY.DMP' },
+  { op = "delete", search = "walk.all", path = '%WINDIR%\Minidump' },
+  { op = "delete", search = "walk.all", path = '%WINDIR%\LiveKernelReports', names = "*.dmp" },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\CrashDumps' },
+]
+
+[[cleaner.option]]
+id = "logs"
+name = "Windows logs"
+description = "Setup, update and component logs older than a day (some need administrator rights)"
+actions = [
+  { op = "delete", search = "walk.files", path = '%WINDIR%\Logs', names = "*.log;*.etl;*.cab", older_than_days = 1 },
+  { op = "delete", search = "glob", path = '%WINDIR%\*.log', kind = "file", older_than_days = 1 },
+  { op = "delete", search = "glob", path = '%WINDIR%\Panther\*.log', kind = "file", older_than_days = 1 },
+  { op = "delete", search = "glob", path = '%WINDIR%\debug\*.log', kind = "file", older_than_days = 1 },
+  { op = "delete", search = "glob", path = '%WINDIR%\security\logs\*.log', kind = "file", older_than_days = 1 },
+  { op = "delete", search = "walk.files", path = '%WINDIR%\SoftwareDistribution\DataStore\Logs', names = "*.log", older_than_days = 1 },
+  { op = "delete", search = "walk.files", path = '%WINDIR%\System32\LogFiles\Setupcln', older_than_days = 1 },
+]
+
+[[cleaner.option]]
+id = "chkdsk"
+name = "Old disk check fragments"
+description = "FILE*.CHK pieces Check Disk recovered into FOUND folders"
+actions = [
+  { op = "delete", search = "glob", path = '%SYSTEMDRIVE%\FOUND.*\*.chk', kind = "file" },
+]
+
+[[cleaner.option]]
+id = "prefetch"
+name = "Prefetch data"
+description = "Start-up hints Windows rebuilds as you use programs (administrator)"
+warning = "Programs may start a little slower until Windows has rebuilt its prefetch data."
+actions = [{ op = "delete", search = "glob", path = '%WINDIR%\Prefetch\*.pf', kind = "file" }]
+
+[[cleaner.option]]
+id = "update_cache"
+name = "Windows Update downloads"
+description = "Update files already installed (administrator)"
+warning = "Only clean this when no update is waiting to install or restart."
+actions = [{ op = "delete", search = "walk.all", path = '%WINDIR%\SoftwareDistribution\Download' }]
+
+[[cleaner.option]]
+id = "delivery_optimization"
+name = "Delivery Optimization cache"
+description = "Update pieces kept to share with other PCs (administrator)"
+actions = [
+  { op = "delete", search = "walk.all", path = '%WINDIR%\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache' },
+  { op = "delete", search = "walk.files", path = '%WINDIR%\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Logs' },
+]
+
+[[cleaner.option]]
+id = "muicache"
+name = "MUI cache"
+description = "The names of programs you have run, cached by Windows"
+actions = [
+  { op = "registry", key = 'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Windows\ShellNoRoam\MUICache' },
+]
+
+[[cleaner.option]]
+id = "free_disk_space"
+name = "Free disk space"
+description = "Overwrite the free space of the drive holding your temporary folder, after everything else"
+warning = "This is slow: it writes over all the free space on the drive, which is full while it runs."
+actions = [{ op = "free-disk-space" }]
+
+[[cleaner.option]]
+id = "custom"
+name = "Custom paths"
+description = "The files and folders you list in Settings › Custom paths"
+actions = [{ op = "custom-paths" }]
+
+[[cleaner]]
+id = "explorer"
+name = "Windows Explorer"
+description = "Recent files, run and search history, and Explorer's caches"
+category = "system"
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent documents"
+description = "Recent files and folders in Quick access, the Start menu and taskbar jump lists"
+actions = [
+  { op = "delete", search = "glob", path = '%APPDATA%\Microsoft\Windows\Recent\*.lnk', kind = "file" },
+  { op = "delete", search = "walk.files", path = '%APPDATA%\Microsoft\Windows\Recent\AutomaticDestinations' },
+  { op = "delete", search = "walk.files", path = '%APPDATA%\Microsoft\Windows\Recent\CustomDestinations' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs' },
+]
+
+[[cleaner.option]]
+id = "run"
+name = "Run history"
+description = "Commands typed into the Run box (Win+R)"
+actions = [{ op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU' }]
+
+[[cleaner.option]]
+id = "search"
+name = "Search and address history"
+description = "What you typed into Explorer's search box and address bar"
+actions = [
+  { op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\WordWheelQuery' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths' },
+]
+
+[[cleaner.option]]
+id = "dialogs"
+name = "Open and save history"
+description = "Files and folders recently used in Open and Save As dialogs"
+actions = [
+  { op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSavePidlMRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\LastVisitedPidlMRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\CIDSizeMRU' },
+]
+
+[[cleaner.option]]
+id = "network_drives"
+name = "Network drive history"
+description = "Shares typed into Map network drive"
+actions = [{ op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Map Network Drive MRU' }]
+
+[[cleaner.option]]
+id = "thumbnails"
+name = "Thumbnail cache"
+description = "Picture and video previews; Explorer makes them again when needed"
+actions = [{ op = "delete", search = "glob", path = '%LOCALAPPDATA%\Microsoft\Windows\Explorer\thumbcache_*.db', kind = "file" }]
+
+[[cleaner.option]]
+id = "usage"
+name = "Program usage history"
+description = "How often and when you started each program (UserAssist)"
+warning = "The Start menu's list of most-used programs starts again from nothing."
+actions = [{ op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist' }]
+
+[[cleaner.option]]
+id = "shellbags"
+name = "Folder view history"
+description = "Every folder you have opened, remembered with its view settings (shellbags)"
+warning = "Each folder goes back to its default view, size and sort order."
+actions = [
+  { op = "registry", key = 'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU' },
+  { op = "registry", key = 'HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags' },
+]
+
+[[cleaner]]
+id = "gpu_caches"
+name = "Graphics shader caches"
+description = "Compiled shaders kept by DirectX and the NVIDIA, AMD and Intel drivers"
+category = "system"
+
+[[cleaner.option]]
+id = "shaders"
+name = "Shader caches"
+description = "Games and apps compile them again the next time they need them"
+warning = "Games may stutter briefly while their shaders are compiled again."
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\D3DSCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\NVIDIA\DXCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\NVIDIA\GLCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\NVIDIA\OptixCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALLOWAPPDATA%\NVIDIA\PerDriverVersion\DXCache' },
+  { op = "delete", search = "walk.all", path = '%APPDATA%\NVIDIA\ComputeCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\AMD\DxCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\AMD\DxcCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\AMD\GLCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\AMD\VkCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALLOWAPPDATA%\Intel\ShaderCache' },
+]
+
+[[cleaner]]
+id = "remote_desktop"
+name = "Remote Desktop"
+description = "Microsoft's Remote Desktop Connection"
+category = "system"
+detect_registry = ['HKCU\Software\Microsoft\Terminal Server Client']
+running = ["mstsc.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Bitmap cache"
+description = "Screen pieces kept to make sessions faster"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Terminal Server Client\Cache' }]
+
+[[cleaner.option]]
+id = "history"
+name = "Connection history"
+description = "The computers listed in the Computer box"
+actions = [{ op = "registry", key = 'HKCU\Software\Microsoft\Terminal Server Client\Default' }]
+
+[[cleaner]]
+id = "powershell"
+name = "PowerShell"
+description = "Windows PowerShell and PowerShell 7"
+category = "system"
+detect = ['%APPDATA%\Microsoft\Windows\PowerShell']
+
+[[cleaner.option]]
+id = "history"
+name = "Command history"
+description = "Commands PSReadLine saved for the up-arrow and Ctrl+R"
+warning = "Earlier commands are no longer offered when you press the up arrow."
+actions = [{ op = "delete", search = "glob", path = '%APPDATA%\Microsoft\Windows\PowerShell\PSReadLine\*_history.txt', kind = "file" }]

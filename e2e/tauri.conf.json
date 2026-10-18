@@ -1,0 +1,16 @@
+{
+  "identifier": "co.swatto.wattclean.e2e",
+  "app": {
+    "security": {
+      "capabilities": [
+        "main",
+        {
+          "identifier": "e2e",
+          "description": "What the suite's own calls need beyond `main`: closing the window as the title bar's X does. Only the e2e build has it.",
+          "windows": ["main"],
+          "permissions": ["core:window:allow-close"]
+        }
+      ]
+    }
+  }
+}

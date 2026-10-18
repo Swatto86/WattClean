@@ -1,0 +1,446 @@
+# Web browsers. Chromium-based browsers share the "chromium" template and
+# Firefox-based ones the "firefox" template; each cleaner only says where
+# its folders are. {root} is the browser's data folder; {profile} matches
+# each profile folder in it, {cache} each folder holding a profile's cache.
+
+[[template]]
+id = "chromium"
+vars = { profile = '{root}\*', cache = '{profile}' }
+
+[[template.option]]
+id = "cache"
+name = "Cache"
+description = "Web pages, images, scripts and compiled code kept to load sites faster"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '{cache}\Cache' },
+  { op = "delete", search = "walk.all", path = '{cache}\Code Cache' },
+  { op = "delete", search = "walk.all", path = '{cache}\GPUCache' },
+  { op = "delete", search = "walk.all", path = '{cache}\Media Cache' },
+  { op = "delete", search = "walk.all", path = '{cache}\Application Cache' },
+  { op = "delete", search = "walk.all", path = '{cache}\DawnCache' },
+  { op = "delete", search = "walk.all", path = '{cache}\DawnGraphiteCache' },
+  { op = "delete", search = "walk.all", path = '{cache}\DawnWebGPUCache' },
+  { op = "delete", search = "walk.all", path = '{profile}\Service Worker\CacheStorage' },
+  { op = "delete", search = "walk.all", path = '{profile}\Service Worker\ScriptCache' },
+  { op = "delete", search = "walk.all", path = '{root}\GrShaderCache' },
+  { op = "delete", search = "walk.all", path = '{root}\GraphiteDawnCache' },
+  { op = "delete", search = "walk.all", path = '{root}\ShaderCache' },
+]
+
+[[template.option]]
+id = "cookies"
+name = "Cookies"
+description = "Small files sites keep to recognise you, including sign-ins"
+warning = "You will be signed out of most websites."
+actions = [
+  { op = "delete", search = "glob", path = '{profile}\Cookies', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Cookies-journal', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Network\Cookies', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Network\Cookies-journal', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Extension Cookies', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Extension Cookies-journal', kind = "file" },
+]
+
+[[template.option]]
+id = "history"
+name = "History"
+description = "Visited pages, search terms, most-visited tiles and address-bar suggestions"
+actions = [
+  { op = "sqlite", search = "glob", path = '{profile}\History', sql = "chrome-history" },
+  { op = "delete", search = "glob", path = '{profile}\History Provider Cache', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Top Sites', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Top Sites-journal', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Visited Links', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Shortcuts', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Shortcuts-journal', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Network Action Predictor', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Network Action Predictor-journal', kind = "file" },
+]
+
+[[template.option]]
+id = "downloads"
+name = "Download history"
+description = "The list of downloaded files (the files themselves stay)"
+actions = [{ op = "sqlite", search = "glob", path = '{profile}\History', sql = "chrome-downloads" }]
+
+[[template.option]]
+id = "session"
+name = "Session"
+description = "The tabs and windows open last time"
+warning = "Your open tabs will not be restored the next time the browser starts."
+actions = [
+  { op = "delete", search = "glob", path = '{profile}\Current Session', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Current Tabs', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Last Session', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Last Tabs', kind = "file" },
+  { op = "delete", search = "walk.all", path = '{profile}\Sessions' },
+]
+
+[[template.option]]
+id = "forms"
+name = "Form history"
+description = "Words typed into web forms and saved addresses"
+actions = [{ op = "sqlite", search = "glob", path = '{profile}\Web Data', sql = "chrome-autofill" }]
+
+[[template.option]]
+id = "passwords"
+name = "Saved passwords"
+description = "Passwords the browser saved on this PC"
+warning = "Saved passwords are deleted from this PC. Passwords synced to an account may come back."
+actions = [
+  { op = "delete", search = "glob", path = '{profile}\Login Data', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Login Data-journal', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Login Data For Account', kind = "file" },
+  { op = "delete", search = "glob", path = '{profile}\Login Data For Account-journal', kind = "file" },
+]
+
+[[template.option]]
+id = "site_storage"
+name = "Site storage"
+description = "Data sites keep on your PC: local storage, IndexedDB and file systems"
+warning = "Sites forget data they keep locally, such as offline mail, game progress and settings."
+actions = [
+  { op = "delete", search = "walk.all", path = '{profile}\Local Storage' },
+  { op = "delete", search = "walk.all", path = '{profile}\Session Storage' },
+  { op = "delete", search = "walk.all", path = '{profile}\IndexedDB' },
+  { op = "delete", search = "walk.all", path = '{profile}\databases' },
+  { op = "delete", search = "walk.all", path = '{profile}\File System' },
+]
+
+[[template.option]]
+id = "search_engines"
+name = "Site search engines"
+description = "Search engines sites added by themselves (yours and the default stay)"
+actions = [{ op = "sqlite", search = "glob", path = '{profile}\Web Data', sql = "chrome-keywords" }]
+
+[[template.option]]
+id = "crash_reports"
+name = "Crash reports"
+description = "Reports kept after the browser crashed"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '{root}\Crashpad\reports' }]
+
+[[template.option]]
+id = "vacuum"
+name = "Vacuum"
+description = "Compact the browser's databases to give back unused space (keeps their data)"
+actions = [
+  { op = "sqlite", search = "glob", path = '{profile}\History', sql = "vacuum" },
+  { op = "sqlite", search = "glob", path = '{profile}\Web Data', sql = "vacuum" },
+  { op = "sqlite", search = "glob", path = '{profile}\Favicons', sql = "vacuum" },
+  { op = "sqlite", search = "glob", path = '{profile}\Top Sites', sql = "vacuum" },
+  { op = "sqlite", search = "glob", path = '{profile}\Shortcuts', sql = "vacuum" },
+  { op = "sqlite", search = "glob", path = '{profile}\Network\Cookies', sql = "vacuum" },
+  { op = "sqlite", search = "glob", path = '{profile}\Login Data', sql = "vacuum" },
+]
+
+[[template]]
+id = "firefox"
+vars = { root = '{base}\Profiles', cache = '{cachebase}\Profiles' }
+
+[[template.option]]
+id = "cache"
+name = "Cache"
+description = "Web pages, images and scripts kept to load sites faster"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '{cache}\*\cache2' },
+  { op = "delete", search = "walk.all", path = '{cache}\*\startupCache' },
+  { op = "delete", search = "walk.all", path = '{cache}\*\thumbnails' },
+  { op = "delete", search = "walk.all", path = '{cache}\*\jumpListCache' },
+  { op = "delete", search = "walk.all", path = '{cache}\*\OfflineCache' },
+  { op = "delete", search = "walk.all", path = '{root}\*\shader-cache' },
+]
+
+[[template.option]]
+id = "cookies"
+name = "Cookies"
+description = "Small files sites keep to recognise you, including sign-ins"
+warning = "You will be signed out of most websites."
+actions = [{ op = "delete", search = "glob", path = '{root}\*\cookies.sqlite*', kind = "file" }]
+
+[[template.option]]
+id = "history"
+name = "History"
+description = "Visited pages and typed addresses; bookmarks stay"
+actions = [
+  { op = "sqlite", search = "glob", path = '{root}\*\places.sqlite', sql = "mozilla-history" },
+  { op = "delete", search = "glob", path = '{root}\*\SiteSecurityServiceState.*', kind = "file" },
+]
+
+[[template.option]]
+id = "downloads"
+name = "Download history"
+description = "The list of downloaded files (the files themselves stay)"
+actions = [
+  { op = "sqlite", search = "glob", path = '{root}\*\places.sqlite', sql = "mozilla-downloads" },
+  { op = "delete", search = "glob", path = '{root}\*\downloads.sqlite', kind = "file" },
+  { op = "delete", search = "glob", path = '{root}\*\downloads.json', kind = "file" },
+]
+
+[[template.option]]
+id = "session"
+name = "Session"
+description = "The tabs and windows open last time"
+warning = "Your open tabs will not be restored the next time the browser starts."
+actions = [
+  { op = "delete", search = "glob", path = '{root}\*\sessionstore.jsonlz4', kind = "file" },
+  { op = "delete", search = "glob", path = '{root}\*\sessionstore.js', kind = "file" },
+  { op = "delete", search = "walk.all", path = '{root}\*\sessionstore-backups' },
+]
+
+[[template.option]]
+id = "forms"
+name = "Form history"
+description = "Words typed into web forms and the search bar"
+actions = [{ op = "delete", search = "glob", path = '{root}\*\formhistory.sqlite*', kind = "file" }]
+
+[[template.option]]
+id = "passwords"
+name = "Saved passwords"
+description = "Passwords saved on this PC"
+warning = "Saved passwords are deleted from this PC. Passwords synced to an account may come back."
+actions = [
+  { op = "delete", search = "glob", path = '{root}\*\logins.json', kind = "file" },
+  { op = "delete", search = "glob", path = '{root}\*\logins-backup.json', kind = "file" },
+  { op = "delete", search = "glob", path = '{root}\*\signons.sqlite', kind = "file" },
+]
+
+[[template.option]]
+id = "site_storage"
+name = "Site storage"
+description = "Data sites keep on your PC: local storage and IndexedDB"
+warning = "Sites forget data they keep locally, such as offline mail, game progress and settings."
+actions = [
+  { op = "delete", search = "walk.all", path = '{root}\*\storage\default' },
+  { op = "delete", search = "walk.all", path = '{root}\*\storage\temporary' },
+  { op = "delete", search = "glob", path = '{root}\*\webappsstore.sqlite*', kind = "file" },
+]
+
+[[template.option]]
+id = "site_preferences"
+name = "Site preferences"
+description = "Per-site settings such as zoom level"
+actions = [{ op = "delete", search = "glob", path = '{root}\*\content-prefs.sqlite*', kind = "file" }]
+
+[[template.option]]
+id = "crash_reports"
+name = "Crash reports"
+description = "Reports kept after the browser crashed"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '{base}\Crash Reports\pending' },
+  { op = "delete", search = "walk.all", path = '{base}\Crash Reports\submitted' },
+  { op = "delete", search = "walk.all", path = '{root}\*\minidumps' },
+]
+
+[[template.option]]
+id = "telemetry"
+name = "Telemetry"
+description = "Usage reports saved before sending"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '{root}\*\datareporting\archived' },
+  { op = "delete", search = "walk.all", path = '{root}\*\saved-telemetry-pings' },
+]
+
+[[template.option]]
+id = "backups"
+name = "Bookmark backups"
+description = "Daily copies of your bookmarks"
+warning = "Bookmarks can no longer be restored from an earlier day."
+actions = [{ op = "delete", search = "walk.all", path = '{root}\*\bookmarkbackups' }]
+
+[[template.option]]
+id = "vacuum"
+name = "Vacuum"
+description = "Compact the browser's databases to give back unused space (keeps their data)"
+actions = [{ op = "sqlite", search = "glob", path = '{root}\*\*.sqlite', sql = "vacuum" }]
+
+# Chromium family
+
+[[cleaner]]
+id = "chrome"
+name = "Google Chrome"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%LOCALAPPDATA%\Google\Chrome\User Data' }
+detect = ['{root}']
+running = ["chrome.exe"]
+
+[[cleaner]]
+id = "edge"
+name = "Microsoft Edge"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%LOCALAPPDATA%\Microsoft\Edge\User Data' }
+detect = ['{root}']
+running = ["msedge.exe"]
+
+[[cleaner]]
+id = "brave"
+name = "Brave"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data' }
+detect = ['{root}']
+running = ["brave.exe"]
+
+[[cleaner]]
+id = "vivaldi"
+name = "Vivaldi"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%LOCALAPPDATA%\Vivaldi\User Data' }
+detect = ['{root}']
+running = ["vivaldi.exe"]
+
+[[cleaner]]
+id = "chromium"
+name = "Chromium"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%LOCALAPPDATA%\Chromium\User Data' }
+detect = ['{root}']
+running = ["chrome.exe"]
+
+[[cleaner]]
+id = "opera"
+name = "Opera"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%APPDATA%\Opera Software\Opera Stable', profile = '{root}', cache = '%LOCALAPPDATA%\Opera Software\Opera Stable' }
+detect = ['{root}']
+running = ["opera.exe"]
+
+[[cleaner]]
+id = "opera_gx"
+name = "Opera GX"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%APPDATA%\Opera Software\Opera GX Stable', profile = '{root}', cache = '%LOCALAPPDATA%\Opera Software\Opera GX Stable' }
+detect = ['{root}']
+running = ["opera.exe"]
+
+# Firefox family
+
+[[cleaner]]
+id = "firefox"
+name = "Firefox"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%APPDATA%\Mozilla\Firefox', cachebase = '%LOCALAPPDATA%\Mozilla\Firefox' }
+detect = ['{root}']
+running = ["firefox.exe"]
+
+[[cleaner]]
+id = "waterfox"
+name = "Waterfox"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%APPDATA%\Waterfox', cachebase = '%LOCALAPPDATA%\Waterfox' }
+detect = ['{root}']
+running = ["waterfox.exe"]
+
+[[cleaner]]
+id = "librewolf"
+name = "LibreWolf"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%APPDATA%\librewolf', cachebase = '%LOCALAPPDATA%\librewolf' }
+detect = ['{root}']
+running = ["librewolf.exe"]
+
+[[cleaner]]
+id = "floorp"
+name = "Floorp"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%APPDATA%\Floorp', cachebase = '%LOCALAPPDATA%\Floorp' }
+detect = ['{root}']
+running = ["floorp.exe"]
+
+[[cleaner]]
+id = "zen"
+name = "Zen Browser"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%APPDATA%\zen', cachebase = '%LOCALAPPDATA%\zen' }
+detect = ['{root}']
+running = ["zen.exe"]
+
+[[cleaner]]
+id = "palemoon"
+name = "Pale Moon"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%APPDATA%\Moonchild Productions\Pale Moon', cachebase = '%LOCALAPPDATA%\Moonchild Productions\Pale Moon' }
+detect = ['{root}']
+running = ["palemoon.exe"]
+
+[[cleaner]]
+id = "seamonkey"
+name = "SeaMonkey"
+description = "Web browser and mail"
+category = "browsers"
+template = "firefox"
+vars = { base = '%APPDATA%\Mozilla\SeaMonkey', cachebase = '%LOCALAPPDATA%\Mozilla\SeaMonkey' }
+detect = ['{root}']
+running = ["seamonkey.exe"]
+
+[[cleaner]]
+id = "thunderbird"
+name = "Thunderbird"
+description = "Mail"
+category = "browsers"
+template = "firefox"
+vars = { base = '%APPDATA%\Thunderbird', cachebase = '%LOCALAPPDATA%\Thunderbird' }
+# Mail account passwords and open mail tabs are not browsing data.
+skip = ["passwords", "session", "downloads", "backups", "telemetry"]
+detect = ['{root}']
+running = ["thunderbird.exe"]
+
+[[cleaner]]
+id = "internet_explorer"
+name = "Internet Explorer"
+description = "Windows' own web cache, also used by many programs"
+category = "browsers"
+running = ["iexplore.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Temporary Internet Files"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Windows\INetCache' }]
+
+[[cleaner.option]]
+id = "cookies"
+name = "Cookies"
+description = "Cookies kept by Windows' web components"
+warning = "Programs that use Windows' web components may sign you out."
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Windows\INetCookies' }]
+
+[[cleaner.option]]
+id = "history"
+name = "History"
+description = "Pages visited with Internet Explorer and typed addresses"
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Windows\History' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Internet Explorer\TypedURLs' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Internet Explorer\TypedURLsTime' },
+]

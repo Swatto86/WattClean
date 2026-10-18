@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>WattClean</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/registry/registry.css" />
+    <link rel="stylesheet" href="/src/uninstall/uninstall.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <nav id="nav" class="nav" aria-label="Pages">
+        <button id="nav-toggle" class="nav-item nav-toggle" type="button" aria-label="Show page names" aria-expanded="true">
+          <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <div id="nav-pages" class="nav-pages"></div>
+        <div class="nav-spacer"></div>
+        <div id="nav-bottom" class="nav-pages"></div>
+      </nav>
+      <div class="main">
+        <header class="header">
+          <h1 id="page-title" class="page-title">WattClean</h1>
+          <div id="search-box" class="search-box" hidden>
+            <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13z" />
+              <path d="M15.5 15.5L20 20" />
+            </svg>
+            <input id="search" type="search" autocomplete="off" spellcheck="false" placeholder="Find a cleaner" aria-label="Find a cleaner" />
+          </div>
+          <span id="test-machine" class="pill warn" hidden>Test machine</span>
+          <div id="commands" class="commands" role="toolbar" aria-label="Commands"></div>
+        </header>
+        <main id="content" class="content"></main>
+        <footer id="status" class="status">
+          <span id="status-selection"></span>
+          <span id="status-rights"></span>
+          <button id="status-admin" class="link" type="button" hidden>Restart as administrator</button>
+          <span id="status-note" class="status-note"></span>
+        </footer>
+      </div>
+    </div>
+    <!-- The registry cleaner's and the uninstaller's views, wired at start
+         and moved into #content as pages; their ids carry the module's
+         prefix (reg-, un-). -->
+    <div id="module-views" hidden>
+        <section id="reg-view-cleaner" class="view reg" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Finds entries left behind by programs that are gone. Everything removed is backed up first.</p>
+            </div>
+            <div class="toolbar" id="reg-cleaner-toolbar" hidden>
+              <button id="reg-cleaner-again" class="ghost" type="button">New scan</button>
+              <button id="reg-cleaner-clean" class="danger" type="button" disabled>Clean</button>
+            </div>
+          </header>
+          <form id="reg-cleaner-start" class="card form wide-form">
+            <fieldset class="modes" id="reg-cleaner-modes">
+              <legend>Scan mode</legend>
+              <label class="mode"><input type="radio" name="mode" value="safe" /> <b>Safe</b><small>The most common places programs leave entries. Nothing questionable.</small></label>
+              <label class="mode"><input type="radio" name="mode" value="moderate" /> <b>Moderate</b><small>Safe, plus COM components, firewall rules, sounds, file extensions and installer records.</small></label>
+              <label class="mode"><input type="radio" name="mode" value="advanced" /> <b>Advanced</b><small>Moderate, plus services, empty keys, broken file types and history lists. Check before cleaning.</small></label>
+              <label class="mode"><input type="radio" name="mode" value="custom" /> <b>Custom</b><small>Choose the categories yourself.</small></label>
+            </fieldset>
+            <fieldset id="reg-cleaner-custom" class="checklist" hidden>
+              <legend>Categories</legend>
+            </fieldset>
+            <label class="check"><input type="checkbox" id="reg-cleaner-all" /> Also scan every other account on this PC</label>
+            <p id="reg-cleaner-error" class="error" role="alert"></p>
+            <div class="toolbar">
+              <button id="reg-cleaner-scan" class="primary" type="submit">Scan</button>
+              <button id="reg-cleaner-quick" class="ghost" type="submit" title="Scan, then go straight to cleaning what the scan ticks">Scan and clean</button>
+            </div>
+          </form>
+          <div id="reg-cleaner-busy" class="card busy" hidden>
+            <span class="mark busy" aria-hidden="true"></span>
+            <div><b>Scanning…</b><p id="reg-cleaner-phase" class="muted" role="status"></p></div>
+            <button id="reg-cleaner-cancel" class="ghost" type="button">Cancel</button>
+          </div>
+          <div id="reg-cleaner-results" class="results" hidden>
+            <p id="reg-cleaner-summary" class="summary" role="status"></p>
+            <div id="reg-cleaner-notes"></div>
+            <div id="reg-cleaner-tree" aria-label="Entries found"></div>
+          </div>
+        </section>
+
+        <section id="reg-view-search" class="view reg" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Find keys, values and data containing a word, and remove the ones you choose with a backup.</p>
+            </div>
+            <div class="toolbar" id="reg-search-toolbar" hidden>
+              <button id="reg-search-delete" class="danger" type="button" disabled>Remove</button>
+            </div>
+          </header>
+          <form id="reg-search-form" class="card form wide-form">
+            <div class="row">
+              <label>Search for <input id="reg-search-text" required minlength="3" maxlength="256" placeholder="e.g. Fabrikam" /></label>
+              <label>Within <input id="reg-search-within" maxlength="1000" placeholder="Whole registry, or a key such as HKEY_CURRENT_USER\Software" /></label>
+            </div>
+            <div class="row checks">
+              <label class="check"><input type="checkbox" id="reg-search-keys" checked /> Key names</label>
+              <label class="check"><input type="checkbox" id="reg-search-values" checked /> Value names</label>
+              <label class="check"><input type="checkbox" id="reg-search-data" checked /> Data</label>
+              <label class="check"><input type="checkbox" id="reg-search-case" /> Match case</label>
+              <label class="check"><input type="checkbox" id="reg-search-whole" /> Match whole text</label>
+            </div>
+            <p id="reg-search-error" class="error" role="alert"></p>
+            <div class="toolbar">
+              <button id="reg-search-go" class="primary" type="submit">Search</button>
+              <button id="reg-search-cancel" class="ghost" type="button" hidden>Stop</button>
+              <span id="reg-search-phase" class="muted" role="status"></span>
+            </div>
+          </form>
+          <div id="reg-search-results" class="results" hidden>
+            <p id="reg-search-summary" class="summary" role="status"></p>
+            <div id="reg-search-notes"></div>
+            <div id="reg-search-tree" aria-label="Matches"></div>
+          </div>
+        </section>
+
+        <section id="reg-view-tuner" class="view reg" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Lesser-known Windows settings. Switching one off puts back exactly what was there before.</p>
+            </div>
+            <div class="toolbar">
+              <input id="reg-tuner-filter" type="search" placeholder="Filter tweaks" aria-label="Filter tweaks" />
+              <button id="reg-tuner-explorer" class="ghost" type="button">Restart File Explorer</button>
+              <button id="reg-tuner-sign-out" class="ghost" type="button">Sign out</button>
+              <button id="reg-tuner-restart" class="ghost" type="button">Restart PC</button>
+              <button id="reg-tuner-reset" class="ghost" type="button">Undo all my changes</button>
+            </div>
+          </header>
+          <p id="reg-tuner-pending" class="notice" role="status" hidden></p>
+          <div id="reg-tuner-list" class="tweaks"></div>
+        </section>
+
+        <section id="reg-view-watcher" class="view reg" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Logs every change made beneath the keys you choose while WattClean is open, and which program made it.</p>
+            </div>
+          </header>
+          <p id="reg-watch-tracing" class="notice" role="status" hidden></p>
+          <form id="reg-watch-form" class="card inline-form">
+            <label class="grow">Key to watch <input id="reg-watch-key" maxlength="1000" placeholder="e.g. HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run" /></label>
+            <button id="reg-watch-add" class="primary" type="submit">Watch</button>
+            <p id="reg-watch-error" class="error" role="alert"></p>
+          </form>
+          <div class="watch-split">
+            <ul id="reg-watch-list" class="watch-list" aria-label="Watched keys" data-menu="watches"></ul>
+            <div class="watch-log">
+              <div class="toolbar">
+                <input id="reg-watch-filter" type="search" placeholder="Filter changes" aria-label="Filter changes" />
+                <button id="reg-watch-export" class="ghost" type="button" disabled>Export…</button>
+                <button id="reg-watch-clear" class="ghost" type="button" disabled>Clear</button>
+              </div>
+              <div class="table-wrap" data-menu="events">
+                <table aria-label="Changes">
+                  <thead><tr><th>Time</th><th>Process</th><th>Change</th><th>Key</th><th>Value</th><th>Old data</th><th>New data</th></tr></thead>
+                  <tbody id="reg-watch-events"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="reg-view-backups" class="view reg" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Every registry entry WattClean removed, and keys you backed up yourself. Restoring never overwrites what is there now.</p>
+            </div>
+            <div class="toolbar">
+              <button id="reg-backup-key" class="primary" type="button">Back up a key…</button>
+              <button id="reg-backup-full" class="ghost" type="button">Full backup</button>
+              <button id="reg-backup-delete-all" class="ghost" type="button">Delete all</button>
+            </div>
+          </header>
+          <div id="reg-backup-list" class="cards" data-menu="backups"></div>
+        </section>
+
+        <section id="reg-view-schedules" class="view reg" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Automatic cleans and backups. Windows Task Scheduler runs them, even when WattClean is closed, as long as you are signed in.</p>
+            </div>
+            <div class="toolbar"><button id="reg-job-new" class="primary" type="button">New schedule…</button></div>
+          </header>
+          <div id="reg-job-list" class="cards" data-menu="jobs"></div>
+        </section>
+
+        <section id="reg-view-settings" class="view reg" hidden>
+          <form id="reg-settings-form" class="card form">
+            <label class="check"><input type="checkbox" id="reg-set-removable" /> Skip entries pointing at USB, network or unplugged drives</label>
+            <label class="check"><input type="checkbox" id="reg-set-windows" /> Skip entries pointing inside the Windows folder</label>
+            <label class="check"><input type="checkbox" id="reg-set-restore" /> Offer a System Restore point before each clean</label>
+            <label class="check"><input type="checkbox" id="reg-set-full" /> Offer a full registry backup before each clean (administrator only; a few hundred MB each)</label>
+            <label class="check"><input type="checkbox" id="reg-set-force" /> Take ownership of protected keys when cleaning (administrator only; their permissions are kept in the backup)</label>
+            <label>Delete cleaner and search backups older than (days; 0 keeps them, hand backups are always kept)
+              <input id="reg-set-keep-days" type="number" min="0" max="3650" step="1" />
+            </label>
+            <label>When all backups take more than (MB; 0 sets no limit), delete the oldest cleaner, search and full backups; the newest is always kept
+              <input id="reg-set-keep-mb" type="number" min="0" max="1048576" step="1" />
+            </label>
+            <p id="reg-settings-status" class="muted" role="status"></p>
+            <div class="toolbar">
+              <button id="reg-settings-export" class="ghost" type="button">Export settings…</button>
+              <button id="reg-settings-import" class="ghost" type="button">Import settings…</button>
+            </div>
+          </form>
+          <div class="card form" id="reg-backups-folder-card">
+            <h2>Backups folder</h2>
+            <p class="muted">Where backups are kept. Changing it moves every backup there.</p>
+            <p><code id="reg-backups-folder"></code></p>
+            <div class="toolbar">
+              <button id="reg-backups-change" class="ghost" type="button">Change…</button>
+              <button id="reg-backups-default" class="ghost" type="button">Use the default</button>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Exclude list</h2>
+            <p class="muted">Keys the cleaner and search never offer.</p>
+            <div id="reg-excludes" class="key-list" data-menu="keylist"></div>
+          </div>
+          <div class="card">
+            <h2>Include list</h2>
+            <p class="muted">Keys whose contents a custom scan with "Include list" ticked offers for removal. Add with care.</p>
+            <div id="reg-includes" class="key-list" data-menu="keylist"></div>
+          </div>
+          <div class="card form" id="reg-background-card">
+            <label class="check"><input type="checkbox" id="reg-set-autostart" /> Start with Windows, in the notification area</label>
+            <p id="reg-autostart-problem" class="muted" role="status"></p>
+          </div>
+        </section>
+
+        <section id="un-view-programs" class="view un" hidden>
+          <header class="view-head">
+            <div>
+              <p id="un-program-count" class="muted">Loading…</p>
+            </div>
+            <div class="toolbar">
+              <input id="un-search" type="search" placeholder="Search name or publisher" aria-label="Search programs" />
+              <button id="un-refresh" class="ghost" title="Refresh (F5)">Refresh</button>
+              <button id="un-uninstall" class="primary" disabled>Uninstall</button>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table class="programs" aria-label="Installed programs">
+              <thead>
+                <tr>
+                  <th data-sort="name" aria-sort="ascending"><button>Name</button></th>
+                  <th data-sort="publisher"><button>Publisher</button></th>
+                  <th data-sort="version"><button>Version</button></th>
+                  <th data-sort="size" class="num"><button>Size</button></th>
+                  <th data-sort="date"><button>Installed</button></th>
+                </tr>
+              </thead>
+              <tbody id="un-program-rows"></tbody>
+            </table>
+          </div>
+          <dl id="un-details" class="details" aria-live="polite"></dl>
+        </section>
+
+        <section id="un-view-traced" class="view un" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Install a program while WattClean records every file and registry entry it creates. Its uninstall then removes exactly those.</p>
+            </div>
+            <div class="toolbar"><button id="un-trace-install" class="primary">Install with tracing…</button></div>
+          </header>
+          <div id="un-log-list" class="cards"></div>
+        </section>
+
+        <section id="un-view-forced" class="view un" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">For a program whose uninstaller is broken or already gone: find and remove what is left of it.</p>
+            </div>
+          </header>
+          <form id="un-forced-form" class="card form">
+            <label>Program name
+              <input id="un-forced-name" required minlength="3" maxlength="200" placeholder="e.g. Acme Widget" />
+            </label>
+            <label>Its folder <span class="muted">(optional, full path)</span>
+              <input id="un-forced-folder" placeholder="e.g. C:\Program Files\Acme\Widget" />
+            </label>
+            <label>Scan mode
+              <select id="un-forced-mode">
+                <option value="safe">Safe</option>
+                <option value="moderate" selected>Moderate</option>
+                <option value="advanced">Advanced</option>
+              </select>
+            </label>
+            <p id="un-forced-error" class="error" role="alert"></p>
+            <div><button id="un-forced-scan" class="primary" type="submit">Scan for leftovers</button></div>
+          </form>
+        </section>
+
+        <section id="un-view-backups" class="view un" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Everything the uninstaller removes is backed up here first. Restore puts it back exactly.</p>
+            </div>
+          </header>
+          <div id="un-backup-list" class="cards"></div>
+        </section>
+
+        <section id="un-view-history" class="view un" hidden>
+          <header class="view-head">
+            <div>
+              <p class="muted">Every uninstall, with what was removed.</p>
+            </div>
+            <div class="toolbar"><button id="un-clear-history" class="ghost">Clear history</button></div>
+          </header>
+          <div id="un-history-list" class="cards"></div>
+        </section>
+
+        <section id="un-view-settings" class="view un" hidden>
+          <form id="un-settings-form" class="card form">
+            <label>Default scan mode
+              <select id="un-set-mode">
+                <option value="safe">Safe</option>
+                <option value="moderate">Moderate</option>
+                <option value="advanced">Advanced</option>
+              </select>
+            </label>
+            <label class="check"><input type="checkbox" id="un-set-restore" /> Create a System Restore point before each uninstall</label>
+            <label class="check"><input type="checkbox" id="un-set-quiet" /> Run uninstallers silently where they allow it</label>
+            <label class="check"><input type="checkbox" id="un-set-system" /> Show system components in the program list</label>
+            <p id="un-settings-status" class="muted" role="status"></p>
+          </form>
+        </section>
+
+    </div>
+    <div id="reg-dialog-root" class="reg"></div>
+    <div id="un-dialog-root" class="un"></div>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

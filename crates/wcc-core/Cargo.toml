@@ -1,0 +1,32 @@
+[package]
+name = "wcc-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WattClean's cleaning engine: cleaner definitions, preview, clean, shred and wipe"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# Built-in and custom cleaner definitions are TOML files a person can read.
+toml = "0.9"
+# Name filters in cleaner definitions (BleachBit's regex / nregex).
+regex = "1"
+# BleachBit CleanerML files are XML; read-only, no dependencies of its own.
+roxmltree = "0.21"
+# Browser history, autofill and vacuuming act inside SQLite databases. The
+# bundled build means no system SQLite is needed.
+rusqlite = { version = "0.37", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+# A sandboxed machine (files in a temp folder, registry and recycle bin as
+# JSON) for the WebDriver suite and development. Never enabled by a release.
+fake = []
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+# Licences the shipped app may include (`cargo deny check licenses`, run
+# before each release). The app itself is MIT. MPL-2.0 (cssparser and
+# selectors, through Tauri) is copyleft per file only and shipped unmodified.
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]

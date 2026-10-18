@@ -1,0 +1,75 @@
+# Deep scan: searches your whole profile for leftovers by name. It skips
+# AppData (programs' own files) and the package, build and Git folders of
+# developer tools, which hold huge numbers of files and never a person's
+# leftovers. Slower than other cleaners all the same.
+#
+# A `*` in an exclusion spans folders, so '%USERPROFILE%\*\node_modules'
+# skips every node_modules folder at any depth.
+
+[[cleaner]]
+id = "deep_scan"
+name = "Deep scan"
+description = "Leftover files anywhere in your profile, found by name"
+category = "deep-scan"
+
+[[cleaner.option]]
+id = "backup"
+name = "Backup files"
+description = "Files ending in .bak or ~ left by editors"
+warning = "Searches your whole profile, which can take a while. Check the preview: a backup you still want would go too."
+actions = [
+  { op = "delete", search = "walk.files", path = '%USERPROFILE%', regex = '(\.bak|~)$', exclude = [
+    '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\*\target',
+    '%USERPROFILE%\.cargo', '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle',
+    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode', '%ONEDRIVE%',
+  ] },
+]
+
+[[cleaner.option]]
+id = "thumbs_db"
+name = "Thumbs.db"
+description = "Thumbnail caches older Windows versions left in folders"
+actions = [
+  { op = "delete", search = "walk.files", path = '%USERPROFILE%', regex = '^Thumbs\.db$', exclude = [
+    '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\*\target',
+    '%USERPROFILE%\.cargo', '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle',
+    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode',
+  ] },
+]
+
+[[cleaner.option]]
+id = "ds_store"
+name = ".DS_Store and ._ files"
+description = "Folder settings and resource forks a Mac leaves on shared drives"
+actions = [
+  { op = "delete", search = "walk.files", path = '%USERPROFILE%', regex = '^(\.DS_Store|\._.+)$', exclude = [
+    '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\*\target',
+    '%USERPROFILE%\.cargo', '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle',
+    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode',
+  ] },
+]
+
+[[cleaner.option]]
+id = "temp_files"
+name = "Temporary files"
+description = "Files ending in .tmp outside program folders, unchanged for a week"
+warning = "Searches your whole profile, which can take a while."
+actions = [
+  { op = "delete", search = "walk.files", path = '%USERPROFILE%', regex = '\.tmp$', older_than_days = 7, exclude = [
+    '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\*\target',
+    '%USERPROFILE%\.cargo', '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle',
+    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode', '%ONEDRIVE%',
+  ] },
+]
+
+[[cleaner.option]]
+id = "office_owner"
+name = "Office owner files"
+description = "~$ files Office leaves beside documents after a crash"
+actions = [
+  { op = "delete", search = "walk.files", path = '%USERPROFILE%', regex = '^~\$', older_than_days = 1, exclude = [
+    '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\*\target',
+    '%USERPROFILE%\.cargo', '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle',
+    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode',
+  ] },
+]

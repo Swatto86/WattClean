@@ -1,0 +1,775 @@
+/* Generated from the module's original stylesheet by scope_css.py: every
+   rule is scoped to .reg, and its colour tokens come from the suite's
+   (WattTask's) palette below. Edit this file directly from now on. */
+
+.reg {
+  --panel: var(--surface);
+  --panel-2: var(--surface-2);
+  --line: var(--border);
+  --muted: var(--text-2);
+  --accent-soft: rgb(var(--accent-rgb) / 0.14);
+  --row-hover: var(--hover);
+  --row-selected: var(--selected);
+  --danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
+  --danger-text: #ffffff;
+  --ok-soft: color-mix(in srgb, var(--ok) 16%, transparent);
+  --warn-soft: color-mix(in srgb, var(--warn) 18%, transparent);
+  --focus: var(--accent);
+}
+
+:root[data-theme="dark"] .reg {
+  --danger-text: #1a0b0c;
+}
+
+.reg button,
+.reg input,
+.reg select {
+  font: inherit;
+  color: inherit;
+}
+
+.reg :focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.reg .view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+}
+
+.reg .view-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.reg h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.reg h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.reg .muted {
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+.reg .toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.reg input[type="search"],
+.reg input[type="number"],
+.reg input[type="time"],
+.reg input:not([type]),
+.reg select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.reg input[type="search"] {
+  width: 260px;
+}
+
+.reg button.primary,
+.reg button.ghost,
+.reg button.danger {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reg button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.reg button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-text);
+  font-weight: 600;
+}
+
+.reg button.ghost:hover {
+  background: var(--row-hover);
+}
+
+.reg button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reg .table-wrap {
+  flex: 1 1 auto;
+  min-height: 200px;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.reg table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.reg thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.reg .num {
+  text-align: right;
+}
+
+.reg tbody tr {
+  cursor: default;
+}
+
+.reg tbody td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 340px;
+}
+
+.reg tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.reg tbody tr[aria-selected="true"] {
+  background: var(--row-selected);
+}
+
+.reg .chip {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.reg .card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+.reg .cards {
+  display: grid;
+  gap: 10px;
+}
+
+.reg .form {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+}
+
+.reg .form label {
+  display: grid;
+  gap: 6px;
+}
+
+.reg .form label.check,
+.reg label.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.reg .error {
+  color: var(--danger);
+  margin: 0;
+  min-height: 1em;
+}
+
+.reg .pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reg .pill.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.reg .pill.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.reg .pill.bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.reg .entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 16px;
+  align-items: center;
+}
+
+.reg .entry .meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.reg .entry .actions {
+  display: flex;
+  gap: 8px;
+  grid-row: span 2;
+}
+
+.reg .empty {
+  color: var(--muted);
+  padding: 30px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.reg code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.reg .backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(8 10 15 / 55%);
+  display: grid;
+  place-items: center;
+  z-index: 10;
+}
+
+.reg .dialog {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  width: min(560px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.reg .dialog.wide {
+  width: min(980px, calc(100vw - 40px));
+  height: calc(100vh - 60px);
+}
+
+.reg .dialog header {
+  padding: 18px 22px 0;
+}
+
+.reg .dialog .body {
+  padding: 14px 22px;
+  overflow: auto;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.reg .dialog footer {
+  padding: 14px 22px 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.reg .modes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.reg .mode {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.reg .mode:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.reg .mode input {
+  grid-row: span 2;
+  margin-top: 3px;
+}
+
+.reg .mode small {
+  color: var(--muted);
+}
+
+.reg .mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.reg .mark.busy {
+  border: 2px solid var(--accent);
+  border-right-color: transparent;
+  animation: reg-spin 0.9s linear infinite;
+}
+
+@keyframes reg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reg .mark.busy {
+    animation: none;
+  }
+}
+
+.reg .notice {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.reg .notice.bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.reg .dialog .body p {
+  white-space: pre-line;
+}
+
+.reg fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.reg legend {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.reg .wide-form {
+  max-width: 900px;
+}
+
+.reg .row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.reg .row.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.reg .row label,
+.reg .field {
+  display: grid;
+  gap: 6px;
+}
+
+.reg .checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 6px 16px;
+}
+
+.reg .inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: end;
+}
+
+.reg .inline-form .grow {
+  flex: 1 1 400px;
+  display: grid;
+  gap: 6px;
+}
+
+.reg .inline-form .error {
+  flex-basis: 100%;
+}
+
+.reg input:not([type]) {
+  width: 100%;
+}
+
+.reg .busy {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.reg .busy > div {
+  flex: 1;
+}
+
+.reg .summary {
+  margin: 0;
+  font-weight: 600;
+}
+
+.reg .results {
+  display: grid;
+  gap: 10px;
+}
+
+.reg .tree {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.reg .group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+}
+
+.reg .twisty {
+  width: 16px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.reg .twisty::before {
+  content: "▸";
+}
+
+.reg .group-row[aria-expanded="true"] .twisty::before {
+  content: "▾";
+}
+
+.reg .count {
+  color: var(--muted);
+}
+
+.reg .finding {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 2px 10px;
+  padding: 7px 12px 7px 36px;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+
+.reg .finding:hover {
+  background: var(--row-hover);
+}
+
+.reg .finding:focus,
+.reg .group-row:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.reg .finding .what {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.reg .finding .path {
+  word-break: break-all;
+}
+
+.reg .finding .value {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.reg .finding .value::before {
+  content: "| ";
+  color: var(--muted);
+}
+
+.reg .finding .why {
+  grid-column: 2 / 4;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.reg .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reg .chip.admin {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.reg .chip.ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.reg .chip.changed {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.reg .tweaks {
+  display: grid;
+  gap: 12px;
+}
+
+.reg .tweak {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  align-items: center;
+}
+
+.reg .tweak-text p {
+  margin: 2px 0 6px;
+  font-size: 13px;
+}
+
+.reg .tweak input[role="switch"] {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 42px;
+  height: 24px;
+  margin: -12px 0 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.reg .switch {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--line);
+  position: relative;
+  transition: background 0.15s;
+}
+
+.reg .switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.reg .tweak:has(input:checked) .switch {
+  background: var(--accent);
+}
+
+.reg .tweak:has(input:checked) .switch::after {
+  transform: translateX(18px);
+}
+
+.reg .tweak:has(input:focus-visible) .switch {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.reg .tweak:has(input:disabled) .switch {
+  opacity: 0.45;
+}
+
+.reg .watch-split {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+
+.reg .watch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reg .watch-list > li {
+  max-width: 100%;
+}
+
+.reg .watch-item {
+  max-width: 460px;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.reg .watch-item[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.reg .watch-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.reg .key-list {
+  display: grid;
+  gap: 6px;
+}
+
+.reg .key-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  word-break: break-all;
+}
+
+.reg .key-add {
+  display: flex;
+  gap: 8px;
+}
+
+.reg .restore-list {
+  display: grid;
+  gap: 4px;
+}
+
+.reg .restore-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  word-break: break-all;
+}
+
+.reg .restore-item small {
+  grid-column: 2;
+}
+
+.reg .watch-log table {
+  table-layout: fixed;
+  min-width: 780px;
+}
+
+.reg .watch-log th:nth-child(1) {
+  width: 104px;
+}
+
+.reg .watch-log th:nth-child(2) {
+  width: 136px;
+}
+
+.reg .watch-log th:nth-child(3) {
+  width: 104px;
+}
+
+.reg .watch-log th:nth-child(5) {
+  width: 130px;
+}
+
+.reg .watch-log th:nth-child(6),
+.reg .watch-log th:nth-child(7) {
+  width: 104px;
+}
+
+.reg .watch-log tbody td:nth-child(4) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.reg #reg-watch-tracing button {
+  margin-left: 8px;
+}
+
+.reg .watch-log thead th {
+  padding: 9px 12px;
+}
+
+.reg .watch-log tbody td {
+  max-width: none;
+}
+
+.reg .inline-form .error:empty {
+  display: none;
+}

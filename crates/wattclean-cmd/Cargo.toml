@@ -1,0 +1,17 @@
+[package]
+name = "wattclean-cmd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WattClean from a console: the disk cleaner and the registry cleaner"
+
+[[bin]]
+name = "wattclean-cmd"
+path = "src/main.rs"
+
+[dependencies]
+wcc-cmd = { path = "../wcc-cmd" }
+wrc-cmd = { path = "../wrc-cmd" }
+
+[lints]
+workspace = true

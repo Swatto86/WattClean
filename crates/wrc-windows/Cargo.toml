@@ -1,0 +1,47 @@
+[package]
+name = "wrc-windows"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Windows side of the registry cleaner: registry, drives, restore points, shell"
+
+[dependencies]
+wrc-core = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+# Windows notifications are a WinRT API; already in the tree through Tauri.
+windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications"] }
+windows-sys = { version = "0.61", features = [
+    "Wdk_System_Registry",
+    "Wdk_System_SystemInformation",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Diagnostics_Etw",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Registry",
+    "Win32_System_Restore",
+    "Win32_System_Shutdown",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# This crate is the one place that calls Win32 functions directly (restore
+# points, change notifications, drive types, the process token, other
+# accounts' hives, starting Registry Editor, event tracing, notifications),
+# so it cannot inherit the workspace's `unsafe_code = "forbid"`. Every
+# unsafe block carries a SAFETY comment, which clippy enforces.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+unwrap_used = "warn"
+expect_used = "warn"

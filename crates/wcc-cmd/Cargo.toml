@@ -1,0 +1,19 @@
+[package]
+name = "wcc-cmd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WattClean's disk cleaner from a console: list, preview, clean, shred and wipe"
+
+[dependencies]
+wcc-core = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+wcc-windows = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+wcc-core = { workspace = true, features = ["fake"] }
+
+[lints]
+workspace = true

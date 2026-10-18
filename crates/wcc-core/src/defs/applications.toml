@@ -1,0 +1,539 @@
+# Everyday applications. Electron apps (Discord, Slack, Teams and others)
+# share the "electron" template; {root} is the app's data folder.
+
+[[template]]
+id = "electron"
+
+[[template.option]]
+id = "cache"
+name = "Cache"
+description = "Downloaded images, scripts and compiled code the app keeps"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '{root}\Cache' },
+  { op = "delete", search = "walk.all", path = '{root}\Code Cache' },
+  { op = "delete", search = "walk.all", path = '{root}\GPUCache' },
+  { op = "delete", search = "walk.all", path = '{root}\DawnCache' },
+  { op = "delete", search = "walk.all", path = '{root}\DawnGraphiteCache' },
+  { op = "delete", search = "walk.all", path = '{root}\DawnWebGPUCache' },
+  { op = "delete", search = "walk.all", path = '{root}\Service Worker\CacheStorage' },
+  { op = "delete", search = "walk.all", path = '{root}\Service Worker\ScriptCache' },
+]
+
+[[template.option]]
+id = "logs"
+name = "Logs"
+description = "The app's log files"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '{root}\logs' }]
+
+[[template.option]]
+id = "crash_reports"
+name = "Crash reports"
+description = "Reports kept after the app crashed"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\reports' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\completed' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\pending' },
+]
+
+[[cleaner]]
+id = "discord"
+name = "Discord"
+description = "Chat"
+category = "applications"
+template = "electron"
+vars = { root = '%APPDATA%\discord' }
+detect = ['{root}']
+running = ["discord.exe"]
+
+[[cleaner]]
+id = "slack"
+name = "Slack"
+description = "Chat"
+category = "applications"
+template = "electron"
+vars = { root = '%APPDATA%\Slack' }
+detect = ['{root}']
+running = ["slack.exe"]
+
+[[cleaner]]
+id = "teams_classic"
+name = "Microsoft Teams (classic)"
+description = "Chat and meetings"
+category = "applications"
+template = "electron"
+vars = { root = '%APPDATA%\Microsoft\Teams' }
+detect = ['{root}']
+running = ["teams.exe"]
+
+[[cleaner]]
+id = "teams"
+name = "Microsoft Teams"
+description = "Chat and meetings (the new app)"
+category = "applications"
+detect = ['%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe']
+running = ["ms-teams.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "The app's web cache"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\Cache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\Code Cache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\GPUCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\EBWebView\*\Service Worker\CacheStorage' },
+]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "The app's log files"
+default = true
+actions = [{ op = "delete", search = "walk.files", path = '%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs' }]
+
+[[cleaner]]
+id = "obsidian"
+name = "Obsidian"
+description = "Notes"
+category = "applications"
+template = "electron"
+vars = { root = '%APPDATA%\obsidian' }
+detect = ['{root}']
+running = ["obsidian.exe"]
+
+[[cleaner]]
+id = "notion"
+name = "Notion"
+description = "Notes"
+category = "applications"
+template = "electron"
+vars = { root = '%APPDATA%\Notion' }
+detect = ['{root}']
+running = ["notion.exe"]
+
+[[cleaner]]
+id = "signal"
+name = "Signal"
+description = "Chat"
+category = "applications"
+template = "electron"
+skip = ["logs"]
+vars = { root = '%APPDATA%\Signal' }
+detect = ['{root}']
+running = ["signal.exe"]
+
+[[cleaner]]
+id = "zoom"
+name = "Zoom"
+description = "Meetings"
+category = "applications"
+detect = ['%APPDATA%\Zoom']
+running = ["zoom.exe"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "Zoom's log files"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%APPDATA%\Zoom\logs' }]
+
+[[cleaner]]
+id = "spotify"
+name = "Spotify"
+description = "Music"
+category = "applications"
+detect = ['%LOCALAPPDATA%\Spotify', '%LOCALAPPDATA%\Packages\SpotifyAB.SpotifyMusic_*']
+running = ["spotify.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Streamed music and images Spotify kept"
+warning = "Songs downloaded for offline listening are kept here too and will need downloading again."
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Spotify\Storage' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Spotify\Data' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Spotify\Browser\Cache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Packages\SpotifyAB.SpotifyMusic_*\LocalCache\Spotify\Data' },
+]
+
+[[cleaner]]
+id = "telegram"
+name = "Telegram Desktop"
+description = "Chat"
+category = "applications"
+detect = ['%APPDATA%\Telegram Desktop\tdata']
+running = ["telegram.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Downloaded pictures, stickers and media kept to show chats faster"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%APPDATA%\Telegram Desktop\tdata\user_data\cache' },
+  { op = "delete", search = "walk.all", path = '%APPDATA%\Telegram Desktop\tdata\user_data\media_cache' },
+]
+
+[[cleaner]]
+id = "office"
+name = "Microsoft Office"
+description = "Word, Excel, PowerPoint and the rest"
+category = "applications"
+detect = ['%APPDATA%\Microsoft\Office', '%LOCALAPPDATA%\Microsoft\Office']
+running = ["winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "onenote.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Office's document cache and add-in cache"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Office\16.0\OfficeFileCache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Office\16.0\Wef' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Office\OTele' },
+]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent documents"
+description = "The recent lists in Office and its shortcuts to recent files"
+actions = [
+  { op = "delete", search = "glob", path = '%APPDATA%\Microsoft\Office\Recent\*', kind = "file" },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\16.0\Word\User MRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\16.0\Excel\User MRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\16.0\PowerPoint\User MRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\16.0\Word\File MRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\16.0\Excel\File MRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\16.0\PowerPoint\File MRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\15.0\Word\File MRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\15.0\Excel\File MRU' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\Office\15.0\PowerPoint\File MRU' },
+]
+
+[[cleaner]]
+id = "libreoffice"
+name = "LibreOffice"
+description = "Office suite"
+category = "applications"
+detect = ['%APPDATA%\LibreOffice']
+running = ["soffice.exe", "soffice.bin"]
+
+[[cleaner.option]]
+id = "temp"
+name = "Temporary files"
+description = "LibreOffice's own temporary folder"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%APPDATA%\LibreOffice\4\user\temp' }]
+
+[[cleaner.option]]
+id = "backup"
+name = "Backup copies"
+description = "Automatic backup copies of documents"
+warning = "Documents can no longer be recovered from LibreOffice's backup copies."
+actions = [{ op = "delete", search = "walk.all", path = '%APPDATA%\LibreOffice\4\user\backup' }]
+
+[[cleaner]]
+id = "adobe_reader"
+name = "Adobe Acrobat Reader"
+description = "PDF reader"
+category = "applications"
+detect = ['%LOCALAPPDATA%\Adobe\Acrobat']
+detect_registry = ['HKCU\Software\Adobe\Acrobat Reader']
+running = ["acrord32.exe", "acrobat.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Reader's web and document cache"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Adobe\AcroCef\DC\Acrobat\Cache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Adobe\Acrobat\DC\Cache' },
+]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent documents"
+description = "The list of recently opened PDFs"
+actions = [
+  { op = "registry", key = 'HKCU\Software\Adobe\Acrobat Reader\DC\AVGeneral\cRecentFiles' },
+  { op = "registry", key = 'HKCU\Software\Adobe\Acrobat Reader\DC\AVGeneral\cRecentFolders' },
+  { op = "registry", key = 'HKCU\Software\Adobe\Adobe Acrobat\DC\AVGeneral\cRecentFiles' },
+  { op = "registry", key = 'HKCU\Software\Adobe\Adobe Acrobat\DC\AVGeneral\cRecentFolders' },
+]
+
+[[cleaner]]
+id = "adobe_media"
+name = "Adobe media cache"
+description = "Premiere Pro, After Effects and Media Encoder"
+category = "applications"
+detect = ['%APPDATA%\Adobe\Common']
+
+[[cleaner.option]]
+id = "media_cache"
+name = "Media cache"
+description = "Audio and video pieces Adobe apps prepare from your footage"
+warning = "Projects take longer to open while the media is prepared again."
+actions = [
+  { op = "delete", search = "walk.all", path = '%APPDATA%\Adobe\Common\Media Cache Files' },
+  { op = "delete", search = "walk.all", path = '%APPDATA%\Adobe\Common\Media Cache' },
+  { op = "delete", search = "walk.all", path = '%APPDATA%\Adobe\Common\Peak Files' },
+]
+
+[[cleaner]]
+id = "seven_zip"
+name = "7-Zip"
+description = "File archiver"
+category = "applications"
+detect_registry = ['HKCU\Software\7-Zip']
+running = ["7zfm.exe", "7zg.exe"]
+
+[[cleaner.option]]
+id = "history"
+name = "History"
+description = "Archive, folder and extraction path history"
+actions = [
+  { op = "registry", key = 'HKCU\Software\7-Zip\Compression', value = "ArcHistory" },
+  { op = "registry", key = 'HKCU\Software\7-Zip\Extraction', value = "PathHistory" },
+  { op = "registry", key = 'HKCU\Software\7-Zip\FM', value = "FolderHistory" },
+  { op = "registry", key = 'HKCU\Software\7-Zip\FM', value = "PathHistory" },
+  { op = "registry", key = 'HKCU\Software\7-Zip\FM', value = "CopyHistory" },
+]
+
+[[cleaner]]
+id = "winrar"
+name = "WinRAR"
+description = "File archiver"
+category = "applications"
+detect_registry = ['HKCU\Software\WinRAR']
+running = ["winrar.exe"]
+
+[[cleaner.option]]
+id = "history"
+name = "History"
+description = "Recently opened archives and extraction paths"
+actions = [
+  { op = "registry", key = 'HKCU\Software\WinRAR\ArcHistory' },
+  { op = "registry", key = 'HKCU\Software\WinRAR\DialogEditHistory\ArcName' },
+  { op = "registry", key = 'HKCU\Software\WinRAR\DialogEditHistory\ExtrPath' },
+]
+
+[[cleaner]]
+id = "vlc"
+name = "VLC media player"
+description = "Media player"
+category = "applications"
+detect = ['%APPDATA%\vlc']
+running = ["vlc.exe"]
+
+[[cleaner.option]]
+id = "art"
+name = "Album art cache"
+description = "Cover pictures VLC downloaded"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%APPDATA%\vlc\art' }]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent media"
+description = "The Media › Open Recent Media list"
+actions = [
+  { op = "ini", path = '%APPDATA%\vlc\vlc-qt-interface.ini', section = "RecentsMRU" },
+  { op = "delete", path = '%APPDATA%\vlc\ml.xspf' },
+]
+
+[[cleaner]]
+id = "media_player"
+name = "Windows Media Player"
+description = "Media player (legacy)"
+category = "applications"
+detect_registry = ['HKCU\Software\Microsoft\MediaPlayer']
+running = ["wmplayer.exe"]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent media"
+description = "Recently played files and addresses"
+actions = [
+  { op = "registry", key = 'HKCU\Software\Microsoft\MediaPlayer\Player\RecentFileList' },
+  { op = "registry", key = 'HKCU\Software\Microsoft\MediaPlayer\Player\RecentURLList' },
+]
+
+[[cleaner]]
+id = "mpc_hc"
+name = "MPC-HC"
+description = "Media Player Classic - Home Cinema"
+category = "applications"
+detect_registry = ['HKCU\Software\MPC-HC\MPC-HC']
+running = ["mpc-hc64.exe", "mpc-hc.exe"]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent media"
+description = "The recent file list"
+actions = [
+  { op = "registry", key = 'HKCU\Software\MPC-HC\MPC-HC\Recent File List' },
+  { op = "registry", key = 'HKCU\Software\MPC-HC\MPC-HC\MediaHistory' },
+]
+
+[[cleaner]]
+id = "paint"
+name = "Paint"
+description = "Windows Paint"
+category = "applications"
+detect_registry = ['HKCU\Software\Microsoft\Windows\CurrentVersion\Applets\Paint']
+running = ["mspaint.exe"]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent pictures"
+description = "Paint's recent file list"
+actions = [{ op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Applets\Paint\Recent File List' }]
+
+[[cleaner]]
+id = "wordpad"
+name = "WordPad"
+description = "Windows WordPad"
+category = "applications"
+detect_registry = ['HKCU\Software\Microsoft\Windows\CurrentVersion\Applets\Wordpad']
+running = ["wordpad.exe"]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent documents"
+description = "WordPad's recent file list"
+actions = [{ op = "registry", key = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Applets\Wordpad\Recent File List' }]
+
+[[cleaner]]
+id = "notepad_plus_plus"
+name = "Notepad++"
+description = "Text editor"
+category = "applications"
+detect = ['%APPDATA%\Notepad++']
+running = ["notepad++.exe"]
+
+[[cleaner.option]]
+id = "session"
+name = "Session"
+description = "The files open last time"
+actions = [{ op = "delete", path = '%APPDATA%\Notepad++\session.xml' }]
+
+[[cleaner.option]]
+id = "backup"
+name = "Unsaved changes"
+description = "Notepad++'s copies of files you have not saved"
+warning = "Changes you never saved in Notepad++ are lost."
+actions = [{ op = "delete", search = "walk.all", path = '%APPDATA%\Notepad++\backup' }]
+
+[[cleaner]]
+id = "gimp"
+name = "GIMP"
+description = "Image editor"
+category = "applications"
+detect = ['%APPDATA%\GIMP']
+running = ["gimp-2.10.exe", "gimp-3.0.exe", "gimp.exe"]
+
+[[cleaner.option]]
+id = "temp"
+name = "Temporary files"
+description = "GIMP's temporary and swap files"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%APPDATA%\GIMP\*\tmp' }]
+
+[[cleaner]]
+id = "obs"
+name = "OBS Studio"
+description = "Streaming and recording"
+category = "applications"
+detect = ['%APPDATA%\obs-studio']
+running = ["obs64.exe"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs and crash reports"
+description = "OBS's log files and crash reports"
+default = true
+actions = [
+  { op = "delete", search = "walk.files", path = '%APPDATA%\obs-studio\logs' },
+  { op = "delete", search = "walk.files", path = '%APPDATA%\obs-studio\crashes' },
+]
+
+[[cleaner]]
+id = "filezilla"
+name = "FileZilla"
+description = "FTP client"
+category = "applications"
+detect = ['%APPDATA%\FileZilla']
+running = ["filezilla.exe"]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent servers"
+description = "The Quickconnect history"
+actions = [{ op = "delete", path = '%APPDATA%\FileZilla\recentservers.xml' }]
+
+[[cleaner]]
+id = "qbittorrent"
+name = "qBittorrent"
+description = "BitTorrent client"
+category = "applications"
+detect = ['%LOCALAPPDATA%\qBittorrent']
+running = ["qbittorrent.exe"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "qBittorrent's log files"
+default = true
+actions = [{ op = "delete", search = "walk.files", path = '%LOCALAPPDATA%\qBittorrent\logs' }]
+
+[[cleaner]]
+id = "onedrive"
+name = "OneDrive"
+description = "Microsoft's cloud storage"
+category = "applications"
+detect = ['%LOCALAPPDATA%\Microsoft\OneDrive']
+running = ["onedrive.exe"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "OneDrive's log files"
+default = true
+actions = [{ op = "delete", search = "walk.files", path = '%LOCALAPPDATA%\Microsoft\OneDrive\logs', older_than_days = 1 }]
+
+[[cleaner]]
+id = "java"
+name = "Java"
+description = "Java runtime"
+category = "applications"
+detect = ['%LOCALLOWAPPDATA%\Sun\Java']
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Downloaded applets and Web Start applications, and logs"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALLOWAPPDATA%\Sun\Java\Deployment\cache' },
+  { op = "delete", search = "walk.all", path = '%LOCALLOWAPPDATA%\Sun\Java\Deployment\log' },
+]
+
+[[cleaner]]
+id = "flash"
+name = "Adobe Flash Player"
+description = "Retired browser plug-in"
+category = "applications"
+detect = ['%APPDATA%\Macromedia\Flash Player']
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache and cookies"
+description = "Everything the retired plug-in left behind"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%APPDATA%\Macromedia\Flash Player' }]

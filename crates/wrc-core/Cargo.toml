@@ -1,0 +1,23 @@
+[package]
+name = "wrc-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Registry cleaning engine: scanning, backed-up removal, tweaks and watching"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+# An in-memory registry over a sandbox folder, for the WebDriver suite and for
+# development without touching the real machine. Never enabled by a release.
+fake = []
+
+[lints]
+workspace = true

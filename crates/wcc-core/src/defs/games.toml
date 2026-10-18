@@ -1,0 +1,131 @@
+# Game launchers and games. %PROGRAMFILES% stands for both Program Files
+# folders, so 32- and 64-bit installs are both found.
+
+[[cleaner]]
+id = "steam"
+name = "Steam"
+description = "Game launcher"
+category = "games"
+detect = ['%PROGRAMFILES%\Steam']
+running = ["steam.exe", "steamwebhelper.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Web cache"
+description = "The store and community pages Steam kept"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%PROGRAMFILES%\Steam\appcache\httpcache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Steam\htmlcache' },
+]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs and crash dumps"
+description = "Steam's log files and crash dumps"
+default = true
+actions = [
+  { op = "delete", search = "walk.files", path = '%PROGRAMFILES%\Steam\logs' },
+  { op = "delete", search = "walk.files", path = '%PROGRAMFILES%\Steam\dumps' },
+]
+
+[[cleaner.option]]
+id = "shaders"
+name = "Shader cache"
+description = "Pre-compiled shaders for your games"
+warning = "Games may stutter briefly while their shaders are compiled again."
+actions = [{ op = "delete", search = "walk.all", path = '%PROGRAMFILES%\Steam\steamapps\shadercache' }]
+
+[[cleaner]]
+id = "epic"
+name = "Epic Games Launcher"
+description = "Game launcher"
+category = "games"
+detect = ['%LOCALAPPDATA%\EpicGamesLauncher']
+running = ["epicgameslauncher.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Web cache"
+description = "The store pages the launcher kept"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\EpicGamesLauncher\Saved\webcache*' }]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "The launcher's log files"
+default = true
+actions = [{ op = "delete", search = "walk.files", path = '%LOCALAPPDATA%\EpicGamesLauncher\Saved\Logs' }]
+
+[[cleaner]]
+id = "battlenet"
+name = "Battle.net"
+description = "Blizzard's game launcher"
+category = "games"
+detect = ['%LOCALAPPDATA%\Battle.net', '%PROGRAMDATA%\Battle.net']
+running = ["battle.net.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "The launcher's own and web caches"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Battle.net\Cache' },
+  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Battle.net\BrowserCache' },
+]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "The launcher's log files"
+default = true
+actions = [{ op = "delete", search = "walk.files", path = '%LOCALAPPDATA%\Battle.net\Logs' }]
+
+[[cleaner]]
+id = "wow"
+name = "World of Warcraft"
+description = "Retail, Classic and Classic Era"
+category = "games"
+detect = ['%PROGRAMFILES%\World of Warcraft']
+running = ["wow.exe", "wowclassic.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Game cache"
+description = "Item, quest and creature data the game downloads again"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%PROGRAMFILES%\World of Warcraft\_*_\Cache' }]
+
+[[cleaner.option]]
+id = "errors"
+name = "Error reports"
+description = "Crash reports the game wrote"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%PROGRAMFILES%\World of Warcraft\_*_\Errors' }]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "Game logs, including combat logs"
+warning = "Combat logs you meant to upload to a log site are deleted too."
+actions = [{ op = "delete", search = "walk.files", path = '%PROGRAMFILES%\World of Warcraft\_*_\Logs' }]
+
+[[cleaner]]
+id = "gog"
+name = "GOG Galaxy"
+description = "Game launcher"
+category = "games"
+detect = ['%PROGRAMDATA%\GOG.com\Galaxy']
+running = ["galaxyclient.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Web cache and logs"
+description = "The launcher's web cache and log files"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%PROGRAMDATA%\GOG.com\Galaxy\webcache' },
+  { op = "delete", search = "walk.files", path = '%PROGRAMDATA%\GOG.com\Galaxy\logs' },
+]

@@ -1,0 +1,25 @@
+/target
+**/*.rs.bk
+
+# Frontend build output and dependencies.
+node_modules/
+/ui/dist
+tsconfig.tsbuildinfo
+
+# Tauri's generated schemas and per-build artifacts.
+/src-tauri/gen
+
+# Downloaded WebDriver binaries, version-matched to this machine's WebView2
+# runtime. Fetched by scripts/setup-e2e.ps1.
+/.webdriver
+
+# Local handoff log and probes.
+install-handoff.log
+.state-probe.*
+
+# Per-session agent permission grants; not project configuration.
+.claude/settings.json
+.claude/settings.local.json
+
+# Per-client launch configuration.
+.claude/

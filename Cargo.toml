@@ -1,0 +1,54 @@
+[workspace]
+members = ["crates/*", "src-tauri"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/Swatto86/WattClean"
+
+[workspace.dependencies]
+wcc-core = { path = "crates/wcc-core" }
+wcc-windows = { path = "crates/wcc-windows" }
+wrc-core = { path = "crates/wrc-core" }
+wrc-windows = { path = "crates/wrc-windows" }
+wu-core = { path = "crates/wu-core" }
+wu-windows = { path = "crates/wu-windows" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+thiserror = "2"
+
+# Compile-speed defaults: workspace crates stay un-optimised with line tables
+# only; dependencies get light optimisation once.
+[profile.dev]
+incremental = true
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
+
+# The owner does not read Rust, so structure is enforced by the build rather
+# than by review.
+[workspace.lints.rust]
+# Only wcc-windows (Win32 calls) and wcc-cmd (one console call) need FFI.
+# They opt out explicitly and say why.
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+module_inception = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
