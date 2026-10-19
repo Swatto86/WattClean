@@ -14,6 +14,7 @@ import {
   type ShellSettings,
 } from "./api.ts";
 import { type Context, type Page } from "./context.ts";
+import { inform } from "./dialog.ts";
 import { el, glyph, notice, setText, type GlyphName } from "./dom.ts";
 import { cleanerPage } from "./pages/cleaner.ts";
 import { historyPage } from "./pages/history.ts";
@@ -355,6 +356,13 @@ const boot = async (): Promise<void> => {
   show("cleaner");
   // Started at sign-in: stay in the notification area until opened.
   if (!info.startedHidden) await reveal();
+  if (info.adoptProblems.length > 0) {
+    void inform(
+      "Some earlier data was not copied",
+      "WattClean copies the data of the apps it replaces. These could not be copied; WattClean tries again at its next start.",
+      info.adoptProblems,
+    );
+  }
 };
 
 const statusBar = (info: AppInfo, restartAsAdmin: () => void): void => {

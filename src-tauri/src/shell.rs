@@ -19,6 +19,9 @@ pub struct Shell {
     pub started_hidden: bool,
     /// True in the WebDriver suite's build, which acts on test machines.
     pub fake: bool,
+    /// What could not be copied from the apps WattClean replaces at this
+    /// start (it is tried again at the next).
+    adopt_problems: Vec<String>,
     settings: Mutex<ShellSettings>,
 }
 
@@ -44,12 +47,18 @@ pub fn local_app_data() -> Result<PathBuf, String> {
 }
 
 impl Shell {
-    pub fn new(root: PathBuf, started_hidden: bool, fake: bool) -> Self {
+    pub fn new(
+        root: PathBuf,
+        started_hidden: bool,
+        fake: bool,
+        adopt_problems: Vec<String>,
+    ) -> Self {
         let settings = ShellSettings::load(&root.join("settings.json"));
         Self {
             root,
             started_hidden,
             fake,
+            adopt_problems,
             settings: Mutex::new(settings),
         }
     }
@@ -91,6 +100,8 @@ pub struct AppInfo {
     windows_build: Option<u32>,
     /// Started at sign-in: the page stays hidden until opened from the tray.
     started_hidden: bool,
+    /// What could not be copied from the earlier apps at this start.
+    adopt_problems: Vec<String>,
 }
 
 #[tauri::command]
@@ -110,6 +121,7 @@ pub fn app_info(
         cleaners_dir: disk.cleaners_dir().display().to_string(),
         windows_build: wrc_core::tuner::windows_build(registry.system.as_ref()),
         started_hidden: shell.started_hidden,
+        adopt_problems: shell.adopt_problems.clone(),
     }
 }
 
@@ -169,6 +181,17 @@ pub fn restart_as_admin(
     Ok(())
 }
 
+/// `--after <process id>`: started by "Restart as administrator", whose
+/// copy is still closing. Without waiting for it, the single-instance check
+/// would hand over to that closing copy and quit, leaving nothing running.
+pub const AFTER_FLAG: &str = "--after";
+
+/// The process this copy must wait for, from `--after <id>`.
+pub fn restarted_from(args: &[String]) -> Option<u32> {
+    let at = args.iter().position(|arg| arg == AFTER_FLAG)?;
+    args.get(at + 1)?.parse().ok()
+}
+
 #[cfg(windows)]
 fn relaunch(exe: &std::path::Path) -> CommandResult<()> {
     registry::platform::relaunch_elevated(exe)
@@ -214,4 +237,21 @@ pub fn quit_when_idle(app: &AppHandle) {
         }
         app.exit(0);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_restarted_copy_knows_whom_to_wait_for() {
+        let args = |text: &str| -> Vec<String> { text.split(' ').map(str::to_string).collect() };
+        assert_eq!(
+            restarted_from(&args("wattclean.exe --after 4242")),
+            Some(4242)
+        );
+        assert_eq!(restarted_from(&args("wattclean.exe --after")), None);
+        assert_eq!(restarted_from(&args("wattclean.exe --after x")), None);
+        assert_eq!(restarted_from(&args("wattclean.exe --background")), None);
+    }
 }

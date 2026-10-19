@@ -5,6 +5,7 @@ use std::ffi::OsStr;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
+use std::time::Duration;
 
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 use windows_sys::Win32::Security::{
@@ -190,4 +191,57 @@ pub fn enable_privilege(name: &str) -> io::Result<()> {
     // SAFETY: `token` is owned here and closed once.
     unsafe { CloseHandle(token) };
     result
+}
+
+/// Waits until process `pid` has ended, at most `timeout`. True when it has
+/// ended or no such process runs; false when it is still running (or
+/// cannot be waited on).
+pub fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
+    use windows_sys::Win32::Foundation::{ERROR_INVALID_PARAMETER, GetLastError, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    };
+
+    // SAFETY: plain values in; the handle returned is closed below.
+    let process = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
+    if process.is_null() {
+        // SAFETY: reads this thread's last error, set by OpenProcess.
+        return unsafe { GetLastError() } == ERROR_INVALID_PARAMETER;
+    }
+    let millis = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX - 1);
+    // SAFETY: `process` is a valid handle opened for waiting.
+    let ended = unsafe { WaitForSingleObject(process, millis) } == WAIT_OBJECT_0;
+    // SAFETY: `process` is owned here and closed once.
+    unsafe { CloseHandle(process) };
+    ended
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+    use std::time::Instant;
+
+    fn pinging(count: u32) -> std::process::Child {
+        Command::new("ping")
+            .args(["-n", &count.to_string(), "127.0.0.1"])
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap()
+    }
+
+    #[test]
+    fn waiting_for_a_process_returns_once_it_has_ended() {
+        let mut short = pinging(2);
+        let started = Instant::now();
+        assert!(wait_for_exit(short.id(), Duration::from_secs(20)));
+        assert!(started.elapsed() < Duration::from_secs(15));
+        assert!(short.try_wait().unwrap().is_some());
+
+        let mut long = pinging(30);
+        assert!(!wait_for_exit(long.id(), Duration::from_millis(200)));
+        long.kill().unwrap();
+        long.wait().unwrap();
+        assert!(wait_for_exit(long.id(), Duration::from_secs(1)));
+    }
 }

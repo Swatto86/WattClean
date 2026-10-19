@@ -61,6 +61,7 @@ export const appInfo = (v: unknown): AppInfo => {
         ? null
         : num(o["windowsBuild"], "windowsBuild"),
     startedHidden: bool(o["startedHidden"], "startedHidden"),
+    adoptProblems: strings(o["adoptProblems"], "adoptProblems"),
   };
 };
 

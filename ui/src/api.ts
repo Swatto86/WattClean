@@ -44,6 +44,8 @@ export interface AppInfo {
   windowsBuild: number | null;
   /** Started at sign-in: the window stays hidden until opened from the tray. */
   startedHidden: boolean;
+  /** What could not be copied from the earlier apps at this start. */
+  adoptProblems: string[];
 }
 
 export const TEXT_SIZES = ["small", "normal", "large"] as const;

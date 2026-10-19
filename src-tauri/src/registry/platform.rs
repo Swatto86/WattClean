@@ -30,9 +30,12 @@ pub fn accept_second_launch(identifier: &str) -> std::io::Result<()> {
     wrc_windows::accept_launch_messages(&format!("{identifier}-sic"), &format!("{identifier}-siw"))
 }
 
+/// Starts `exe` with administrator rights, telling it to wait until this
+/// process has ended (see `shell::restarted_from`).
 #[cfg(windows)]
 pub fn relaunch_elevated(exe: &Path) -> CommandResult<()> {
-    wrc_windows::relaunch_elevated(exe, "").map_err(|error| {
+    let args = format!("{} {}", crate::shell::AFTER_FLAG, std::process::id());
+    wrc_windows::relaunch_elevated(exe, &args).map_err(|error| {
         if error.raw_os_error() == Some(1223) {
             CommandError::from("Administrator rights were not granted.")
         } else {
@@ -40,6 +43,18 @@ pub fn relaunch_elevated(exe: &Path) -> CommandResult<()> {
         }
     })
 }
+
+/// Waits (at most half a minute) for the copy that restarted this one to
+/// end.
+#[cfg(windows)]
+pub fn wait_for_exit(pid: u32) {
+    if !wrc_windows::wait_for_exit(pid, std::time::Duration::from_secs(30)) {
+        eprintln!("The copy of WattClean that restarted this one is still running.");
+    }
+}
+
+#[cfg(not(windows))]
+pub fn wait_for_exit(_pid: u32) {}
 
 /// Where to save an export. The test machine saves into its data folder,
 /// so the WebDriver suite needs no dialog.

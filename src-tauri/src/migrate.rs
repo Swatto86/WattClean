@@ -1,7 +1,8 @@
 //! Taking over from the three apps WattClean replaces. At the first start of
 //! each module (its folder is missing or empty, as the command line leaves
-//! it when run first), the old app's data is copied into
-//! it: WattCompClean's settings and cleaners, WattRegClean's settings,
+//! it when run first), the old app's data is copied into it, and what could
+//! not be copied (a locked file) is tried again at each start until it is
+//! in; the window lists what failed: WattCompClean's settings and cleaners, WattRegClean's settings,
 //! backups, tweaks and watch list, WattUninstaller's settings, backups,
 //! history and install logs. Copied, never moved, so the old app keeps
 //! working until it is uninstalled; its program files are never touched.
@@ -51,21 +52,46 @@ pub struct Adopted {
     pub problems: Vec<String>,
 }
 
+/// Left in a module folder while some of the old app's data is still to
+/// copy, one entry per line. Written before copying, so a start cut short
+/// (a locked file, a crash) is finished at the next start; removed once
+/// everything is in.
+const PENDING: &str = "adopting.txt";
+
 /// Copies each old app's data from `local` (Local AppData) into `root`
-/// (WattClean's data folder) when that module's folder is missing or empty.
+/// (WattClean's data folder) when that module's folder is missing or
+/// empty, or still lists entries in [`PENDING`]. What is already in the
+/// module folder is never overwritten.
 pub fn adopt(local: &Path, root: &Path) -> Adopted {
     let mut adopted = Adopted::default();
     for source in SOURCES {
         let from = local.join(source.app);
         let to = root.join(source.module);
-        if !from.is_dir() || has_entries(&to) {
+        if !from.is_dir() {
             continue;
         }
-        if let Err(error) = fs::create_dir_all(&to) {
+        let pending = to.join(PENDING);
+        let entries: Vec<&str> = if has_entries(&to) {
+            // No list: adopted before, or WattClean's own data.
+            let Ok(text) = fs::read_to_string(&pending) else {
+                continue;
+            };
+            let listed: Vec<&str> = text.lines().map(str::trim).collect();
+            source
+                .entries
+                .iter()
+                .copied()
+                .filter(|entry| listed.contains(entry))
+                .collect()
+        } else {
+            source.entries.to_vec()
+        };
+        if let Err(error) = fs::create_dir_all(&to).and_then(|()| list(&pending, &entries)) {
             adopted.problems.push(format!("{}: {error}", to.display()));
             continue;
         }
-        for entry in source.entries {
+        let mut left = Vec::new();
+        for entry in entries {
             let path = from.join(entry);
             if !path.exists() {
                 continue;
@@ -74,11 +100,26 @@ pub fn adopt(local: &Path, root: &Path) -> Adopted {
                 adopted
                     .problems
                     .push(format!("{}: {error}", path.display()));
+                left.push(entry);
             }
+        }
+        let recorded = if left.is_empty() {
+            fs::remove_file(&pending)
+        } else {
+            list(&pending, &left)
+        };
+        if let Err(error) = recorded {
+            adopted
+                .problems
+                .push(format!("{}: {error}", pending.display()));
         }
         adopted.apps.push(source.app);
     }
     adopted
+}
+
+fn list(pending: &Path, entries: &[&str]) -> io::Result<()> {
+    fs::write(pending, entries.join("\n"))
 }
 
 /// Whether a folder exists and holds anything.
@@ -86,23 +127,26 @@ fn has_entries(folder: &Path) -> bool {
     fs::read_dir(folder).is_ok_and(|mut entries| entries.next().is_some())
 }
 
-/// Copies a file, or a folder with everything in it. Links are skipped,
-/// never followed.
+/// Copies a file, or a folder with everything in it, keeping whatever is
+/// already at `to`. Links are skipped, never followed. Every part is
+/// tried; the first problem is returned.
 fn copy(from: &Path, to: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(from)?;
-    if meta.file_type().is_symlink() {
+    if meta.file_type().is_symlink() || fs::symlink_metadata(to).is_ok_and(|m| !m.is_dir()) {
         return Ok(());
     }
-    if meta.is_dir() {
-        fs::create_dir_all(to)?;
-        for entry in fs::read_dir(from)? {
-            let entry = entry?;
-            copy(&entry.path(), &to.join(entry.file_name()))?;
-        }
-        Ok(())
-    } else {
-        fs::copy(from, to).map(|_| ())
+    if !meta.is_dir() {
+        return fs::copy(from, to).map(|_| ());
     }
+    fs::create_dir_all(to)?;
+    let mut outcome = Ok(());
+    for entry in fs::read_dir(from)? {
+        let copied = entry.and_then(|entry| copy(&entry.path(), &to.join(entry.file_name())));
+        if outcome.is_ok() {
+            outcome = copied;
+        }
+    }
+    outcome
 }
 
 #[cfg(test)]
@@ -152,6 +196,47 @@ mod tests {
             fs::read_to_string(new.join(r"disk\settings.json")).unwrap(),
             "{}"
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_copy_cut_short_by_a_locked_file_is_finished_at_the_next_start() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let local = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let old = local.path().join("WattRegClean");
+        write(&old.join("settings.json"), "{}");
+        write(&old.join(r"backups\1\backup.json"), "one");
+        write(&old.join(r"backups\2\backup.json"), "two");
+        write(&old.join("watch.json"), "[]");
+        let locked = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(old.join(r"backups\1\backup.json"))
+            .unwrap();
+        let first = adopt(local.path(), root.path());
+        assert_eq!(first.problems.len(), 1, "{:?}", first.problems);
+        let new = root.path().join("registry");
+        assert!(new.join("settings.json").is_file());
+        assert!(new.join("watch.json").is_file());
+        assert!(new.join(r"backups\2\backup.json").is_file());
+        assert!(!new.join(r"backups\1\backup.json").exists());
+
+        // Meanwhile the person changes a setting in WattClean.
+        write(&new.join("settings.json"), r#"{"changed":true}"#);
+        drop(locked);
+        let second = adopt(local.path(), root.path());
+        assert!(second.problems.is_empty(), "{:?}", second.problems);
+        assert_eq!(
+            fs::read_to_string(new.join(r"backups\1\backup.json")).unwrap(),
+            "one"
+        );
+        assert_eq!(
+            fs::read_to_string(new.join("settings.json")).unwrap(),
+            r#"{"changed":true}"#,
+            "what is already there is kept"
+        );
+        assert!(adopt(local.path(), root.path()) == Adopted::default());
     }
 
     #[test]

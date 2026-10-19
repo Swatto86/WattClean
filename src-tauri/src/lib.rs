@@ -47,7 +47,11 @@ pub fn run_job(id: &str) -> i32 {
 }
 
 pub fn run() {
-    let started_hidden = std::env::args().any(|arg| arg == BACKGROUND_FLAG);
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(pid) = shell::restarted_from(&args) {
+        registry::platform::wait_for_exit(pid);
+    }
+    let started_hidden = args.iter().any(|arg| arg == BACKGROUND_FLAG);
     let app = tauri::Builder::default()
         // First, so a second launch shows this window instead of a copy. A
         // second launch may have fewer rights than this copy (see
@@ -102,12 +106,11 @@ fn start(app: &mut tauri::App, started_hidden: bool) -> Result<(), Box<dyn std::
     std::fs::create_dir_all(&root)?;
     // The WebDriver suite sets its own data folder and must never adopt
     // this PC's data.
-    if std::env::var_os("WATTCLEAN_DATA_DIR").is_none() {
-        let adopted = migrate::adopt(&shell::local_app_data()?, &root);
-        for problem in &adopted.problems {
-            eprintln!("Could not copy from an earlier app: {problem}");
-        }
-    }
+    let adopt_problems = if std::env::var_os("WATTCLEAN_DATA_DIR").is_none() {
+        migrate::adopt(&shell::local_app_data()?, &root).problems
+    } else {
+        Vec::new()
+    };
 
     let disk_dir = root.join("disk");
     std::fs::create_dir_all(&disk_dir)?;
@@ -138,7 +141,12 @@ fn start(app: &mut tauri::App, started_hidden: bool) -> Result<(), Box<dyn std::
         fake,
     ));
 
-    app.manage(Arc::new(Shell::new(root, started_hidden, fake)));
+    app.manage(Arc::new(Shell::new(
+        root,
+        started_hidden,
+        fake,
+        adopt_problems,
+    )));
     app.manage(disk);
     app.manage(registry);
     app.manage(uninstall);

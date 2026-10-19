@@ -42,7 +42,13 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   tweaks, watch list and install logs. Copied, not moved, so an old app
   keeps working until it is uninstalled. Schedules are not copied: their
   tasks start the old app, so they are set up again here. The WebDriver
-  build (its own data folder) never migrates.
+  build (its own data folder) never migrates. What could not be copied (a
+  locked file) stays listed in the module's `adopting.txt`, is tried again
+  at each start without overwriting anything already there, and is shown
+  in a dialog until it is in.
+- **Restart as administrator waits** (`--after <pid>`): the elevated copy
+  waits for the copy that asked to end before its single-instance check,
+  which would otherwise hand over to the closing copy and quit.
 - **One right-click policy**: the registry cleaner's native menus (Windows'
   edit menu on text, a list's own menu on a list) serve the whole window;
   the uninstaller's separate edit menu was dropped as a duplicate. The

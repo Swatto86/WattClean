@@ -31,7 +31,9 @@ use wrc_core::trace::RegistryTrace;
 use wrc_core::{Hive, System};
 
 pub use launch::accept_launch_messages;
-pub use privilege::{ELEVATION_REQUIRED, enable_privilege, is_elevated, relaunch_elevated};
+pub use privilege::{
+    ELEVATION_REQUIRED, enable_privilege, is_elevated, relaunch_elevated, wait_for_exit,
+};
 pub use trace::handle_addresses;
 
 /// A registry key handle shared between threads. Win32 registry functions
