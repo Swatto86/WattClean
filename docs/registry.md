@@ -174,7 +174,13 @@ WebDriver suite on the fake machine. **Out**: left out, reason in
   present. Services inside the Windows folder are never offered. Type
   library data may name a resource inside a file (`updater.exe\4`): it is
   missing only when the file is (2026-10-19, after 0.1.0 removed live
-  Google Updater, OneDrive and Office type libraries this way). An unquoted
+  Google Updater, OneDrive and Office type libraries this way). A drive
+  letter with no drive behind it counts as a network drive while it is
+  still taken: a `subst` whose folder is gone, or a mapping Windows
+  remembers under `HKCU\Network` (an elevated scan cannot see the
+  unelevated session's mappings; a `net use` or `subst` made there without
+  being remembered stays invisible, so only "exclude removable drives",
+  on by default, keeps those safe). An unquoted
   command whose program end cannot be told (a space and no known file
   type), or another account's data using a per-user variable
   (`%APPDATA%`, `%LOCALAPPDATA%`…), is not judged at all
