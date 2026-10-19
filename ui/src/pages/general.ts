@@ -5,6 +5,7 @@
 import { api, TEXT_SIZES, THEMES, type ShellSettings } from "../api.ts";
 import type { Context } from "../context.ts";
 import { el, notice } from "../dom.ts";
+import { isWindows, osName } from "../platform.ts";
 import { ACCENTS } from "../theme.ts";
 
 type Group = (
@@ -40,7 +41,7 @@ export const general = (
   const fail = (e: unknown) => notice(String(e), true);
 
   const theme = select("set-theme", "Theme", [
-    ["system", "Same as Windows"],
+    ["system", `Same as ${osName()}`],
     ["light", "Light"],
     ["dark", "Dark"],
   ]);
@@ -97,7 +98,8 @@ export const general = (
     type: "button",
     class: "secondary",
     text: "Restart as administrator",
-    hidden: ctx.info.elevated,
+    // Linux and macOS ask for administrator rights per task instead.
+    hidden: ctx.info.elevated || !isWindows(),
   });
   restart.addEventListener("click", () => {
     api.restartAsAdmin().catch(fail);
@@ -149,7 +151,9 @@ export const general = (
           { class: "setting-text" },
           el("span", { text: "Keep running in the notification area" }),
           note(
-            "Closing the window hides it to the icon by the clock, so the Registry Watcher keeps watching. Quit from the icon's menu or below.",
+            isWindows()
+              ? "Closing the window hides it to the icon by the clock, so the Registry Watcher keeps watching. Quit from the icon's menu or below."
+              : "Closing the window hides it to the icon in the menu bar or panel. Quit from the icon's menu or below.",
           ),
         ),
       ),

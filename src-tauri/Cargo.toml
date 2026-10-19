@@ -3,7 +3,7 @@ name = "wattclean"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "WattClean: disk cleaner, registry cleaner and uninstaller for Windows in one app"
+description = "WattClean: disk cleaner, registry cleaner (Windows) and uninstaller in one app"
 
 [lib]
 name = "wattclean_lib"
@@ -32,6 +32,10 @@ wcc-windows = { workspace = true }
 wrc-windows = { workspace = true }
 wu-windows = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+wcc-unix = { workspace = true }
+wu-unix = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 
@@ -40,7 +44,8 @@ workspace = true
 
 # `fake-system` swaps Windows for test machines (a sandboxed disk, an
 # in-memory registry and installed programs) so the WebDriver suite drives
-# the real binary without touching this PC. Off by default, so a release
+# the real binary without touching this PC. On Linux and macOS it swaps the
+# disk only. Off by default, so a release
 # build never contains it; scripts/verify.sh asserts that.
 [features]
 default = []

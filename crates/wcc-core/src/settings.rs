@@ -102,9 +102,12 @@ pub fn check_path(path: &str) -> Result<(), String> {
     let p = Path::new(trimmed);
     let absolute = p.is_absolute() || (cfg!(not(windows)) && trimmed.starts_with('/'));
     if !absolute || trimmed.contains('%') {
-        return Err(format!(
-            "{trimmed:?} must be a full path such as C:\\Folder"
-        ));
+        let example = if cfg!(windows) {
+            r"C:\Folder"
+        } else {
+            "/home/you/Folder"
+        };
+        return Err(format!("{trimmed:?} must be a full path such as {example}"));
     }
     Ok(())
 }
@@ -257,6 +260,8 @@ impl Settings {
 mod tests {
     use super::*;
 
+    // Windows paths: a Linux or macOS build rightly refuses them.
+    #[cfg(windows)]
     #[test]
     fn loading_keeps_every_field_that_parses() {
         let dir = tempfile::tempdir().unwrap();
@@ -271,6 +276,28 @@ mod tests {
         assert!(!settings.shred, "a bad value keeps the default");
         assert_eq!(settings.accent, "sky");
         assert_eq!(settings.keep.len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_paths_are_full_paths_and_drive_paths_are_not() {
+        let mut settings = Settings::default();
+        let entry = |p: &str| CustomPath {
+            path: p.into(),
+            folder: false,
+        };
+        settings
+            .apply(SettingsPatch {
+                keep: Some(vec![entry(" /home/t/b.txt "), entry("/home/t/b.txt")]),
+                ..SettingsPatch::default()
+            })
+            .unwrap();
+        assert_eq!(settings.keep, vec![entry("/home/t/b.txt")]);
+        let drive = SettingsPatch {
+            keep: Some(vec![entry(r"C:\A")]),
+            ..SettingsPatch::default()
+        };
+        assert!(settings.apply(drive).is_err());
     }
 
     #[test]
@@ -300,6 +327,8 @@ mod tests {
         assert!(serde_json::from_str::<SettingsPatch>(r#"{"unknown":true}"#).is_err());
     }
 
+    // Windows paths: a Linux or macOS build rightly refuses them.
+    #[cfg(windows)]
     #[test]
     fn keep_entries_cannot_hold_wildcards() {
         let wildcard = SettingsPatch {
@@ -325,6 +354,8 @@ mod tests {
         assert_eq!(loaded.keep[0].path, r"C:\A");
     }
 
+    // Windows paths: a Linux or macOS build rightly refuses them.
+    #[cfg(windows)]
     #[test]
     fn lists_are_trimmed_and_deduplicated() {
         let mut settings = Settings::default();

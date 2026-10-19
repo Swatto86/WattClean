@@ -30,6 +30,8 @@ pub enum ItemKind {
     RecycleBin,
     Clipboard,
     FreeSpace,
+    /// A package manager's (or other tool's) maintenance command.
+    Command,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

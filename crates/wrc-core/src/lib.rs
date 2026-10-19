@@ -4,6 +4,10 @@
 //! through [`System`]; the real implementation lives in `wrc-windows`, a
 //! fake one (feature `fake`) drives the tests and the WebDriver suite. Files
 //! a registry entry names are checked here with `std::fs`.
+//!
+//! The registry exists only on Windows, so the app offers this engine only
+//! there; its tests use Windows paths and run on Windows only
+//! (`cfg(test)` with `cfg(windows)`).
 
 pub mod autostart;
 pub mod backup;

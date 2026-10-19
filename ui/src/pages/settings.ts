@@ -8,6 +8,7 @@ import type { Context, Page } from "../context.ts";
 import { confirm } from "../dialog.ts";
 import { el, notice } from "../dom.ts";
 import { plural } from "../format.ts";
+import { isWindows, osName } from "../platform.ts";
 import { general } from "./general.ts";
 import { pathList } from "./pathlist.ts";
 
@@ -22,6 +23,15 @@ const group = (
     el("legend", { text: title }),
     ...children,
   );
+
+/** winapp2.ini describes Windows programs: offered on Windows only. */
+const communityGroup = (
+  ...args: Parameters<typeof group>
+): HTMLFieldSetElement => {
+  const fieldset = group(...args);
+  fieldset.hidden = !isWindows();
+  return fieldset;
+};
 
 const note = (text: string): HTMLElement =>
   el("span", { class: "setting-note", text });
@@ -210,6 +220,10 @@ export const settingsPage = (ctx: Context): Page => {
     notice("Cleaners reloaded.");
   });
 
+  // Windows only: Linux and macOS delete a file in use at once, and
+  // winapp2.ini describes Windows programs.
+  reboot.row.hidden = !isWindows();
+
   const apply = (s: Settings) => {
     hide.box.checked = s.hideIrrelevant;
     shred.box.checked = s.shred;
@@ -253,12 +267,12 @@ export const settingsPage = (ctx: Context): Page => {
         "Custom paths",
         "settings-custom",
         note(
-          "Files and folders deleted when Windows › Custom paths is ticked in the Cleaner. Folders go with everything in them.",
+          `Files and folders deleted when ${osName()} › Custom paths is ticked in the Cleaner. Folders go with everything in them.`,
         ),
         custom.list,
         custom.buttons,
       ),
-      group(
+      communityGroup(
         "Community cleaners",
         "settings-community",
         note(

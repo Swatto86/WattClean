@@ -1,0 +1,21 @@
+[package]
+name = "wu-unix"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The uninstaller on Linux and macOS: package managers, application bundles and the Trash"
+
+[dependencies]
+wu-core = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+# Finding and running programs, with administrator rights when asked: the
+# same rules as the disk cleaner's package-manager commands.
+wcc-unix = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

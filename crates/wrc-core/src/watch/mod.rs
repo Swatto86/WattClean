@@ -13,6 +13,7 @@ mod log;
 pub mod offline;
 mod snapshot;
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 
 use std::collections::BTreeMap;

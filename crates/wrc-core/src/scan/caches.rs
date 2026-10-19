@@ -227,6 +227,7 @@ fn fonts(context: &Context, key: &RegPath, out: &mut Vec<Found>) {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::mui_path;
 

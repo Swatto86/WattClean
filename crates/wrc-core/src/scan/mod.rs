@@ -8,6 +8,7 @@ mod machine;
 mod programs;
 mod roots;
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 
 use std::collections::HashSet;

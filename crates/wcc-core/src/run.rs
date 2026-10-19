@@ -190,3 +190,7 @@ impl Step<'_> {
 #[cfg(test)]
 #[path = "run_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "run_command_tests.rs"]
+mod command_tests;

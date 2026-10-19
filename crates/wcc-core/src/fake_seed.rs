@@ -71,7 +71,7 @@ actions = [{{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Northwi
 pub fn seed(sandbox: &Path) -> io::Result<()> {
     let root = sandbox.join("machine");
     let c = root.join("C");
-    let profile = c.join(r"Users\Tester");
+    let profile = crate::paths::join(&c, r"Users\Tester");
     windows(&c, &profile)?;
     browsers(&profile)?;
     applications(&profile)?;
@@ -82,52 +82,85 @@ pub fn seed(sandbox: &Path) -> io::Result<()> {
 }
 
 fn windows(c: &Path, profile: &Path) -> io::Result<()> {
-    let local = profile.join(r"AppData\Local");
-    let roaming = profile.join(r"AppData\Roaming");
+    let local = crate::paths::join(profile, r"AppData\Local");
+    let roaming = crate::paths::join(profile, r"AppData\Roaming");
     // Temporary files: two old ones go, a fresh one and a kept folder stay.
-    old_file(&local.join(r"Temp\setup-1234.tmp"), 40_000)?;
-    old_file(&local.join(r"Temp\old-installer\payload.bin"), 60_000)?;
-    age_folder(&local.join(r"Temp\old-installer"))?;
-    file(&local.join(r"Temp\in-use-today.tmp"), 1_000)?;
-    old_file(&local.join(r"Temp\keep-me\important.tmp"), 2_000)?;
-    old_file(&c.join(r"Windows\Temp\update.tmp"), 30_000)?;
-    file(&c.join(r"Windows\Prefetch\NOTEPAD.EXE-1234ABCD.pf"), 9_000)?;
-    file(&c.join(r"Windows\Minidump\101825-1.dmp"), 120_000)?;
+    old_file(&crate::paths::join(&local, r"Temp\setup-1234.tmp"), 40_000)?;
+    old_file(
+        &crate::paths::join(&local, r"Temp\old-installer\payload.bin"),
+        60_000,
+    )?;
+    age_folder(&crate::paths::join(&local, r"Temp\old-installer"))?;
+    file(&crate::paths::join(&local, r"Temp\in-use-today.tmp"), 1_000)?;
+    old_file(
+        &crate::paths::join(&local, r"Temp\keep-me\important.tmp"),
+        2_000,
+    )?;
+    old_file(&crate::paths::join(c, r"Windows\Temp\update.tmp"), 30_000)?;
     file(
-        &local.join(r"Microsoft\Windows\WER\ReportArchive\AppCrash_x\Report.wer"),
+        &crate::paths::join(c, r"Windows\Prefetch\NOTEPAD.EXE-1234ABCD.pf"),
+        9_000,
+    )?;
+    file(
+        &crate::paths::join(c, r"Windows\Minidump\101825-1.dmp"),
+        120_000,
+    )?;
+    file(
+        &crate::paths::join(
+            &local,
+            r"Microsoft\Windows\WER\ReportArchive\AppCrash_x\Report.wer",
+        ),
         5_000,
     )?;
-    file(&c.join(r"$Recycle.Bin\S-1-5-21-1\$RAB12CD.txt"), 25_000)?;
     file(
-        &roaming.join(r"Microsoft\Windows\Recent\report.docx.lnk"),
+        &crate::paths::join(c, r"$Recycle.Bin\S-1-5-21-1\$RAB12CD.txt"),
+        25_000,
+    )?;
+    file(
+        &crate::paths::join(&roaming, r"Microsoft\Windows\Recent\report.docx.lnk"),
         700,
     )?;
     file(
-        &local.join(r"Microsoft\Windows\Explorer\thumbcache_256.db"),
+        &crate::paths::join(&local, r"Microsoft\Windows\Explorer\thumbcache_256.db"),
         50_000,
     )?;
     Ok(())
 }
 
 fn browsers(profile: &Path) -> io::Result<()> {
-    let local = profile.join(r"AppData\Local");
-    let roaming = profile.join(r"AppData\Roaming");
+    let local = crate::paths::join(profile, r"AppData\Local");
+    let roaming = crate::paths::join(profile, r"AppData\Roaming");
     // Google Chrome, one profile.
-    let chrome = local.join(r"Google\Chrome\User Data");
+    let chrome = crate::paths::join(&local, r"Google\Chrome\User Data");
     for (name, size) in [("data_0", 8_192), ("data_1", 270_336), ("f_000001", 51_000)] {
-        file(&chrome.join(r"Default\Cache\Cache_Data").join(name), size)?;
+        file(
+            &crate::paths::join(&chrome, r"Default\Cache\Cache_Data").join(name),
+            size,
+        )?;
     }
-    file(&chrome.join(r"Default\Code Cache\js\index"), 24_000)?;
-    file(&chrome.join(r"Default\GPUCache\data_0"), 8_192)?;
-    file(&chrome.join(r"Default\Network\Cookies"), 20_480)?;
-    file(&chrome.join(r"Crashpad\reports\a1b2.dmp"), 300_000)?;
-    file(&chrome.join(r"Default\Preferences"), 10)?;
+    file(
+        &crate::paths::join(&chrome, r"Default\Code Cache\js\index"),
+        24_000,
+    )?;
+    file(
+        &crate::paths::join(&chrome, r"Default\GPUCache\data_0"),
+        8_192,
+    )?;
+    file(
+        &crate::paths::join(&chrome, r"Default\Network\Cookies"),
+        20_480,
+    )?;
+    file(
+        &crate::paths::join(&chrome, r"Crashpad\reports\a1b2.dmp"),
+        300_000,
+    )?;
+    file(&crate::paths::join(&chrome, r"Default\Preferences"), 10)?;
     fs::write(
-        chrome.join(r"Default\Preferences"),
+        crate::paths::join(&chrome, r"Default\Preferences"),
         br#"{"browser":{"window_placement":{}}}"#,
     )?;
     database(
-        &chrome.join(r"Default\History"),
+        &crate::paths::join(&chrome, r"Default\History"),
         r"CREATE TABLE urls (id INTEGER PRIMARY KEY, url TEXT, title TEXT);
          CREATE TABLE visits (id INTEGER PRIMARY KEY, url INTEGER, visit_time INTEGER);
          CREATE TABLE downloads (id INTEGER PRIMARY KEY, target_path TEXT);
@@ -137,7 +170,7 @@ fn browsers(profile: &Path) -> io::Result<()> {
          INSERT INTO downloads (target_path) VALUES ('C:\Users\Tester\Downloads\file.zip');",
     )?;
     database(
-        &chrome.join(r"Default\Web Data"),
+        &crate::paths::join(&chrome, r"Default\Web Data"),
         "CREATE TABLE autofill (name TEXT, value TEXT);
          CREATE TABLE keywords (id INTEGER PRIMARY KEY, short_name TEXT, safe_for_autoreplace INTEGER, prepopulate_id INTEGER);
          CREATE TABLE meta (key TEXT, value TEXT);
@@ -147,9 +180,12 @@ fn browsers(profile: &Path) -> io::Result<()> {
     )?;
 
     // Firefox, one profile; the bookmarked place must survive history cleaning.
-    let firefox = roaming.join(r"Mozilla\Firefox\Profiles\t3st.default-release");
+    let firefox = crate::paths::join(&roaming, r"Mozilla\Firefox\Profiles\t3st.default-release");
     file(
-        &local.join(r"Mozilla\Firefox\Profiles\t3st.default-release\cache2\entries\3F2A1B"),
+        &crate::paths::join(
+            &local,
+            r"Mozilla\Firefox\Profiles\t3st.default-release\cache2\entries\3F2A1B",
+        ),
         90_000,
     )?;
     file(&firefox.join("cookies.sqlite"), 32_768)?;
@@ -171,35 +207,68 @@ fn browsers(profile: &Path) -> io::Result<()> {
 }
 
 fn applications(profile: &Path) -> io::Result<()> {
-    let local = profile.join(r"AppData\Local");
-    let roaming = profile.join(r"AppData\Roaming");
+    let local = crate::paths::join(profile, r"AppData\Local");
+    let roaming = crate::paths::join(profile, r"AppData\Roaming");
     fs::create_dir_all(roaming.join("vlc"))?;
     fs::write(
-        roaming.join(r"vlc\vlc-qt-interface.ini"),
+        crate::paths::join(&roaming, r"vlc\vlc-qt-interface.ini"),
         "[General]\r\nqt-mode=1\r\n[RecentsMRU]\r\nlist=C:/Users/Tester/Videos/holiday.mp4\r\ntimes=0\r\n",
     )?;
-    file(&roaming.join(r"vlc\art\artistalbum\cover.jpg"), 45_000)?;
-    file(&roaming.join(r"discord\Cache\Cache_Data\data_1"), 150_000)?;
-    file(&local.join(r"Northwind\Cache\page.bin"), 33_000)?;
+    file(
+        &crate::paths::join(&roaming, r"vlc\art\artistalbum\cover.jpg"),
+        45_000,
+    )?;
+    file(
+        &crate::paths::join(&roaming, r"discord\Cache\Cache_Data\data_1"),
+        150_000,
+    )?;
+    file(
+        &crate::paths::join(&local, r"Northwind\Cache\page.bin"),
+        33_000,
+    )?;
 
     // Deep scan finds these; the document beside them stays.
-    file(&profile.join(r"Documents\report.docx"), 12_000)?;
-    file(&profile.join(r"Documents\report.docx.bak"), 11_000)?;
-    file(&profile.join(r"Pictures\Holiday\Thumbs.db"), 7_000)?;
+    file(
+        &crate::paths::join(profile, r"Documents\report.docx"),
+        12_000,
+    )?;
+    file(
+        &crate::paths::join(profile, r"Documents\report.docx.bak"),
+        11_000,
+    )?;
+    file(
+        &crate::paths::join(profile, r"Pictures\Holiday\Thumbs.db"),
+        7_000,
+    )?;
 
     // Build output: the target folder beside Cargo.toml goes; the project's
     // own files and a folder that only shares the name stay.
-    file(&profile.join(r"Projects\demo\Cargo.toml"), 200)?;
-    file(&profile.join(r"Projects\demo\src\main.rs"), 300)?;
     file(
-        &profile.join(r"Projects\demo\target\debug\demo.exe"),
+        &crate::paths::join(profile, r"Projects\demo\Cargo.toml"),
+        200,
+    )?;
+    file(
+        &crate::paths::join(profile, r"Projects\demo\src\main.rs"),
+        300,
+    )?;
+    file(
+        &crate::paths::join(profile, r"Projects\demo\target\debug\demo.exe"),
         90_000,
     )?;
-    file(&profile.join(r"Projects\notes\target\plan.txt"), 1_000)?;
+    file(
+        &crate::paths::join(profile, r"Projects\notes\target\plan.txt"),
+        1_000,
+    )?;
 
     // For Custom paths, Shred and the keep list.
-    file(&profile.join(r"Documents\Scratch\draft.txt"), 4_000)?;
-    file(&profile.join(r"Documents\Secret\plan.txt"), 6_000)?;
+    file(
+        &crate::paths::join(profile, r"Documents\Scratch\draft.txt"),
+        4_000,
+    )?;
+    file(
+        &crate::paths::join(profile, r"Documents\Secret\plan.txt"),
+        6_000,
+    )?;
     Ok(())
 }
 

@@ -1,6 +1,8 @@
 //! BleachBit's own cleaner format (CleanerML), so a person's existing custom
-//! BleachBit cleaners keep working. Windows parts only: an element marked
-//! `os="linux"` (or anything but windows) is skipped.
+//! BleachBit cleaners keep working. Each platform reads its own parts: an
+//! element marked for another system (`os="linux"` on Windows,
+//! `os="windows"` on Linux) is skipped. On Linux and macOS a path starting
+//! with `~` starts in the home folder.
 //!
 //! Commands understood: `delete`, `shred` (a delete; overwriting follows the
 //! setting), `truncate`, `winreg`, `json`, `ini`, `sqlite.vacuum`,
@@ -14,33 +16,34 @@ use roxmltree::{Document, Node};
 use crate::model::{
     Action, Category, Cleaner, CleanerOption, FileSpec, Kind, Search, Source, SqliteOp, slug,
 };
+use crate::system::Platform;
 
 /// The cleaner, and what in the file was not understood.
-pub fn parse(text: &str) -> Result<(Cleaner, Vec<String>), String> {
+pub fn parse(text: &str, platform: Platform) -> Result<(Cleaner, Vec<String>), String> {
     let doc = Document::parse(text).map_err(|e| e.to_string())?;
     let root = doc.root_element();
     if root.tag_name().name() != "cleaner" {
         return Err("the root element is not <cleaner>".into());
     }
-    if !for_windows(root) {
-        return Err("this cleaner is not for Windows".into());
+    if !fits(root, platform) {
+        return Err("this cleaner is for another system".into());
     }
     let id = slug(root.attribute("id").unwrap_or_default());
     if id.is_empty() {
         return Err("the cleaner has no id".into());
     }
     let mut notes = Vec::new();
-    let vars = read_vars(root);
+    let vars = read_vars(root, platform);
     let mut options = Vec::new();
-    for option in children(root, "option") {
+    for option in children(root, "option", platform) {
         let option_id = slug(option.attribute("id").unwrap_or_default());
         if option_id.is_empty() {
             notes.push("an option without an id was skipped".into());
             continue;
         }
         let mut actions = Vec::new();
-        for action in children(option, "action") {
-            match read_action(action, &vars) {
+        for action in children(option, "action", platform) {
+            match read_action(action, &vars, platform) {
                 Ok(list) => actions.extend(list),
                 Err(note) => notes.push(format!("{option_id}: {note}")),
             }
@@ -50,23 +53,23 @@ pub fn parse(text: &str) -> Result<(Cleaner, Vec<String>), String> {
         }
         options.push(CleanerOption {
             id: option_id.clone(),
-            name: text_of(option, "label").unwrap_or(option_id),
-            description: text_of(option, "description").unwrap_or_default(),
-            warning: text_of(option, "warning"),
+            name: text_of(option, "label", platform).unwrap_or(option_id),
+            description: text_of(option, "description", platform).unwrap_or_default(),
+            warning: text_of(option, "warning", platform),
             default: false,
             actions,
         });
     }
     if options.is_empty() {
-        return Err("no option has an action for Windows".into());
+        return Err("no option has an action for this system".into());
     }
     let cleaner = Cleaner {
         id: format!("ml-{id}"),
-        name: text_of(root, "label").unwrap_or_else(|| id.clone()),
-        description: text_of(root, "description").unwrap_or_default(),
+        name: text_of(root, "label", platform).unwrap_or_else(|| id.clone()),
+        description: text_of(root, "description", platform).unwrap_or_default(),
         category: Category::Custom,
         source: Source::Custom,
-        running: children(root, "running")
+        running: children(root, "running", platform)
             .filter_map(|r| r.text())
             .map(|t| t.trim().to_ascii_lowercase())
             .filter(|t| !t.is_empty())
@@ -77,21 +80,29 @@ pub fn parse(text: &str) -> Result<(Cleaner, Vec<String>), String> {
     Ok((cleaner, notes))
 }
 
-fn for_windows(node: Node) -> bool {
-    node.attribute("os")
-        .is_none_or(|os| os.eq_ignore_ascii_case("windows"))
+/// Whether an element is for this platform (no `os` means every one).
+fn fits(node: Node, platform: Platform) -> bool {
+    node.attribute("os").is_none_or(|os| {
+        let os = os.to_ascii_lowercase();
+        match platform {
+            Platform::Windows => os == "windows",
+            Platform::Linux => matches!(os.as_str(), "linux" | "unix" | "posix"),
+            Platform::Macos => matches!(os.as_str(), "darwin" | "macos" | "osx" | "unix" | "posix"),
+        }
+    })
 }
 
 fn children<'a, 'input>(
     node: Node<'a, 'input>,
     name: &'a str,
+    platform: Platform,
 ) -> impl Iterator<Item = Node<'a, 'input>> + 'a {
     node.children()
-        .filter(move |c| c.is_element() && c.tag_name().name() == name && for_windows(*c))
+        .filter(move |c| c.is_element() && c.tag_name().name() == name && fits(*c, platform))
 }
 
-fn text_of(node: Node, name: &str) -> Option<String> {
-    children(node, name)
+fn text_of(node: Node, name: &str, platform: Platform) -> Option<String> {
+    children(node, name, platform)
         .next()
         .and_then(|n| n.text())
         .map(|t| t.trim().to_string())
@@ -99,13 +110,13 @@ fn text_of(node: Node, name: &str) -> Option<String> {
 }
 
 /// `<var name="x"><value>…</value></var>`, used as `$$x$$` in paths.
-fn read_vars(root: Node) -> HashMap<String, Vec<String>> {
+fn read_vars(root: Node, platform: Platform) -> HashMap<String, Vec<String>> {
     let mut vars: HashMap<String, Vec<String>> = HashMap::new();
-    for var in children(root, "var") {
+    for var in children(root, "var", platform) {
         let Some(name) = var.attribute("name") else {
             continue;
         };
-        let values = children(var, "value")
+        let values = children(var, "value", platform)
             .filter_map(|v| v.text())
             .map(|t| env_style(t.trim()));
         vars.entry(name.to_string()).or_default().extend(values);
@@ -113,9 +124,17 @@ fn read_vars(root: Node) -> HashMap<String, Vec<String>> {
     vars
 }
 
-/// `$APPDATA` and `${APPDATA}` written as `%APPDATA%`.
+/// `$APPDATA` and `${APPDATA}` written as `%APPDATA%`, and a leading `~`
+/// (the home folder on Linux and macOS) as `%HOME%`.
 fn env_style(path: &str) -> String {
     let mut out = String::new();
+    let path = match path.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => {
+            out.push_str("%HOME%");
+            rest
+        }
+        _ => path,
+    };
     let mut chars = path.chars().peekable();
     while let Some(c) = chars.next() {
         if c != '$' {
@@ -166,10 +185,17 @@ fn substitute(path: &str, vars: &HashMap<String, Vec<String>>) -> Vec<String> {
     results.into_iter().map(|p| env_style(&p)).collect()
 }
 
-fn read_action(node: Node, vars: &HashMap<String, Vec<String>>) -> Result<Vec<Action>, String> {
+fn read_action(
+    node: Node,
+    vars: &HashMap<String, Vec<String>>,
+    platform: Platform,
+) -> Result<Vec<Action>, String> {
     let command = node
         .attribute("command")
         .ok_or("an action without a command")?;
+    if command == "winreg" && platform != Platform::Windows {
+        return Err("registry actions apply to Windows only".into());
+    }
     if command == "winreg" {
         let key = node.attribute("path").ok_or("winreg without a path")?;
         return Ok(vec![Action::Registry {
@@ -281,7 +307,7 @@ mod tests {
 
     #[test]
     fn reads_options_actions_and_variables() {
-        let (cleaner, notes) = parse(SAMPLE).unwrap();
+        let (cleaner, notes) = parse(SAMPLE, Platform::Windows).unwrap();
         assert_eq!(cleaner.id, "ml-example");
         assert_eq!(cleaner.name, "Example");
         assert_eq!(cleaner.running, vec!["example.exe".to_string()]);
@@ -326,8 +352,40 @@ mod tests {
 
     #[test]
     fn refuses_what_is_not_a_windows_cleaner() {
-        assert!(parse("<nope/>").is_err());
-        assert!(parse(r#"<cleaner id="x" os="linux"><option id="a"/></cleaner>"#).is_err());
-        assert!(parse("not xml").is_err());
+        assert!(parse("<nope/>", Platform::Windows).is_err());
+        let linux = r#"<cleaner id="x" os="linux"><option id="a"/></cleaner>"#;
+        assert!(parse(linux, Platform::Windows).is_err());
+        assert!(parse("not xml", Platform::Windows).is_err());
+    }
+
+    /// BleachBit's own cleaners are mostly Linux ones.
+    #[test]
+    fn linux_reads_its_own_parts_with_the_home_folder() {
+        let text = r#"<cleaner id="gedit">
+  <label>gedit</label>
+  <option id="cache">
+    <label>Cache</label>
+    <action command="delete" search="walk.all" path="~/.cache/gedit"/>
+    <action command="delete" search="file" path="$XDG_CONFIG_HOME/gedit/recent" os="linux"/>
+    <action command="delete" search="file" path="$APPDATA\gedit\cache" os="windows"/>
+    <action command="winreg" path="HKCU\Software\gedit"/>
+  </option>
+</cleaner>"#;
+        let (cleaner, notes) = parse(text, Platform::Linux).unwrap();
+        let paths: Vec<_> = cleaner.options[0]
+            .actions
+            .iter()
+            .filter_map(|a| match a {
+                Action::Delete(spec) => Some(spec.path.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            paths,
+            ["%HOME%/.cache/gedit", "%XDG_CONFIG_HOME%/gedit/recent"]
+        );
+        assert_eq!(notes, ["cache: registry actions apply to Windows only"]);
+        let (windows, _) = parse(text, Platform::Windows).unwrap();
+        assert_eq!(windows.options[0].actions.len(), 3, "~ stays literal there");
     }
 }

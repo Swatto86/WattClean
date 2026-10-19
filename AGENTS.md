@@ -1,17 +1,18 @@
 # WattClean — working context
 
-A Windows cleaning suite in Rust + Tauri 2 with WattTask's look and a
-notification-area icon. It replaces three apps: a BleachBit-style disk and
+A cleaning suite for Windows, Linux and macOS in Rust + Tauri 2 with
+WattTask's look and a notification-area icon. It replaces three apps: a BleachBit-style disk and
 privacy cleaner (was WattCompClean), a Revo-style registry cleaner with
 tuner, watcher, backups and schedules (was WattRegClean), and a Revo-style
 uninstaller with leftover scans, backups and traced installs (was
-WattUninstaller). `ARCHITECTURE.md` is the map, `CONTEXT.md` the suite's
+WattUninstaller). The registry cleaner is Windows-only; on Linux and
+macOS the uninstaller asks the package managers. `ARCHITECTURE.md` is the map, `CONTEXT.md` the suite's
 decisions; each engine's own structure and decisions are in
 `docs/disk-cleaner.md`, `docs/registry.md` and `docs/uninstaller.md`.
 
 ## Build, test, verify
 
-- Windows only (x64, MSVC). Toolchain pinned in `rust-toolchain.toml`.
+- Windows (x64, MSVC), Linux and macOS. Toolchain in `rust-toolchain.toml`.
 - Inner loop: `pwsh scripts/fastcheck.ps1` (`-Package <crate>` checks one).
   Run the app on the test machines with
   `npx tauri dev --features fake-system` and `WATTCLEAN_DATA_DIR` set to a
@@ -25,12 +26,18 @@ decisions; each engine's own structure and decisions are in
   the WebDriver suite (`e2e/`, 102 tests, about 3 minutes). It drives real
   Windows right-click menus on the desktop: leave the mouse and keyboard
   alone while it runs.
+- Linux (WSL Ubuntu here: build with `CARGO_TARGET_DIR` on ext4): the same
+  `bash scripts/verify.sh`, ending with `e2e/linux/smoke.py` (needs the
+  WebKitGTK dev packages, `webkit2gtk-driver`, `xvfb`, Linux node_modules
+  and `scripts/setup-tauri-driver.sh`). macOS: the gate builds but has no
+  WebDriver; the window is checked by hand (not yet run on a Mac).
 - WebDriver setup once per WebView2 update: `pwsh scripts/setup-e2e.ps1`
   (run it from PowerShell: from Git Bash it cannot find Git's bash.exe).
 - Read-only checks on this PC (they change nothing):
   `cargo run -p wattclean-cmd -- disk --preview --all-but-warning`;
   `cargo run -p wrc-windows --example dry_run -- [safe|moderate|advanced] [all]`;
-  `cargo run -p wu-windows --example dry_run -- "<program>" [mode]`.
+  `cargo run -p wu-windows --example dry_run -- "<program>" [mode]`;
+  on Linux or macOS `cargo run -p wu-unix --example packages -- [--all] [name]`.
 - Real-machine checks of the registry engine, as administrator, each
   touching only its own keys or tasks (see `docs/registry.md`):
   `force_check`, `trace_check`, `autostart_check` (WattClean installed and
@@ -39,8 +46,9 @@ decisions; each engine's own structure and decisions are in
 - `cargo test -p wcc-windows -- --ignored` writes and removes a scratch key
   under `HKCU\Software\WattClean-Test`; run it after changing the disk
   engine's `registry.rs`.
-- Before a release: `cargo deny --target x86_64-pc-windows-msvc check
-  advisories licenses` (policy: `deny.toml`) and `npm audit --omit=dev`.
+- Before a release: `cargo deny --target <triple> check advisories
+  licenses` for each shipped target (policy: `deny.toml`) and
+  `npm audit --omit=dev`.
 - Local install: `AGENT_RELEASE=1 npx tauri build` (NSIS, per machine),
   then `pwsh scripts/install-handoff.ps1`: the installer asks for
   administrator rights once (UAC), then the script starts the app through
@@ -64,8 +72,11 @@ decisions; each engine's own structure and decisions are in
 
 ## Constraints
 
-- `unsafe` lives in the `*-windows` crates (and `wrc-cmd`'s one mutex
-  check); every other crate forbids it.
+- `unsafe` lives in the `*-windows` crates, `wcc-unix/src/sys.rs` (and
+  `wrc-cmd`'s one mutex check); every other crate forbids it.
+- Commands run for cleaning come only from `wcc-core/src/tasks.rs`;
+  removals only from `wu-core/src/packages/remove.rs`. Unix leftovers go to
+  the Trash, never deleted outright.
 - Each engine keeps its safety rules: the disk cleaner's `paths::Guard`
   (checked when planned and again before deleting, keep list honoured,
   links removed as links), the registry cleaner's "only a confident missing
@@ -82,7 +93,8 @@ decisions; each engine's own structure and decisions are in
   module element ids theirs (`reg-`, `un-`); add new ones the same way.
 - The only network access is the user clicking "Download the latest"
   winapp2.ini (Windows' own `curl.exe`, HTTPS only).
-- Data: `%LOCALAPPDATA%\WattClean` (`WATTCLEAN_DATA_DIR` overrides it), the
+- Data: `%LOCALAPPDATA%\WattClean`, `~/.local/share/WattClean`,
+  `~/Library/Application Support/WattClean` (`WATTCLEAN_DATA_DIR` overrides), the
   shell's `settings.json` and one folder per module; files are written to a
   temp file then renamed, and loading keeps every field that parses.
 - Nothing from BleachBit, Revo or Task Manager TMOG (code, text, icons) is
@@ -96,5 +108,6 @@ decisions; each engine's own structure and decisions are in
   for every Watt* repo): the local full gate is the only verdict.
 - `SRSetRestorePoint` may be throttled by Windows to one point per 24 hours;
   both cleaners report what it returns and carry on.
-- macOS: the engines are platform-neutral, but only the Windows backends
-  and Windows definitions exist.
+- macOS has only been compile-checked (from Linux); run the app and the
+  gate on a Mac. Linux and macOS releases are not published yet; macOS
+  signing and notarization are undecided.

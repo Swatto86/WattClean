@@ -57,10 +57,68 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
 - **One command line**, `wattclean-cmd disk …` (BleachBit's options) and
   `wattclean-cmd registry …` (Revo's `RRCcmd` verbs), so scripts keep their
   exit codes; the old console programs became libraries.
-- **Rights are reported once**, from the registry module's machine; on a
-  real PC all three agree. On the test build that means "Administrator",
+- **Rights are reported once**, from the registry module's machine (the
+  disk module's on Linux and macOS); on a real PC all three agree. On the test build that means "Administrator",
   which the registry and uninstaller suites expect; the disk engine still
   asks its own machine for its own administrator-only behaviour.
+
+## Linux and macOS (2026-10-19)
+
+- **One app on three systems.** The disk cleaner and the uninstaller run on
+  Linux and macOS too; the registry cleaner (and with it schedules, the
+  watcher, start with Windows and restart as administrator) is compiled
+  for Windows only, since only Windows has a registry. The window asks the
+  app which platform it is on (`app_info.platform`) and offers only that
+  platform's pages.
+- **The disk engine is shared; definitions are per platform.**
+  `defs/windows`, `defs/linux`, `defs/macos` and `defs/unix` (both), over
+  shared Chromium, Firefox and Electron templates (`defs/templates.toml`).
+  Linux and macOS paths use `%HOME%`, the XDG folders, and `%CONFIG%` /
+  `%CACHE%` (XDG on Linux, `~/Library/…` on macOS) so one definition serves
+  both. The tests check each platform's set uses only its own variables
+  and kinds of action.
+- **Paths compare by one text rule everywhere**: either separator,
+  case-insensitive. On Linux that can only make the guard refuse more. The
+  disk engine's existing tests run on Linux too (the test machine stays
+  Windows-shaped; definitions may use either separator).
+- **Package managers clean through their own commands**, picked by id from
+  one table in Rust (`wcc-core/src/tasks.rs`): apt, dnf, zypper, pacman,
+  Flatpak, Snap, Nix, Homebrew, MacPorts, journald and developer tools. A
+  definition file can only name a task, never a command; names a listing
+  step reads back are checked before they are passed on. System caches
+  belong to root, so those commands ask for administrator rights each time
+  (polkit's `pkexec`, macOS's own prompt): the app itself never runs as
+  root, and there is no "restart as administrator" outside Windows.
+- **Unix safety rules**: sockets, pipes and devices are never listed (the
+  temporary folder holds running sessions'); clearing "read-only" stays a
+  Windows-only fallback (on Unix it would make a file world-writable); the
+  temporary-folder option keeps hidden and session entries and anything
+  touched in the last two days.
+- **The uninstaller on Linux and macOS is a package engine**
+  (`wu-core/src/packages`, `wu-unix`), not the registry one: it lists what
+  apt/dpkg, dnf/zypper/rpm, pacman, Flatpak, Snap, Homebrew (formulae and
+  casks), MacPorts, AppImages and app bundles installed, shows applications
+  (those with a launcher, or bundles) unless asked for every package, and
+  removes with the package manager's command. Leftovers are matched by
+  exact name only, never offered when another installed program goes by
+  the name, never pre-ticked, and moved to the Trash (freedesktop.org Trash
+  on Linux, Finder on macOS) rather than backed up: the Trash is how these
+  systems undo.
+- **winapp2.ini is Windows-only** (its entries are Windows paths); BleachBit
+  CleanerML files are read for each platform's own parts, `~` being home.
+- **Data folders**: `~/.local/share/WattClean` (XDG) on Linux,
+  `~/Library/Application Support/WattClean` on macOS.
+- **Bundles**: deb, rpm and AppImage on Linux; app and dmg on macOS, each
+  with `wattclean-cmd` (`tauri.linux.conf.json`, `tauri.macos.conf.json`).
+  The licence notices cover every shipped target; `deny.toml` allows ISC and
+  Apache-2.0 WITH LLVM-exception (Linux only) and records four
+  "unmaintained" advisories in Tauri's Linux stack, to review 2027-01-19.
+- **Verification**: the full gate runs on Linux with `e2e/linux/smoke.py`
+  (WebKitGTK through tauri-driver: real package managers, read only, and a
+  throwaway AppImage uninstalled to the Trash, in a temporary home). macOS
+  has no WebDriver for WKWebView; it was compile-checked from Linux
+  (`cargo clippy --target aarch64-apple-darwin`) and has not yet run on a
+  Mac.
 
 ## Repository
 

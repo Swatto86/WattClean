@@ -154,6 +154,7 @@ impl<'a> PathCheck<'a> {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
     use crate::fake::FakeSystem;

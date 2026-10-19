@@ -9,7 +9,7 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::model::{Category, Cleaner, Detect, OptionKey, Source};
-use crate::system::{Registry, System};
+use crate::system::{Platform, Registry, System};
 use crate::wildcard::{Wildcard, glob};
 use crate::{cleanerml, defs, vars, winapp2};
 
@@ -24,18 +24,22 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// The built-in cleaners, then custom files, then winapp2.ini when
-    /// `community` is on. A later cleaner with an id already taken is
-    /// reported and left out.
-    pub fn load(cleaners_dir: Option<&Path>, community: bool) -> Self {
-        let (mut cleaners, problems) = defs::built_in();
+    /// The platform's built-in cleaners, then custom files, then
+    /// winapp2.ini when `community` is on (Windows only: its entries are
+    /// Windows paths). A later cleaner with an id already taken is reported
+    /// and left out.
+    pub fn load(platform: Platform, cleaners_dir: Option<&Path>, community: bool) -> Self {
+        let (mut cleaners, problems) = defs::built_in(platform);
         let mut catalog = Self {
             cleaners: Vec::new(),
             problems: problems.iter().map(ToString::to_string).collect(),
         };
         if let Some(dir) = cleaners_dir {
-            cleaners.extend(catalog.load_custom(dir));
-            if community && let Ok(text) = fs::read_to_string(dir.join(WINAPP2_FILE)) {
+            cleaners.extend(catalog.load_custom(dir, platform));
+            if community
+                && platform == Platform::Windows
+                && let Ok(text) = fs::read_to_string(dir.join(WINAPP2_FILE))
+            {
                 cleaners.extend(winapp2::parse(&text));
             }
         }
@@ -53,7 +57,7 @@ impl Catalog {
         catalog
     }
 
-    fn load_custom(&mut self, dir: &Path) -> Vec<Cleaner> {
+    fn load_custom(&mut self, dir: &Path, platform: Platform) -> Vec<Cleaner> {
         let Ok(entries) = fs::read_dir(dir) else {
             return Vec::new();
         };
@@ -72,7 +76,7 @@ impl Catalog {
             match extension.as_deref() {
                 Some("xml") => match fs::read_to_string(&path)
                     .map_err(|e| e.to_string())
-                    .and_then(|t| cleanerml::parse(&t))
+                    .and_then(|t| cleanerml::parse(&t, platform))
                 {
                     Ok((cleaner, notes)) => {
                         self.problems
@@ -150,6 +154,7 @@ pub fn is_present(cleaner: &Cleaner, system: &dyn System) -> bool {
             .iter()
             .any(|p| !glob(p).is_empty()),
         Detect::Registry(key) => key_found(system.registry(), key),
+        Detect::Program(name) => system.find_program(name).is_some(),
     })
 }
 

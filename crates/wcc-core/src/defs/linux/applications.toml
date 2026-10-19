@@ -1,0 +1,200 @@
+# Everyday applications on Linux. Electron apps share the "electron"
+# template (templates.toml); {root} is the app's folder in ~/.config.
+
+[[cleaner]]
+id = "discord"
+name = "Discord"
+description = "Chat"
+category = "applications"
+template = "electron"
+vars = { root = '%XDG_CONFIG_HOME%/discord' }
+detect = ['{root}']
+running = ["discord"]
+
+[[cleaner]]
+id = "slack"
+name = "Slack"
+description = "Chat"
+category = "applications"
+template = "electron"
+vars = { root = '%XDG_CONFIG_HOME%/Slack' }
+detect = ['{root}']
+running = ["slack"]
+
+[[cleaner]]
+id = "signal"
+name = "Signal"
+description = "Chat"
+category = "applications"
+template = "electron"
+vars = { root = '%XDG_CONFIG_HOME%/Signal' }
+skip = ["logs"]
+detect = ['{root}']
+running = ["signal-desktop"]
+
+[[cleaner]]
+id = "obsidian"
+name = "Obsidian"
+description = "Notes"
+category = "applications"
+template = "electron"
+vars = { root = '%XDG_CONFIG_HOME%/obsidian' }
+detect = ['{root}']
+running = ["obsidian"]
+
+[[cleaner]]
+id = "teams"
+name = "Teams for Linux"
+description = "Chat and meetings"
+category = "applications"
+template = "electron"
+vars = { root = '%XDG_CONFIG_HOME%/teams-for-linux' }
+detect = ['{root}']
+running = ["teams-for-linux"]
+
+[[cleaner]]
+id = "spotify"
+name = "Spotify"
+description = "Music"
+category = "applications"
+detect = ['%XDG_CACHE_HOME%/spotify']
+running = ["spotify"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Streamed music and pictures kept to play them again (offline songs stay)"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/spotify/Data' },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/spotify/Browser' },
+]
+
+[[cleaner]]
+id = "telegram"
+name = "Telegram"
+description = "Chat"
+category = "applications"
+detect = ['%XDG_DATA_HOME%/TelegramDesktop']
+running = ["telegram-desktop", "telegram-deskto"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Media cache"
+description = "Pictures, videos and files from chats, downloaded again when opened"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_DATA_HOME%/TelegramDesktop/tdata/user_data' },
+  { op = "delete", search = "walk.all", path = '%XDG_DATA_HOME%/TelegramDesktop/tdata/emoji' },
+]
+
+[[cleaner]]
+id = "libreoffice"
+name = "LibreOffice"
+description = "Office suite"
+category = "applications"
+detect = ['%XDG_CONFIG_HOME%/libreoffice']
+running = ["soffice.bin", "soffice"]
+
+[[cleaner.option]]
+id = "backups"
+name = "Backup copies"
+description = "Automatic backup copies of documents"
+actions = [{ op = "delete", search = "walk.all", path = '%XDG_CONFIG_HOME%/libreoffice/*/user/backup' }]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Pictures and extension data LibreOffice makes again"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CONFIG_HOME%/libreoffice/*/user/temp' },
+  { op = "delete", search = "walk.all", path = '%XDG_CONFIG_HOME%/libreoffice/*/user/uno_packages/cache' },
+]
+
+[[cleaner]]
+id = "vlc"
+name = "VLC"
+description = "Media player"
+category = "applications"
+detect = ['%XDG_CONFIG_HOME%/vlc', '%XDG_CACHE_HOME%/vlc']
+running = ["vlc"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Album art and other files VLC downloaded"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/vlc' }]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent media"
+description = "The list of files and streams you played"
+actions = [{ op = "ini", path = '%XDG_CONFIG_HOME%/vlc/vlc-qt-interface.conf', section = "RecentsMRL" }]
+
+[[cleaner]]
+id = "gimp"
+name = "GIMP"
+description = "Image editor"
+category = "applications"
+detect = ['%XDG_CONFIG_HOME%/GIMP', '%XDG_CACHE_HOME%/gimp']
+running = ["gimp", "gimp-2.10", "gimp-3.0"]
+
+[[cleaner.option]]
+id = "temp"
+name = "Temporary files"
+description = "Swap and thumbnail files GIMP left behind"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/gimp' },
+  { op = "delete", search = "walk.all", path = '%XDG_CONFIG_HOME%/GIMP/*/tmp' },
+]
+
+[[cleaner]]
+id = "zoom"
+name = "Zoom"
+description = "Meetings"
+category = "applications"
+detect = ['%HOME%/.zoom']
+running = ["zoom"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "Zoom's log files"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/.zoom/logs' }]
+
+[[cleaner]]
+id = "obs"
+name = "OBS Studio"
+description = "Recording and streaming"
+category = "applications"
+detect = ['%XDG_CONFIG_HOME%/obs-studio']
+running = ["obs"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs and crash reports"
+description = "OBS Studio's log files and crash reports"
+default = true
+actions = [
+  { op = "delete", search = "walk.files", path = '%XDG_CONFIG_HOME%/obs-studio/logs' },
+  { op = "delete", search = "walk.files", path = '%XDG_CONFIG_HOME%/obs-studio/crashes' },
+]
+
+[[cleaner]]
+id = "qbittorrent"
+name = "qBittorrent"
+description = "Downloads"
+category = "applications"
+detect = ['%XDG_DATA_HOME%/qBittorrent']
+running = ["qbittorrent"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "qBittorrent's log files"
+default = true
+actions = [{ op = "delete", search = "walk.files", path = '%XDG_DATA_HOME%/qBittorrent/logs' }]

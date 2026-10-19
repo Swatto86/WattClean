@@ -1,0 +1,194 @@
+# Web browsers on Linux, on the shared templates (templates.toml). Chromium
+# browsers keep the profile in the config folder and the disk cache in the
+# cache folder; Firefox keeps profiles straight in its folder. Snap and
+# Flatpak builds keep their own copies under ~/snap and ~/.var/app.
+
+[[cleaner]]
+id = "chrome"
+name = "Google Chrome"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%XDG_CONFIG_HOME%/google-chrome', cache = '%XDG_CACHE_HOME%/google-chrome/*' }
+detect = ['{root}']
+running = ["chrome"]
+
+[[cleaner]]
+id = "chromium"
+name = "Chromium"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%XDG_CONFIG_HOME%/chromium', cache = '%XDG_CACHE_HOME%/chromium/*' }
+detect = ['{root}']
+running = ["chromium", "chromium-browse"]
+
+[[cleaner]]
+id = "chromium_snap"
+name = "Chromium (Snap)"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/snap/chromium/common/chromium', cache = '%HOME%/snap/chromium/common/.cache/chromium/*' }
+detect = ['{root}']
+running = ["chromium", "chrome"]
+
+[[cleaner]]
+id = "chromium_flatpak"
+name = "Chromium (Flatpak)"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/.var/app/org.chromium.Chromium/config/chromium', cache = '%HOME%/.var/app/org.chromium.Chromium/cache/chromium/*' }
+detect = ['{root}']
+running = ["chromium", "chrome"]
+
+[[cleaner]]
+id = "edge"
+name = "Microsoft Edge"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%XDG_CONFIG_HOME%/microsoft-edge', cache = '%XDG_CACHE_HOME%/microsoft-edge/*' }
+detect = ['{root}']
+running = ["msedge"]
+
+[[cleaner]]
+id = "brave"
+name = "Brave"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%XDG_CONFIG_HOME%/BraveSoftware/Brave-Browser', cache = '%XDG_CACHE_HOME%/BraveSoftware/Brave-Browser/*' }
+detect = ['{root}']
+running = ["brave"]
+
+[[cleaner]]
+id = "brave_flatpak"
+name = "Brave (Flatpak)"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/.var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser', cache = '%HOME%/.var/app/com.brave.Browser/cache/BraveSoftware/Brave-Browser/*' }
+detect = ['{root}']
+running = ["brave"]
+
+[[cleaner]]
+id = "vivaldi"
+name = "Vivaldi"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%XDG_CONFIG_HOME%/vivaldi', cache = '%XDG_CACHE_HOME%/vivaldi/*' }
+detect = ['{root}']
+running = ["vivaldi-bin"]
+
+[[cleaner]]
+id = "opera"
+name = "Opera"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%XDG_CONFIG_HOME%/opera', profile = '{root}', cache = '%XDG_CACHE_HOME%/opera' }
+detect = ['{root}']
+running = ["opera"]
+
+[[cleaner]]
+id = "firefox"
+name = "Firefox"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/.mozilla/firefox', root = '{base}', cache = '%XDG_CACHE_HOME%/mozilla/firefox' }
+detect = ['{root}']
+running = ["firefox", "firefox-bin"]
+
+[[cleaner]]
+id = "firefox_snap"
+name = "Firefox (Snap)"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/snap/firefox/common/.mozilla/firefox', root = '{base}', cache = '%HOME%/snap/firefox/common/.cache/mozilla/firefox' }
+detect = ['{root}']
+running = ["firefox", "firefox-bin"]
+
+[[cleaner]]
+id = "firefox_flatpak"
+name = "Firefox (Flatpak)"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/.var/app/org.mozilla.firefox/.mozilla/firefox', root = '{base}', cache = '%HOME%/.var/app/org.mozilla.firefox/cache/mozilla/firefox' }
+detect = ['{root}']
+running = ["firefox", "firefox-bin"]
+
+[[cleaner]]
+id = "librewolf"
+name = "LibreWolf"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/.librewolf', root = '{base}', cache = '%XDG_CACHE_HOME%/librewolf' }
+detect = ['{root}']
+running = ["librewolf"]
+
+[[cleaner]]
+id = "floorp"
+name = "Floorp"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/.floorp', root = '{base}', cache = '%XDG_CACHE_HOME%/floorp' }
+detect = ['{root}']
+running = ["floorp"]
+
+[[cleaner]]
+id = "zen"
+name = "Zen Browser"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/.zen', root = '{base}', cache = '%XDG_CACHE_HOME%/zen' }
+detect = ['{root}']
+running = ["zen", "zen-bin"]
+
+[[cleaner]]
+id = "thunderbird"
+name = "Thunderbird"
+description = "Mail"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/.thunderbird', root = '{base}', cache = '%XDG_CACHE_HOME%/thunderbird' }
+# Mail account passwords and open mail tabs are not browsing data.
+skip = ["passwords", "session", "downloads", "backups", "telemetry"]
+detect = ['{root}']
+running = ["thunderbird", "thunderbird-bin"]
+
+[[cleaner]]
+id = "epiphany"
+name = "GNOME Web"
+description = "Web browser"
+category = "browsers"
+detect = ['%XDG_DATA_HOME%/epiphany', '%XDG_CACHE_HOME%/epiphany']
+running = ["epiphany"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Web pages, images and scripts kept to load sites faster"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/epiphany' }]
+
+[[cleaner.option]]
+id = "cookies"
+name = "Cookies"
+description = "Small files sites keep to recognise you, including sign-ins"
+warning = "You will be signed out of most websites."
+actions = [{ op = "delete", search = "glob", path = '%XDG_DATA_HOME%/epiphany/cookies.sqlite*', kind = "file" }]
+
+[[cleaner.option]]
+id = "history"
+name = "History"
+description = "Visited pages"
+actions = [{ op = "delete", search = "glob", path = '%XDG_DATA_HOME%/epiphany/ephy-history.db*', kind = "file" }]

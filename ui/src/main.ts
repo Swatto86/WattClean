@@ -1,7 +1,8 @@
 // The shell: navigation grouped by module, header, status bar, theme, the
 // notification-area icon's requests, and showing the window once the first
-// page has painted (so it never flashes white). The registry cleaner's and
-// uninstaller's views are wired at start and shown here as pages.
+// page has painted (so it never flashes white). On Windows the registry
+// cleaner's and uninstaller's views are wired at start and shown here as
+// pages; Linux and macOS have no registry (see pagelist.ts).
 
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -13,31 +14,14 @@ import {
   type SettingsPatch,
   type ShellSettings,
 } from "./api.ts";
-import { type Context, type Page } from "./context.ts";
+import { type Context, type Page, type SettingsSection } from "./context.ts";
 import { inform } from "./dialog.ts";
-import { el, glyph, notice, setText, type GlyphName } from "./dom.ts";
-import { cleanerPage } from "./pages/cleaner.ts";
-import { historyPage } from "./pages/history.ts";
-import { settingsPage } from "./pages/settings.ts";
-import { shredPage } from "./pages/shred.ts";
-import { wipePage } from "./pages/wipe.ts";
-import {
-  startRegistry,
-  type ModuleView,
-  type RegistryViews,
-} from "./registry/start.ts";
+import { el, glyph, notice, setText } from "./dom.ts";
+import { unixPages, windowsPages } from "./pagelist.ts";
+import { isWindows, setPlatform } from "./platform.ts";
+import { startRegistry } from "./registry/start.ts";
 import { applyTheme, onSystemThemeChange } from "./theme.ts";
-import { startUninstall, type UninstallViews } from "./uninstall/start.ts";
-
-interface PageEntry {
-  id: string;
-  label: string;
-  glyph: GlyphName;
-  make: (ctx: Context) => Page;
-  /** The module heading shown above it in the navigation. */
-  group?: string;
-  bottom?: boolean;
-}
+import { startUninstall } from "./uninstall/start.ts";
 
 const byId = (id: string): HTMLElement => {
   const node = document.getElementById(id);
@@ -51,140 +35,6 @@ const inputById = (id: string): HTMLInputElement => {
     throw new Error(`#${id} is not a text box`);
   return node;
 };
-
-/**
- * A module's view as a page: it keeps its own toolbar, and scrolls inside
- * a page-sized frame (as in the app it came from) rather than being the
- * frame, so its lists grow instead of shrinking to fit.
- */
-const modulePage = (view: ModuleView) => (): Page => {
-  view.element.hidden = false;
-  view.element.classList.add("module-view");
-  return {
-    element: el("div", { class: "page module-page" }, view.element),
-    commands: [],
-    ...(view.onShow ? { onShow: view.onShow } : {}),
-  };
-};
-
-/** Every page, in the navigation's order. */
-const pageList = (
-  registry: RegistryViews,
-  uninstall: UninstallViews,
-): PageEntry[] => [
-  {
-    id: "cleaner",
-    label: "Disk cleaner",
-    glyph: "cleaner",
-    group: "Disk",
-    make: cleanerPage,
-  },
-  {
-    id: "shred",
-    label: "Shred files",
-    glyph: "shred",
-    group: "Disk",
-    make: shredPage,
-  },
-  {
-    id: "wipe",
-    label: "Wipe free space",
-    glyph: "wipe",
-    group: "Disk",
-    make: wipePage,
-  },
-  {
-    id: "history",
-    label: "Clean history",
-    glyph: "history",
-    group: "Disk",
-    make: historyPage,
-  },
-  {
-    id: "registry",
-    label: "Registry cleaner",
-    glyph: "registry",
-    group: "Registry",
-    make: modulePage(registry.cleaner),
-  },
-  {
-    id: "regsearch",
-    label: "Registry search",
-    glyph: "search",
-    group: "Registry",
-    make: modulePage(registry.search),
-  },
-  {
-    id: "tuner",
-    label: "Registry tuner",
-    glyph: "tuner",
-    group: "Registry",
-    make: modulePage(registry.tuner),
-  },
-  {
-    id: "watcher",
-    label: "Registry watcher",
-    glyph: "watcher",
-    group: "Registry",
-    make: modulePage(registry.watcher),
-  },
-  {
-    id: "regbackups",
-    label: "Registry backups",
-    glyph: "backup",
-    group: "Registry",
-    make: modulePage(registry.backups),
-  },
-  {
-    id: "schedules",
-    label: "Schedules",
-    glyph: "schedule",
-    group: "Registry",
-    make: modulePage(registry.schedules),
-  },
-  {
-    id: "programs",
-    label: "Uninstall programs",
-    glyph: "programs",
-    group: "Programs",
-    make: modulePage(uninstall.programs),
-  },
-  {
-    id: "traced",
-    label: "Traced installs",
-    glyph: "trace",
-    group: "Programs",
-    make: modulePage(uninstall.traced),
-  },
-  {
-    id: "forced",
-    label: "Forced uninstall",
-    glyph: "forced",
-    group: "Programs",
-    make: modulePage(uninstall.forced),
-  },
-  {
-    id: "unbackups",
-    label: "Uninstall backups",
-    glyph: "backup",
-    group: "Programs",
-    make: modulePage(uninstall.backups),
-  },
-  {
-    id: "unhistory",
-    label: "Uninstall history",
-    glyph: "history",
-    group: "Programs",
-    make: modulePage(uninstall.history),
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    glyph: "settings",
-    make: settingsPage,
-    bottom: true,
-  },
-];
 
 /** Show the window once the page has painted, so it never flashes white. */
 const reveal = async (): Promise<void> => {
@@ -205,6 +55,7 @@ const boot = async (): Promise<void> => {
     api.getSettings(),
     api.getShellSettings(),
   ]);
+  setPlatform(info.platform);
   let settings: Settings = first;
   let shell: ShellSettings = firstShell;
   const listeners: ((s: Settings) => void)[] = [];
@@ -215,8 +66,29 @@ const boot = async (): Promise<void> => {
     api.restartAsAdmin().catch((e: unknown) => notice(String(e), true));
   };
   const host = { restartAsAdmin, reveal };
-  const registry = await startRegistry(host);
-  const uninstall = await startUninstall(host);
+  const modules = isWindows()
+    ? {
+        registry: await startRegistry(host),
+        uninstall: await startUninstall(host),
+      }
+    : null;
+  const sections: SettingsSection[] = modules
+    ? [
+        {
+          id: "registry",
+          title: "Registry cleaner",
+          element: modules.registry.settings.element,
+          ...(modules.registry.settings.onShow
+            ? { onShow: modules.registry.settings.onShow }
+            : {}),
+        },
+        {
+          id: "uninstall",
+          title: "Uninstaller",
+          element: modules.uninstall.settings.element,
+        },
+      ]
+    : [];
 
   const ctx: Context = {
     info,
@@ -233,27 +105,17 @@ const boot = async (): Promise<void> => {
       applyLook(shell);
       return shell;
     },
-    sections: [
-      {
-        id: "registry",
-        title: "Registry cleaner",
-        element: registry.settings.element,
-        ...(registry.settings.onShow
-          ? { onShow: registry.settings.onShow }
-          : {}),
-      },
-      {
-        id: "uninstall",
-        title: "Uninstaller",
-        element: uninstall.settings.element,
-      },
-    ],
-    startWithWindows: document.getElementById("reg-background-card"),
+    sections,
+    startWithWindows: modules
+      ? document.getElementById("reg-background-card")
+      : null,
     setSelectionStatus: (text) => setText(byId("status-selection"), text),
     go: (id) => show(id),
   };
 
-  const pages = pageList(registry, uninstall);
+  const pages = modules
+    ? windowsPages(modules.registry, modules.uninstall)
+    : unixPages();
   const content = byId("content");
   const commands = byId("commands");
   const title = byId("page-title");
@@ -371,7 +233,8 @@ const statusBar = (info: AppInfo, restartAsAdmin: () => void): void => {
     info.elevated ? "Administrator" : "Standard user",
   );
   const admin = byId("status-admin");
-  admin.hidden = info.elevated;
+  // Linux and macOS ask for administrator rights per task instead.
+  admin.hidden = info.elevated || !isWindows();
   admin.addEventListener("click", restartAsAdmin);
   setText(byId("status-note"), `WattClean ${info.version}`);
 };

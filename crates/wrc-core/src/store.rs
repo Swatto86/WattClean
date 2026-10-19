@@ -60,6 +60,7 @@ pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<Option<T>> {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

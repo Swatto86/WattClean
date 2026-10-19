@@ -145,6 +145,7 @@ pub fn upgrade_entries(system: &dyn System, packed: &str) -> Vec<(RegPath, RawVa
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

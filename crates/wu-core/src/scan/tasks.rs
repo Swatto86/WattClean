@@ -133,6 +133,7 @@ fn event_log_sources(identity: &Identity, context: &Context<'_>, found: &mut Fou
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

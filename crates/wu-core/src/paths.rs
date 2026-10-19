@@ -93,6 +93,7 @@ pub fn embedded_path(text: &str) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
     use crate::fake::FakeSystem;

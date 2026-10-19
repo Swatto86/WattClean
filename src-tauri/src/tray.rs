@@ -10,9 +10,17 @@ use tauri::{AppHandle, Emitter, Manager};
 const TRAY: &str = "main";
 
 /// The page each menu item opens, as the window's navigation names it.
+#[cfg(windows)]
 const PAGES: &[(&str, &str, &str)] = &[
     ("tray-cleaner", "&Disk cleaner", "cleaner"),
     ("tray-registry", "&Registry cleaner", "registry"),
+    ("tray-programs", "&Uninstall programs", "programs"),
+];
+
+/// Linux and macOS have no registry.
+#[cfg(not(windows))]
+const PAGES: &[(&str, &str, &str)] = &[
+    ("tray-cleaner", "&Disk cleaner", "cleaner"),
     ("tray-programs", "&Uninstall programs", "programs"),
 ];
 

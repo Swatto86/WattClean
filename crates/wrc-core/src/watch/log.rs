@@ -69,6 +69,7 @@ impl Log {
     }
 
     #[cfg(test)]
+    #[cfg(windows)]
     pub fn with_limit(mut self, limit: u64) -> Self {
         self.limit = limit;
         self

@@ -1,0 +1,31 @@
+[package]
+name = "wcc-unix"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WattClean on Linux and macOS: folders, Trash, clipboard, processes, drives and package managers"
+
+[dependencies]
+wcc-core = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+# geteuid, statvfs, access and the Ctrl+C handler; already in the tree
+# through Tauri and the standard library's own platform code.
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# sys.rs is the one place that calls the C library directly (the effective
+# user, file system sizes, write access, Ctrl+C), so this crate cannot
+# inherit the workspace's `unsafe_code = "forbid"`. Every unsafe block
+# carries a SAFETY comment, which clippy enforces.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+unwrap_used = "warn"
+expect_used = "warn"

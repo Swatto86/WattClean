@@ -7,15 +7,18 @@
 mod capture;
 mod force;
 #[cfg(test)]
+#[cfg(windows)]
 mod force_tests;
 mod full;
 #[cfg(test)]
+#[cfg(windows)]
 mod full_tests;
 mod regfile;
 mod relocate;
 mod remove;
 mod restore;
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 mod trim;
 

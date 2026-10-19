@@ -177,6 +177,7 @@ pub fn is_absolute_local(path: &str) -> bool {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
     use crate::fake::FakeSystem;

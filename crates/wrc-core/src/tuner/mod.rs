@@ -4,6 +4,7 @@
 
 mod catalog;
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 
 use std::collections::BTreeMap;

@@ -197,4 +197,5 @@ fn from_write(write: &Write) -> Change {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;

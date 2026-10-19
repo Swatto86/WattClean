@@ -1,4 +1,4 @@
-//! What a cleaner is: an application (or part of Windows) with options, each
+//! What a cleaner is: an application (or part of the system) with options, each
 //! option a list of actions. Definitions come from the built-in TOML files,
 //! custom TOML or CleanerML files, and an imported winapp2.ini; all of them
 //! end up as these types.
@@ -19,6 +19,8 @@ pub enum Source {
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
     System,
+    /// Package managers' caches and what nothing installed needs any more.
+    Packages,
     Browsers,
     Applications,
     Developer,
@@ -50,6 +52,8 @@ pub enum Detect {
     Path(String),
     /// A registry key such as `HKCU\Software\7-Zip`.
     Registry(String),
+    /// A program the machine finds in its program folders (`apt-get`).
+    Program(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +96,9 @@ pub enum Action {
     /// Overwrite the free space of the drive holding the temporary folder
     /// (always run last, so space freed by the clean is wiped too).
     FreeDiskSpace,
+    /// Run one of the fixed maintenance commands (a package manager's
+    /// clean). Definitions name it; `tasks::TASKS` says what it runs.
+    Command(&'static crate::tasks::Task),
 }
 
 /// How a path pattern is turned into files.

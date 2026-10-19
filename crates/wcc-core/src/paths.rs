@@ -1,14 +1,19 @@
-//! Comparing paths the way Windows does, and the guard every deletion passes:
-//! protected folders (drive roots, Windows, the profile and its known
-//! folders) and the keep list (BleachBit's whitelist) are never removed.
+//! Comparing paths, and the guard every deletion passes: protected folders
+//! (drive roots, the system's folders, the profile and its known folders)
+//! and the keep list (BleachBit's whitelist) are never removed.
+//!
+//! Comparison is one text rule on every platform: either separator,
+//! case-insensitive. On Linux, where two names may differ only by case,
+//! that can only make the guard refuse more, never less.
 
 use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use crate::model::Kind;
 
-/// A path as Windows compares it: case-insensitive, either separator,
-/// `.` and `..` resolved, no trailing separator, no `\\?\` prefix.
+/// A path as the guard compares it: case-insensitive, either separator,
+/// `.` and `..` resolved, no trailing separator, no `\\?\` prefix. Keys
+/// always use `\` (the Unix path `/home/a` is `\home\a`).
 pub fn key(path: &Path) -> String {
     let text = path.to_string_lossy().replace('/', "\\");
     let text = text
@@ -16,27 +21,66 @@ pub fn key(path: &Path) -> String {
         .map(|rest| format!(r"\\{rest}"))
         .or_else(|| text.strip_prefix(r"\\?\").map(str::to_string))
         .unwrap_or(text);
-    let mut parts: Vec<String> = Vec::new();
-    let mut prefix = String::new();
-    for component in Path::new(&text).components() {
-        match component {
-            Component::Prefix(p) => prefix = p.as_os_str().to_string_lossy().to_lowercase(),
-            Component::RootDir => prefix.push('\\'),
-            Component::CurDir => {}
-            Component::ParentDir => {
-                parts.pop();
-            }
-            Component::Normal(name) => parts.push(name.to_string_lossy().to_lowercase()),
-        }
+    let (prefix, rooted, rest) = split_prefix(&text);
+    let mut out = prefix.to_lowercase();
+    if rooted {
+        out.push('\\');
     }
-    let mut out = prefix;
-    for (i, part) in parts.iter().enumerate() {
+    for (i, part) in normal_parts(rest).iter().enumerate() {
         if i > 0 || !(out.is_empty() || out.ends_with('\\')) {
             out.push('\\');
         }
-        out.push_str(part);
+        out.push_str(&part.to_lowercase());
     }
     out
+}
+
+/// The drive (`C:`) or share (`\\server\share`) a backslashed path starts
+/// with, whether a root separator follows it, and the rest.
+fn split_prefix(text: &str) -> (&str, bool, &str) {
+    let bytes = text.as_bytes();
+    let (prefix, rest) = if let Some(after) = text.strip_prefix(r"\\") {
+        let server = after.find('\\').unwrap_or(after.len());
+        let share_end = after
+            .get(server + 1..)
+            .and_then(|share| share.find('\\'))
+            .map_or(after.len(), |end| server + 1 + end);
+        text.split_at(2 + share_end)
+    } else if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        text.split_at(2)
+    } else {
+        ("", text)
+    };
+    match rest.strip_prefix('\\') {
+        Some(rest) => (prefix, true, rest),
+        None => (prefix, false, rest),
+    }
+}
+
+/// The named parts of a path after its prefix, `.` and `..` resolved.
+fn normal_parts(rest: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    for part in rest.split('\\') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            name => parts.push(name),
+        }
+    }
+    parts
+}
+
+/// A definition's path in this platform's own spelling. Definitions may use
+/// either separator (the built-in templates are shared by every platform);
+/// on Linux and macOS a backslash in a definition is always a separator.
+pub fn native(text: &str) -> String {
+    if cfg!(windows) {
+        text.replace('/', "\\")
+    } else {
+        text.replace('\\', "/")
+    }
 }
 
 /// `path` is `root` or inside it, comparing whole components.
@@ -72,12 +116,33 @@ fn is_dir_link(_: &fs::Metadata) -> bool {
     false
 }
 
+/// A socket, pipe or device: a running program's door or the system's,
+/// never a file to clean (sessions keep their sockets in the temporary
+/// folder on Linux and macOS).
+#[cfg(unix)]
+pub fn is_special(meta: &fs::Metadata) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    let kind = meta.file_type();
+    kind.is_socket() || kind.is_fifo() || kind.is_block_device() || kind.is_char_device()
+}
+
+#[cfg(not(unix))]
+pub fn is_special(_: &fs::Metadata) -> bool {
+    false
+}
+
+/// `base` joined with a relative path written with either separator, as
+/// the test machine and the tests write Windows-shaped paths on every
+/// platform.
+#[cfg(any(test, feature = "fake"))]
+pub fn join(base: &Path, relative: &str) -> PathBuf {
+    base.join(native(relative))
+}
+
 /// Named folders below the root, ignoring the drive and root markers.
 fn depth(key: &str) -> usize {
-    Path::new(key)
-        .components()
-        .filter(|c| matches!(c, Component::Normal(_)))
-        .count()
+    let (_, _, rest) = split_prefix(key);
+    normal_parts(rest).len()
 }
 
 /// Why a path may not be removed.

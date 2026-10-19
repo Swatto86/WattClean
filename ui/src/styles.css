@@ -1200,3 +1200,26 @@ button:disabled {
   font-size: 12px;
   color: var(--text-2);
 }
+
+/* Uninstall programs (Linux and macOS): one row is chosen at a time. */
+
+.table.selectable tbody tr {
+  cursor: default;
+}
+
+.table.selectable tbody tr:hover td {
+  background: var(--hover);
+}
+
+.table.selectable tbody tr[aria-selected="true"] td {
+  background: var(--selected);
+}
+
+.table .small {
+  font-size: 12px;
+}
+
+#un-pkg-leftovers {
+  max-height: 50vh;
+  overflow: auto;
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "shortDescription": "Clean disks and package caches, and uninstall apps completely",
+    "longDescription": "WattClean frees disk space and removes traces of what you do: browser caches, cookies and history, temporary files, logs, Xcode's build data and the caches of dozens of applications, and Homebrew's and MacPorts' downloads through their own commands. It lists your apps, casks and ports and removes them together with what they leave in your Library, to the Trash. Shred files and wipe free space.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "files": {
+        "MacOS/wattclean-cmd": "../target/release/wattclean-cmd",
+        "Resources/THIRD-PARTY-NOTICES.txt": "../THIRD-PARTY-NOTICES.txt"
+      }
+    }
+  }
+}

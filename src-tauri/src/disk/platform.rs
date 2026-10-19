@@ -1,6 +1,7 @@
-//! Which machine the app acts on (Windows itself, or the sandboxed test
-//! machine in the WebDriver suite's `fake-system` build), and the native
-//! pieces the commands use: Open dialogs, Explorer, administrator restart.
+//! Which machine the app acts on (Windows, Linux or macOS itself, or the
+//! sandboxed test machine in the WebDriver suite's `fake-system` build),
+//! and the native pieces the commands use: Open dialogs, the file manager,
+//! administrator restart.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -17,6 +18,11 @@ pub fn machine(data_dir: &Path) -> std::io::Result<(Arc<dyn System>, bool)> {
 #[cfg(all(windows, not(feature = "fake-system")))]
 pub fn machine(_data_dir: &Path) -> std::io::Result<(Arc<dyn System>, bool)> {
     Ok((Arc::new(wcc_windows::WindowsSystem::new()), false))
+}
+
+#[cfg(all(unix, not(feature = "fake-system")))]
+pub fn machine(_data_dir: &Path) -> std::io::Result<(Arc<dyn System>, bool)> {
+    Ok((Arc::new(wcc_unix::UnixSystem::new()), false))
 }
 
 /// What an Open dialog is for.
@@ -78,25 +84,42 @@ pub fn pick(app: &tauri::AppHandle, _data_dir: &Path, what: Pick, title: &str) -
     }
 }
 
-/// Opens a folder of the app's own in Explorer.
+/// Opens a folder of the app's own in the file manager (Explorer, Finder,
+/// or the desktop's own through `xdg-open`).
 pub fn open_folder(fake: bool, folder: &Path) -> CommandResult<()> {
     std::fs::create_dir_all(folder)?;
     if fake {
         return Ok(());
     }
-    std::process::Command::new("explorer.exe")
+    let opener = if cfg!(windows) {
+        "explorer.exe"
+    } else if cfg!(target_os = "macos") {
+        "/usr/bin/open"
+    } else {
+        "xdg-open"
+    };
+    std::process::Command::new(opener)
         .arg(folder)
         .spawn()
         .map(|_| ())
-        .map_err(|error| CommandError::from(format!("Explorer could not be opened: {error}")))
+        .map_err(|error| {
+            CommandError::from(format!("The file manager could not be opened: {error}"))
+        })
 }
 
 /// The community's winapp2.ini, as BleachBit downloads it.
 pub const WINAPP2_URL: &str =
     "https://raw.githubusercontent.com/MoscaDotTo/Winapp2/master/Winapp2.ini";
 
+/// winapp2.ini describes Windows programs only.
+#[cfg(not(windows))]
+pub fn download(_url: &str, _to: &Path) -> CommandResult<()> {
+    Err("winapp2.ini describes Windows programs: it is offered on Windows only.".into())
+}
+
 /// Downloads a file with Windows' own curl.exe (Windows 10 1803 and later):
 /// arguments are passed one by one, never through a shell.
+#[cfg(windows)]
 pub fn download(url: &str, to: &Path) -> CommandResult<()> {
     let curl = std::env::var_os("SystemRoot")
         .map(|root| PathBuf::from(root).join(r"System32\curl.exe"))

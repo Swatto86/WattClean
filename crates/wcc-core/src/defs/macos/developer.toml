@@ -1,0 +1,88 @@
+# Apple's developer tools and their package managers. Xcode makes all of
+# this again: builds start from scratch, device support downloads again
+# when a device is connected.
+
+[[cleaner]]
+id = "xcode"
+name = "Xcode"
+description = "Apple's developer tools"
+category = "developer"
+detect = ['%HOME%/Library/Developer']
+running = ["xcode"]
+
+[[cleaner.option]]
+id = "derived_data"
+name = "Derived data"
+description = "Build products and indexes of every project"
+warning = "Each project is built and indexed from scratch the next time you open it."
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/DerivedData' }]
+
+[[cleaner.option]]
+id = "previews"
+name = "SwiftUI previews"
+description = "Builds Xcode made to show previews"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/UserData/Previews' }]
+
+[[cleaner.option]]
+id = "device_support"
+name = "Device support files"
+description = "Symbols copied from each iPhone, iPad, Watch and Apple TV you connected"
+warning = "Connecting a device copies its symbols again, which takes a while."
+actions = [
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/iOS DeviceSupport' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/watchOS DeviceSupport' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/tvOS DeviceSupport' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/visionOS DeviceSupport' },
+]
+
+[[cleaner.option]]
+id = "archives"
+name = "Archives"
+description = "Builds you archived to distribute"
+warning = "Archives are needed to read crash reports from the apps you shipped and to export them again."
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/Archives' }]
+
+[[cleaner.option]]
+id = "simulator_caches"
+name = "Simulator caches"
+description = "Caches of the iOS and other simulators"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/CoreSimulator/Caches' }]
+
+[[cleaner.option]]
+id = "unavailable_simulators"
+name = "Unavailable simulators"
+description = "Simulators for platforms this Xcode no longer has (xcrun simctl delete unavailable)"
+actions = [{ op = "command", task = "simctl-unavailable" }]
+
+[[cleaner]]
+id = "cocoapods"
+name = "CocoaPods"
+description = "Swift and Objective-C package manager"
+category = "developer"
+detect = ['%CACHE%/CocoaPods']
+
+[[cleaner.option]]
+id = "cache"
+name = "Pod cache"
+description = "Downloaded pods CocoaPods keeps"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/CocoaPods' }]
+
+[[cleaner]]
+id = "swiftpm"
+name = "Swift Package Manager"
+description = "Swift package manager and Carthage"
+category = "developer"
+detect = ['%CACHE%/org.swift.swiftpm', '%CACHE%/org.carthage.CarthageKit']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages kept to resolve them again quickly"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%CACHE%/org.swift.swiftpm' },
+  { op = "delete", search = "walk.all", path = '%CACHE%/org.carthage.CarthageKit' },
+]

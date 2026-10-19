@@ -7,14 +7,12 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
 
-use regex::{Regex, RegexBuilder};
-
+pub use crate::filter::{Filter, SpecError};
 use crate::model::{FileSpec, Kind, Search};
 use crate::paths::{self, Guard};
 use crate::vars::{self, Vars};
-use crate::wildcard::{Wildcard, WildcardSet, glob};
+use crate::wildcard::glob;
 
 /// Walks stop this deep, far below any real application's folders.
 const MAX_DEPTH: usize = 64;
@@ -39,146 +37,6 @@ pub struct Findings {
     pub problems: Vec<Problem>,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum SpecError {
-    #[error("invalid regular expression {0:?}: {1}")]
-    Regex(String, String),
-    #[error("skipped: the exclusion {0:?} uses a variable this PC does not know")]
-    Exclusion(String),
-}
-
-/// A spec's filters, compiled once per run.
-pub struct Filter {
-    regex: Option<Regex>,
-    nregex: Option<Regex>,
-    wholeregex: Option<Regex>,
-    nwholeregex: Option<Regex>,
-    names: Option<WildcardSet>,
-    /// find.dirs: the folders it looks for, and the file beside them.
-    dir_names: Option<WildcardSet>,
-    beside: Option<WildcardSet>,
-    kind: Option<Kind>,
-    /// walk.all with a file-name filter: only matching files go, never the
-    /// folders (some were already empty and are Windows' to keep).
-    files_by_name: bool,
-    older_than: Option<SystemTime>,
-    exclude_roots: Vec<String>,
-    exclude_patterns: Vec<Wildcard>,
-}
-
-fn compile(pattern: Option<&String>) -> Result<Option<Regex>, SpecError> {
-    pattern
-        .map(|p| {
-            RegexBuilder::new(p)
-                .case_insensitive(true)
-                .build()
-                .map_err(|e| SpecError::Regex(p.clone(), e.to_string()))
-        })
-        .transpose()
-}
-
-impl Filter {
-    pub fn new(spec: &FileSpec, vars: &dyn Vars, now: SystemTime) -> Result<Self, SpecError> {
-        let mut exclude_roots = Vec::new();
-        let mut exclude_patterns = Vec::new();
-        for pattern in &spec.exclude {
-            let Some(expansions) = vars::expand_exclusion(pattern, vars) else {
-                return Err(SpecError::Exclusion(pattern.clone()));
-            };
-            for expanded in expansions {
-                if Wildcard::has_wildcards(&expanded) {
-                    let key = paths::key(Path::new(&expanded));
-                    // `\*\` spans any number of folders, none included.
-                    if key.contains(r"\*\") {
-                        exclude_patterns.push(Wildcard::new(&key.replace(r"\*\", r"\")));
-                    }
-                    exclude_patterns.push(Wildcard::new(&key));
-                } else {
-                    exclude_roots.push(paths::key(Path::new(&expanded)));
-                }
-            }
-        }
-        // find.dirs names the folders it finds, not what is in them.
-        let names = spec.names.as_deref().map(WildcardSet::new);
-        let (names, dir_names) = if spec.search == Search::FindDirs {
-            (None, names)
-        } else {
-            (names, None)
-        };
-        let files_by_name = spec.search == Search::WalkAll
-            && (spec.names.is_some() || spec.regex.is_some() || spec.nregex.is_some());
-        Ok(Self {
-            regex: compile(spec.regex.as_ref())?,
-            nregex: compile(spec.nregex.as_ref())?,
-            wholeregex: compile(spec.wholeregex.as_ref())?,
-            nwholeregex: compile(spec.nwholeregex.as_ref())?,
-            names,
-            dir_names,
-            beside: spec.beside.as_deref().map(WildcardSet::new),
-            kind: spec.kind,
-            files_by_name,
-            older_than: spec
-                .older_than_days
-                .and_then(|days| now.checked_sub(Duration::from_secs(u64::from(days) * 86_400))),
-            exclude_roots,
-            exclude_patterns,
-        })
-    }
-
-    fn excluded(&self, path: &Path) -> bool {
-        if self.exclude_roots.is_empty() && self.exclude_patterns.is_empty() {
-            return false;
-        }
-        let key = paths::key(path);
-        self.exclude_roots
-            .iter()
-            .any(|root| paths::is_within(&key, root))
-            || self.exclude_patterns.iter().any(|w| w.matches(&key))
-    }
-
-    /// Whole-path filters, applied to files and folders alike.
-    fn path_ok(&self, path: &Path) -> bool {
-        let text = path.to_string_lossy();
-        if self.wholeregex.as_ref().is_some_and(|r| !r.is_match(&text)) {
-            return false;
-        }
-        if self.nwholeregex.as_ref().is_some_and(|r| r.is_match(&text)) {
-            return false;
-        }
-        !self.excluded(path)
-    }
-
-    /// The age filter alone, for folders a walk reaches.
-    fn age_ok(&self, meta: &fs::Metadata) -> bool {
-        self.older_than
-            .is_none_or(|limit| meta.modified().is_ok_and(|modified| modified <= limit))
-    }
-
-    /// Name and age filters, applied to files (and to folders matched directly).
-    fn name_ok(&self, path: &Path, meta: &fs::Metadata) -> bool {
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy())
-            .unwrap_or_default();
-        if self.regex.as_ref().is_some_and(|r| !r.is_match(&name)) {
-            return false;
-        }
-        if self.nregex.as_ref().is_some_and(|r| r.is_match(&name)) {
-            return false;
-        }
-        if self.names.as_ref().is_some_and(|w| !w.matches(&name)) {
-            return false;
-        }
-        if let Some(limit) = self.older_than {
-            match meta.modified() {
-                Ok(modified) if modified <= limit => {}
-                _ => return false,
-            }
-        }
-        true
-    }
-}
-
 /// Context shared by one search.
 pub struct Searcher<'a> {
     pub guard: &'a Guard,
@@ -190,7 +48,7 @@ impl Searcher<'_> {
     pub fn find(&self, spec: &FileSpec, filter: &Filter, vars: &dyn Vars, out: &mut Findings) {
         for pattern in vars::expand(&spec.path, vars) {
             let roots = match spec.search {
-                Search::File => vec![PathBuf::from(&pattern)],
+                Search::File => vec![PathBuf::from(paths::native(&pattern))],
                 _ => glob(&pattern),
             };
             for root in roots {
@@ -206,6 +64,9 @@ impl Searcher<'_> {
         let Ok(meta) = fs::symlink_metadata(root) else {
             return;
         };
+        if paths::is_special(&meta) {
+            return;
+        }
         let is_dir = meta.is_dir() && !meta.file_type().is_symlink();
         match search {
             Search::File | Search::Glob => {
@@ -278,6 +139,10 @@ impl Searcher<'_> {
                 return false;
             }
         };
+        // By name, so a preview lists in the same order on every platform
+        // (Windows returns names sorted, Linux in no particular order).
+        let mut entries: Vec<_> = entries.collect();
+        entries.sort_by_key(|entry| entry.as_ref().ok().map(fs::DirEntry::file_name));
         let mut complete = true;
         for entry in entries {
             let Ok(entry) = entry else {
@@ -290,6 +155,10 @@ impl Searcher<'_> {
                 continue;
             };
             let link = meta.file_type().is_symlink();
+            if paths::is_special(&meta) {
+                complete = false;
+                continue;
+            }
             if meta.is_dir() && !link {
                 let inner = self.walk(&path, depth + 1, files_only, filter, out);
                 if files_only
@@ -358,6 +227,7 @@ impl Searcher<'_> {
                 marked = true;
             }
         }
+        folders.sort();
         for (path, name) in folders {
             if filter.excluded(&path) {
                 continue;

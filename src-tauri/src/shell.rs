@@ -8,9 +8,11 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
+use crate::disk;
 use crate::error::{CommandError, CommandResult};
+#[cfg(windows)]
+use crate::registry;
 use crate::settings::{ShellPatch, ShellSettings};
-use crate::{disk, registry};
 
 pub struct Shell {
     /// `%LOCALAPPDATA%\WattClean`, or `WATTCLEAN_DATA_DIR`.
@@ -32,14 +34,13 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// `WATTCLEAN_DATA_DIR` moves the app's files (the WebDriver suite isolates
-/// each run this way); otherwise `%LOCALAPPDATA%\WattClean`.
+/// each run this way); otherwise this platform's data folder
+/// (`wcc_core::store::app_root`).
 pub fn root() -> Result<PathBuf, String> {
-    if let Some(dir) = std::env::var_os("WATTCLEAN_DATA_DIR").filter(|dir| !dir.is_empty()) {
-        return Ok(PathBuf::from(dir));
-    }
-    local_app_data().map(|local| local.join("WattClean"))
+    wcc_core::store::app_root()
 }
 
+#[cfg(windows)]
 pub fn local_app_data() -> Result<PathBuf, String> {
     std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
@@ -87,12 +88,13 @@ impl Shell {
 
 type ShellState<'a> = State<'a, Arc<Shell>>;
 type Disk<'a> = State<'a, Arc<disk::state::AppState>>;
-type Registry<'a> = State<'a, Arc<registry::state::AppState>>;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppInfo {
     version: String,
+    /// `windows`, `linux` or `macos`: which modules and words the page uses.
+    platform: wcc_core::system::Platform,
     elevated: bool,
     test_machine: bool,
     data_dir: String,
@@ -105,24 +107,45 @@ pub struct AppInfo {
 }
 
 #[tauri::command]
-pub fn app_info(
-    app: AppHandle,
-    shell: ShellState<'_>,
-    disk: Disk<'_>,
-    registry: Registry<'_>,
-) -> AppInfo {
+pub fn app_info(app: AppHandle, shell: ShellState<'_>, disk: Disk<'_>) -> AppInfo {
     AppInfo {
         version: app.package_info().version.to_string(),
-        // One answer for the whole app; every module's machine agrees on a
-        // real PC.
-        elevated: registry.system.is_elevated(),
+        platform: wcc_core::system::Platform::current(),
+        elevated: elevated(&app, &disk),
         test_machine: shell.fake,
         data_dir: shell.root.display().to_string(),
         cleaners_dir: disk.cleaners_dir().display().to_string(),
-        windows_build: wrc_core::tuner::windows_build(registry.system.as_ref()),
+        windows_build: windows_build(&app),
         started_hidden: shell.started_hidden,
         adopt_problems: shell.adopt_problems.clone(),
     }
+}
+
+/// One answer for the whole app, from the registry module's machine on
+/// Windows (every module's machine agrees on a real PC).
+#[cfg(windows)]
+fn elevated(app: &AppHandle, disk: &disk::state::AppState) -> bool {
+    app.try_state::<Arc<registry::state::AppState>>()
+        .map_or_else(
+            || disk.system.is_elevated(),
+            |registry| registry.system.is_elevated(),
+        )
+}
+
+#[cfg(not(windows))]
+fn elevated(_app: &AppHandle, disk: &disk::state::AppState) -> bool {
+    disk.system.is_elevated()
+}
+
+#[cfg(windows)]
+fn windows_build(app: &AppHandle) -> Option<u32> {
+    let registry = app.try_state::<Arc<registry::state::AppState>>()?;
+    wrc_core::tuner::windows_build(registry.system.as_ref())
+}
+
+#[cfg(not(windows))]
+fn windows_build(_app: &AppHandle) -> Option<u32> {
+    None
 }
 
 #[tauri::command]
@@ -184,9 +207,12 @@ pub fn restart_as_admin(
 /// `--after <process id>`: started by "Restart as administrator", whose
 /// copy is still closing. Without waiting for it, the single-instance check
 /// would hand over to that closing copy and quit, leaving nothing running.
+/// Windows only: Linux and macOS never restart the app as administrator.
+#[cfg(windows)]
 pub const AFTER_FLAG: &str = "--after";
 
 /// The process this copy must wait for, from `--after <id>`.
+#[cfg(windows)]
 pub fn restarted_from(args: &[String]) -> Option<u32> {
     let at = args.iter().position(|arg| arg == AFTER_FLAG)?;
     args.get(at + 1)?.parse().ok()
@@ -197,21 +223,33 @@ fn relaunch(exe: &std::path::Path) -> CommandResult<()> {
     registry::platform::relaunch_elevated(exe)
 }
 
+/// Linux and macOS ask for administrator rights for each task that needs
+/// them (polkit, or macOS's own prompt), so the whole app never restarts
+/// as root.
 #[cfg(not(windows))]
 fn relaunch(_exe: &std::path::Path) -> CommandResult<()> {
-    Err("Restarting as administrator needs Windows.".into())
+    Err("WattClean asks for administrator rights when a task needs them.".into())
 }
 
 const REMOVING: &str = "Wait for the registry clean or the uninstall's removal to finish first.";
 
 /// A registry clean, or an uninstall's removal or restore, is under way:
 /// cut short, its backup would hold entries that were never removed.
+#[cfg(windows)]
 fn removing(app: &AppHandle) -> bool {
     app.try_state::<Arc<registry::state::AppState>>()
         .is_some_and(|state| state.is_cleaning())
         || app
             .try_state::<Arc<crate::uninstall::state::AppState>>()
             .is_some_and(|state| state.is_removing())
+}
+
+/// A package manager is removing a program: cut short, it could leave the
+/// package database half-changed.
+#[cfg(not(windows))]
+fn removing(app: &AppHandle) -> bool {
+    app.try_state::<Arc<crate::packages::AppState>>()
+        .is_some_and(|state| state.is_removing())
 }
 
 /// Quits once the running disk job (a wipe gives its space back when
@@ -240,6 +278,7 @@ pub fn quit_when_idle(app: &AppHandle) {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

@@ -1,8 +1,9 @@
 // Writes THIRD-PARTY-NOTICES.txt: the licence of every open-source package built into
-// wattclean.exe and wattclean-cmd.exe, as their licences ask when the programs are given out.
-// Rust packages come from `cargo metadata` (normal dependencies of the two shipped crates,
-// Windows target); the page's one npm runtime package from node_modules. Identical licence
-// texts are printed once with the packages that share them.
+// wattclean and wattclean-cmd, as their licences ask when the programs are given out.
+// Rust packages come from `cargo metadata` (normal dependencies of the two shipped crates, on
+// every platform WattClean ships for: one file serves the Windows, Linux and macOS builds);
+// the page's one npm runtime package from node_modules. Identical licence texts are printed
+// once with the packages that share them.
 //
 // Usage: node scripts/third-party-notices.mjs [--check]
 //   --check  exits 1 when the committed file differs from what would be written.
@@ -18,38 +19,50 @@ const SHIPPED = ["wattclean", "wattclean-cmd"];
 const NPM_RUNTIME = ["@tauri-apps/api"];
 const LICENCE_FILE = /^(licen[cs]e|copying|notice|copyright)/i;
 
-const metadata = JSON.parse(
-  execFileSync(
-    "cargo",
-    [
-      "metadata",
-      "--format-version",
-      "1",
-      "--locked",
-      "--filter-platform",
-      "x86_64-pc-windows-msvc",
-    ],
-    { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
-  ),
-);
+/** The platforms releases are built for. */
+const TARGETS = [
+  "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+];
 
-const nodes = new Map(metadata.resolve.nodes.map((node) => [node.id, node]));
-const packages = new Map(metadata.packages.map((pkg) => [pkg.id, pkg]));
-
-// Normal (not build or dev) dependencies reachable from the shipped crates.
+// Normal (not build or dev) dependencies reachable from the shipped crates,
+// on any of the targets.
 const reached = new Set();
-const stack = metadata.packages
-  .filter((pkg) => SHIPPED.includes(pkg.name) && pkg.source === null)
-  .map((pkg) => pkg.id);
-if (stack.length !== SHIPPED.length) {
-  throw new Error(`expected the crates ${SHIPPED.join(", ")} in the workspace`);
-}
-while (stack.length > 0) {
-  const id = stack.pop();
-  if (reached.has(id)) continue;
-  reached.add(id);
-  for (const dep of nodes.get(id)?.deps ?? []) {
-    if (dep.dep_kinds.some((kind) => kind.kind === null)) stack.push(dep.pkg);
+const packages = new Map();
+for (const target of TARGETS) {
+  const metadata = JSON.parse(
+    execFileSync(
+      "cargo",
+      [
+        "metadata",
+        "--format-version",
+        "1",
+        "--locked",
+        "--filter-platform",
+        target,
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
+    ),
+  );
+  const nodes = new Map(metadata.resolve.nodes.map((node) => [node.id, node]));
+  for (const pkg of metadata.packages) packages.set(pkg.id, pkg);
+  const stack = metadata.packages
+    .filter((pkg) => SHIPPED.includes(pkg.name) && pkg.source === null)
+    .map((pkg) => pkg.id);
+  if (stack.length !== SHIPPED.length) {
+    throw new Error(`expected the crates ${SHIPPED.join(", ")} in the workspace`);
+  }
+  const seen = new Set();
+  while (stack.length > 0) {
+    const id = stack.pop();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    reached.add(id);
+    for (const dep of nodes.get(id)?.deps ?? []) {
+      if (dep.dep_kinds.some((kind) => kind.kind === null)) stack.push(dep.pkg);
+    }
   }
 }
 

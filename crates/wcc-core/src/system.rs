@@ -9,7 +9,61 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+/// The operating system a machine runs: it decides which built-in cleaners
+/// apply and what the window calls things.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Platform {
+    Windows,
+    Linux,
+    Macos,
+}
+
+impl Platform {
+    /// The platform this program was built for.
+    pub const fn current() -> Self {
+        if cfg!(windows) {
+            Self::Windows
+        } else if cfg!(target_os = "macos") {
+            Self::Macos
+        } else {
+            Self::Linux
+        }
+    }
+}
+
+/// What a program a task ran printed and whether it succeeded.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProgramOutput {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
 pub trait System: Send + Sync {
+    /// Which built-in cleaners apply to this machine.
+    fn platform(&self) -> Platform {
+        Platform::current()
+    }
+    /// The full path of a program a task runs (a package manager), from
+    /// the system's own program folders; `None` when it is not installed.
+    fn find_program(&self, _name: &str) -> Option<PathBuf> {
+        None
+    }
+    /// Runs a program with these arguments (never through a shell) and
+    /// waits for it; `admin` asks for administrator (root) rights first
+    /// when this program does not have them.
+    fn run_program(
+        &self,
+        _program: &Path,
+        _args: &[String],
+        _admin: bool,
+    ) -> io::Result<ProgramOutput> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "this machine cannot run maintenance commands",
+        ))
+    }
     /// The folders (or text) a `%VARIABLE%` stands for; empty when unknown.
     fn var(&self, name: &str) -> Vec<String>;
     fn registry(&self) -> &dyn Registry;

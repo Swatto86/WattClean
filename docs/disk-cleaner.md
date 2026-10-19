@@ -18,10 +18,13 @@ ui/ (vanilla TypeScript)    pages: Cleaner, Shred files, Wipe free space,
 src-tauri/ (wattcompclean)  thin commands, app state (settings, catalog, the
                              one running job), Open dialogs, single instance
   │
-crates/wcc-core             the engine; no Tauri, no Win32
-  │  trait System (variables, registry, Recycle Bin, clipboard, running
-  │                programs, drives, rights, delete at restart)
-crates/wcc-windows          the real PC (the only crate with `unsafe`)
+crates/wcc-core             the engine; no Tauri, no OS API
+  │  trait System (platform, variables, registry, Recycle Bin or Trash,
+  │                clipboard, running programs, drives, rights, delete at
+  │                restart, finding and running maintenance programs)
+crates/wcc-windows          the real Windows PC (`unsafe`: Win32)
+crates/wcc-unix             the real Linux or macOS machine (`unsafe`
+                             only in sys.rs: geteuid, statvfs, access)
 wcc-core::fake (feature)    a test machine over a sandbox folder
 crates/wcc-cmd              wattclean-cmd.exe disk, BleachBit-style console
                              options, on wcc-core and wcc-windows (no Tauri)
@@ -35,13 +38,16 @@ beside the app by `src-tauri/installer-hooks.nsh`.
 | Module | Responsibility |
 | --- | --- |
 | `model` | Cleaner, option, action, file spec; `cleaner.option` keys |
-| `defs` + `defs/*.toml` | Built-in and custom TOML definitions, templates |
-| `cleanerml` | BleachBit CleanerML import (Windows parts) |
+| `defs` + `defs/` | Built-in (per platform, `defs/built_in.rs`) and custom TOML definitions, templates |
+| `cleanerml` | BleachBit CleanerML import (this platform's parts) |
+| `tasks` | The one table of maintenance commands (package managers) and their listing parsers |
+| `command` | A task in a run: planning, measuring, the preview line, running it |
+| `filter` | A file spec's filters, compiled once per run |
 | `winapp2` | winapp2.ini import: one cleaner per entry |
 | `catalog` | All cleaners together; detection (installed?) and running state |
 | `vars` | `%VARIABLE%` expansion (a variable may have several values) |
 | `wildcard`, `search` | Globs and walks with filters; links never followed |
-| `paths` | Windows path comparison and the `Guard` |
+| `paths` | Path comparison (one rule on every platform) and the `Guard` |
 | `ops` | Planning an option's actions into operations |
 | `exec` | Carrying out operations (shred, delete at restart) |
 | `run` | Preview or clean of a selection, with progress and stop |
@@ -53,7 +59,12 @@ beside the app by `src-tauri/installer-hooks.nsh`.
 | `system` | The machine trait; protected folders |
 | `fake`, `fake_seed` | The test machine (feature `fake`) |
 
-## Cleaner definitions (`crates/wcc-core/src/defs/*.toml`)
+## Cleaner definitions (`crates/wcc-core/src/defs/`)
+
+`templates.toml` (Chromium, Firefox, Electron) serves every platform;
+`windows/`, `linux/` and `macos/` hold each platform's cleaners and `unix/`
+the ones Linux and macOS share. Paths may use either separator (on Linux
+and macOS a backslash in a definition is a separator).
 
 ```toml
 [[template]]                     # options shared by several cleaners
@@ -71,10 +82,11 @@ actions = [{ op = "delete", search = "walk.all", path = '{cache}\Cache' }]
 id = "chrome"                    # letters, digits, _ or -
 name = "Google Chrome"
 description = "Web browser"
-category = "browsers"            # system browsers applications developer games deep-scan
+category = "browsers"            # system packages browsers applications developer games deep-scan
 template = "chromium"
 vars = { root = '%LOCALAPPDATA%\Google\Chrome\User Data' }
-detect = ['{root}']              # shown only when one exists (or detect_registry)
+detect = ['{root}']              # shown only when one exists (or detect_registry,
+                                 # or detect_program = ["apt-get"])
 running = ["chrome.exe"]
 skip = []                        # template options to leave out
 ```
@@ -83,7 +95,10 @@ Actions (`op`): `delete`, `truncate`, `sqlite` (`sql` = vacuum,
 chrome-history, chrome-downloads, chrome-autofill, chrome-keywords,
 mozilla-history, mozilla-downloads), `json` (`address` a/b/c), `ini`
 (`section`, optional `parameter`), `registry` (`key`, optional `value`),
-`recycle-bin`, `clipboard`, `custom-paths`. File actions take `path`,
+`recycle-bin` (the Trash on Linux and macOS), `clipboard`, `custom-paths`,
+`command` (`task` = an id from `tasks::TASKS`: a package manager's clean,
+run with administrator rights when it needs them, its listing shown in the
+preview; a definition can name a task, never a command). File actions take `path`,
 `search` (file, glob, walk.files, walk.all, walk.top, find.dirs), and filters
 `regex`, `nregex`, `wholeregex`, `nwholeregex`, `names` (wildcards),
 `kind` (file/dir), `older_than_days`, `exclude` (paths; a `*` in an
@@ -98,6 +113,9 @@ registry action. `find.dirs` looks through every folder below
 (wildcards, `;` between) when given, and takes each found folder whole
 (as walk.top) without looking further inside it. Variables: see `KNOWN_VARIABLES` in
 `defs_tests.rs`; `%PROGRAMFILES%` stands for both Program Files folders.
+On Linux and macOS: `vars::UNIX_VARIABLES` (`%HOME%`, the XDG folders,
+`%CONFIG%` and `%CACHE%` — XDG on Linux, `~/Library/…` on macOS — the user
+folders, `%TRASH%`, `%HOMEBREW_CACHE%`, `%GOPATH%`, `%CARGO_HOME%`).
 
 Custom `.toml` and CleanerML `.xml` files go in the data folder's
 `cleaners` folder; winapp2.ini is kept there as `winapp2.ini`.
@@ -125,7 +143,9 @@ cleaner `cleaners\northwind.toml`. Open dialogs answer from `picks.json`.
 
 ## Data folder
 
-`%LOCALAPPDATA%\WattClean\disk`: `settings.json`, `history.json`, `cleaners\`.
+`disk` in WattClean's data folder (`%LOCALAPPDATA%\WattClean`,
+`~/.local/share/WattClean`, `~/Library/Application Support/WattClean`):
+`settings.json`, `history.json`, `cleaners`.
 
 # Decisions in force
 

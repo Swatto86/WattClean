@@ -4306,10 +4306,12 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tempfile",
  "wcc-core",
+ "wcc-unix",
  "wcc-windows",
  "wrc-core",
  "wrc-windows",
  "wu-core",
+ "wu-unix",
  "wu-windows",
 ]
 
@@ -4327,6 +4329,7 @@ version = "0.1.2"
 dependencies = [
  "tempfile",
  "wcc-core",
+ "wcc-unix",
  "wcc-windows",
 ]
 
@@ -4342,6 +4345,15 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "wcc-unix"
+version = "0.1.2"
+dependencies = [
+ "libc",
+ "tempfile",
+ "wcc-core",
 ]
 
 [[package]]
@@ -4908,6 +4920,16 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "wu-unix"
+version = "0.1.2"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "wcc-unix",
+ "wu-core",
 ]
 
 [[package]]

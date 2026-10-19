@@ -1,0 +1,68 @@
+# Games on Linux: Steam (native, Snap and Flatpak), Lutris and Heroic.
+
+[[cleaner]]
+id = "steam"
+name = "Steam"
+description = "Game launcher"
+category = "games"
+detect = ['%XDG_DATA_HOME%/Steam', '%HOME%/.steam/steam', '%HOME%/.var/app/com.valvesoftware.Steam/.local/share/Steam']
+running = ["steam", "steamwebhelper"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Web cache"
+description = "The store and community pages Steam kept"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_DATA_HOME%/Steam/appcache/httpcache' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.steam/steam/appcache/httpcache' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.var/app/com.valvesoftware.Steam/.local/share/Steam/appcache/httpcache' },
+  { op = "delete", search = "walk.all", path = '%XDG_DATA_HOME%/Steam/config/htmlcache' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.steam/steam/config/htmlcache' },
+]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs and crash dumps"
+description = "Steam's log files and crash dumps"
+default = true
+actions = [
+  { op = "delete", search = "walk.files", path = '%XDG_DATA_HOME%/Steam/logs' },
+  { op = "delete", search = "walk.files", path = '%HOME%/.steam/steam/logs' },
+  { op = "delete", search = "walk.files", path = '%XDG_DATA_HOME%/Steam/dumps' },
+]
+
+[[cleaner.option]]
+id = "shader_cache"
+name = "Shader pre-caches"
+description = "Shaders Steam downloaded or compiled for each game"
+warning = "Games may stutter while Steam compiles their shaders again."
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_DATA_HOME%/Steam/steamapps/shadercache' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.steam/steam/steamapps/shadercache' },
+]
+
+[[cleaner]]
+id = "lutris"
+name = "Lutris"
+description = "Game launcher"
+category = "games"
+detect = ['%XDG_CACHE_HOME%/lutris']
+running = ["lutris"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Downloaded installers, banners and icons Lutris fetches again"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/lutris' }]
+
+[[cleaner]]
+id = "heroic"
+name = "Heroic Games Launcher"
+description = "Game launcher for Epic, GOG and Amazon"
+category = "games"
+template = "electron"
+vars = { root = '%XDG_CONFIG_HOME%/heroic' }
+detect = ['{root}']
+running = ["heroic"]

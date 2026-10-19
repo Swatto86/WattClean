@@ -3,6 +3,7 @@
 import type { ItemKind, OptionReport, Progress, Report } from "../api.ts";
 import { el, glyph } from "../dom.ts";
 import { bytes, count, duration, percent, plural } from "../format.ts";
+import { isWindows } from "../platform.ts";
 
 const KIND_LABELS: Record<ItemKind, string> = {
   file: "File",
@@ -15,7 +16,11 @@ const KIND_LABELS: Record<ItemKind, string> = {
   "recycle-bin": "Bin",
   clipboard: "Clipboard",
   "free-space": "Free space",
+  command: "Command",
 };
+
+const kindLabel = (kind: ItemKind): string =>
+  kind === "recycle-bin" && !isWindows() ? "Trash" : KIND_LABELS[kind];
 
 const tile = (label: string, value: string, extra = ""): HTMLElement =>
   el(
@@ -71,7 +76,7 @@ const optionResult = (r: OptionReport): HTMLElement => {
           el(
             "li",
             {},
-            el("span", { class: "item-kind", text: KIND_LABELS[item.kind] }),
+            el("span", { class: "item-kind", text: kindLabel(item.kind) }),
             el("span", {
               class: "item-path",
               text: item.note ? `${item.path}  (${item.note})` : item.path,
@@ -167,10 +172,12 @@ export const renderReport = (
     o.problems.some((p) => p.message.includes("administrator")),
   );
   if (needsAdmin && !elevated) {
+    // Linux and macOS ask for administrator rights per command instead.
     const button = el("button", {
       type: "button",
       class: "secondary",
       text: "Restart as administrator",
+      hidden: !isWindows(),
     });
     button.addEventListener("click", actions.restartAsAdmin);
     nodes.push(
@@ -179,7 +186,9 @@ export const renderReport = (
         { class: "banner" },
         el("span", {
           class: "banner-text",
-          text: "Some items need administrator rights.",
+          text: isWindows()
+            ? "Some items need administrator rights."
+            : "Some items need administrator rights, which were not granted.",
         }),
         button,
       ),

@@ -5,6 +5,17 @@ use super::*;
 use crate::model::{Action, Cleaner, CleanerOption, Detect};
 use crate::search::Filter;
 
+const PLATFORMS: [Platform; 3] = [Platform::Windows, Platform::Linux, Platform::Macos];
+
+/// The fewest built-in cleaners each platform should have.
+fn fewest(platform: Platform) -> usize {
+    match platform {
+        Platform::Windows => 60,
+        Platform::Linux => 35,
+        Platform::Macos => 35,
+    }
+}
+
 /// Every variable the Windows and test machines resolve.
 pub const KNOWN_VARIABLES: &[&str] = &[
     "APPDATA",
@@ -48,6 +59,7 @@ fn texts(cleaner: &Cleaner) -> Vec<String> {
     for detect in &cleaner.detect {
         match detect {
             Detect::Path(p) | Detect::Registry(p) => out.push(p.clone()),
+            Detect::Program(_) => {}
         }
     }
     for option in &cleaner.options {
@@ -63,6 +75,9 @@ fn texts(cleaner: &Cleaner) -> Vec<String> {
                     out.push(files.path.clone());
                 }
                 Action::Registry { key, .. } => out.push(key.clone()),
+                Action::Command(task) => {
+                    out.extend(task.measure.iter().map(ToString::to_string));
+                }
                 _ => {}
             }
         }
@@ -72,9 +87,19 @@ fn texts(cleaner: &Cleaner) -> Vec<String> {
 
 #[test]
 fn every_built_in_file_parses() {
-    let (cleaners, problems) = built_in();
-    assert!(problems.is_empty(), "{problems:#?}");
-    assert!(cleaners.len() >= 60, "only {} cleaners", cleaners.len());
+    for platform in PLATFORMS {
+        every_file_parses(platform);
+    }
+}
+
+fn every_file_parses(platform: Platform) {
+    let (cleaners, problems) = built_in(platform);
+    assert!(problems.is_empty(), "{platform:?}: {problems:#?}");
+    assert!(
+        cleaners.len() >= fewest(platform),
+        "{platform:?}: only {} cleaners",
+        cleaners.len()
+    );
     let mut ids = HashSet::new();
     for cleaner in &cleaners {
         assert!(
@@ -100,20 +125,62 @@ fn every_built_in_file_parses() {
 
 #[test]
 fn built_in_paths_use_only_known_variables_and_no_leftover_placeholders() {
-    let (cleaners, _) = built_in();
-    for cleaner in &cleaners {
-        for text in texts(cleaner) {
-            assert!(
-                !text.contains('{'),
-                "{}: unfilled placeholder in {text}",
-                cleaner.id
-            );
-            for name in variables(&text) {
+    for platform in PLATFORMS {
+        let known: &[&str] = if platform == Platform::Windows {
+            KNOWN_VARIABLES
+        } else {
+            crate::vars::UNIX_VARIABLES
+        };
+        let (cleaners, _) = built_in(platform);
+        for cleaner in &cleaners {
+            for text in texts(cleaner) {
                 assert!(
-                    KNOWN_VARIABLES.contains(&name.as_str()),
-                    "{}: unknown variable %{name}% in {text}",
+                    !text.contains('{'),
+                    "{}: unfilled placeholder in {text}",
                     cleaner.id
                 );
+                for name in variables(&text) {
+                    assert!(
+                        known.contains(&name.as_str()),
+                        "{platform:?} {}: unknown variable %{name}% in {text}",
+                        cleaner.id
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Registry actions exist only on Windows; commands only elsewhere, and
+/// every Linux or macOS path is a full path from a variable or the root.
+#[test]
+fn each_platform_uses_only_its_own_kinds_of_action() {
+    for platform in PLATFORMS {
+        let (cleaners, _) = built_in(platform);
+        for cleaner in &cleaners {
+            for option in &cleaner.options {
+                for action in &option.actions {
+                    let key = format!("{platform:?} {}.{}", cleaner.id, option.id);
+                    match action {
+                        Action::Registry { .. } => {
+                            assert_eq!(platform, Platform::Windows, "{key}");
+                        }
+                        Action::Command(_) => {
+                            assert_ne!(platform, Platform::Windows, "{key}");
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if platform != Platform::Windows {
+                for text in texts(cleaner) {
+                    assert!(
+                        text.starts_with('%') || text.starts_with('/'),
+                        "{platform:?} {}: {text} is not a full path",
+                        cleaner.id
+                    );
+                    assert!(!text.contains(':'), "{}: {text}", cleaner.id);
+                }
             }
         }
     }
@@ -121,7 +188,13 @@ fn built_in_paths_use_only_known_variables_and_no_leftover_placeholders() {
 
 #[test]
 fn built_in_filters_compile() {
-    let (cleaners, _) = built_in();
+    for platform in PLATFORMS {
+        filters_compile(platform);
+    }
+}
+
+fn filters_compile(platform: Platform) {
+    let (cleaners, _) = built_in(platform);
     let vars = |_: &str| vec![r"C:\X".to_string()];
     for cleaner in &cleaners {
         for option in &cleaner.options {
@@ -259,7 +332,7 @@ fn option_of<'a>(cleaners: &'a [Cleaner], cleaner: &str, option: &str) -> &'a Cl
 
 #[test]
 fn profile_wide_deep_scans_stay_out_of_onedrive() {
-    let (cleaners, _) = built_in();
+    let (cleaners, _) = built_in(Platform::Windows);
     let scan = cleaners.iter().find(|c| c.id == "deep_scan").unwrap();
     for option in &scan.options {
         for action in &option.actions {
@@ -279,7 +352,7 @@ fn profile_wide_deep_scans_stay_out_of_onedrive() {
 
 #[test]
 fn options_that_lose_pinned_or_unsynced_things_say_so() {
-    let (cleaners, _) = built_in();
+    let (cleaners, _) = built_in(Platform::Windows);
     let warns = |c, o, word: &str| {
         option_of(&cleaners, c, o)
             .warning
@@ -292,9 +365,12 @@ fn options_that_lose_pinned_or_unsynced_things_say_so() {
 
 #[test]
 fn site_storage_leaves_browser_extension_data_alone() {
-    let (cleaners, _) = built_in();
     let mut checked = 0;
-    for cleaner in &cleaners {
+    let all: Vec<Cleaner> = PLATFORMS
+        .iter()
+        .flat_map(|platform| built_in(*platform).0)
+        .collect();
+    for cleaner in &all {
         for option in cleaner.options.iter().filter(|o| o.id == "site_storage") {
             for action in &option.actions {
                 let Action::Delete(spec) = action else {

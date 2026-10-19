@@ -1,0 +1,153 @@
+# Linux itself. Format: see docs/disk-cleaner.md ("Cleaner definitions").
+# Paths take %VARIABLES% (vars::UNIX_VARIABLES) and * ? wildcards. Only
+# what this account owns is cleaned here: system-wide caches are left to
+# the package managers' own commands (packages.toml), which ask for
+# administrator rights.
+
+[[cleaner]]
+id = "system"
+name = "System"
+description = "Temporary files, the Trash, thumbnails and caches your desktop keeps"
+category = "system"
+
+# Session sockets, X locks and services' private folders live in the
+# temporary folder too: they and everything hidden at its top are kept.
+[[cleaner.option]]
+id = "temp"
+name = "Temporary files"
+description = "Your files in the temporary folder unchanged for two days"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%TEMP%', older_than_days = 2, exclude = [
+    '%TEMP%/.*', '%TEMP%/systemd-private-*', '%TEMP%/snap-private-tmp', '%TEMP%/tmux-*',
+    '%TEMP%/ssh-*', '%TEMP%/pulse-*', '%TEMP%/krb5cc*', '%TEMP%/xauth*', '%TEMP%/sddm-*',
+    '%TEMP%/lightdm*', '%TEMP%/gdm*', '%TEMP%/runtime-*', '%TEMP%/dbus-*', '%TEMP%/user',
+    '%TEMP%/wattclean-*',
+  ] },
+]
+
+[[cleaner.option]]
+id = "trash"
+name = "Trash"
+description = "Empty the Trash"
+actions = [{ op = "recycle-bin" }]
+
+[[cleaner.option]]
+id = "clipboard"
+name = "Clipboard"
+description = "Clear whatever was last copied"
+actions = [{ op = "clipboard" }]
+
+[[cleaner.option]]
+id = "thumbnails"
+name = "Thumbnails"
+description = "Pictures of files your file manager made to show them faster"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/thumbnails' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.thumbnails' },
+]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent documents"
+description = "The lists of files you opened lately that desktops and apps show"
+actions = [
+  { op = "delete", path = '%XDG_DATA_HOME%/recently-used.xbel' },
+  { op = "delete", search = "glob", path = '%XDG_DATA_HOME%/recently-used.xbel.*', kind = "file" },
+  { op = "delete", search = "walk.all", path = '%XDG_DATA_HOME%/RecentDocuments' },
+  { op = "delete", search = "glob", path = '%XDG_DATA_HOME%/user-places.xbel.bak*', kind = "file" },
+]
+
+[[cleaner.option]]
+id = "cache"
+name = "Application caches"
+description = "Everything in your cache folder unchanged for a week; programs fill it again"
+warning = "Programs may start slower while they rebuild their caches. Close them first for the most space."
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%', older_than_days = 7 },
+]
+
+[[cleaner.option]]
+id = "session_logs"
+name = "Session logs"
+description = "Error logs your graphical session keeps (the current one is emptied)"
+default = true
+actions = [
+  { op = "truncate", path = '%HOME%/.xsession-errors' },
+  { op = "delete", path = '%HOME%/.xsession-errors.old' },
+  { op = "delete", search = "glob", path = '%XDG_DATA_HOME%/xorg/Xorg.*.log.old', kind = "file" },
+  { op = "delete", path = '%XDG_DATA_HOME%/sddm/xorg-session.log.old' },
+]
+
+[[cleaner.option]]
+id = "crash_reports"
+name = "Crash reports"
+description = "Reports kept after programs crashed"
+default = true
+actions = [
+  { op = "delete", search = "walk.files", path = '/var/crash', names = "*.crash;*.upload;*.uploaded" },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/abrt' },
+  { op = "delete", search = "walk.all", path = '%XDG_DATA_HOME%/drkonqi' },
+]
+
+[[cleaner.option]]
+id = "journal"
+name = "Old journal entries"
+description = "System log entries older than two weeks (asks for administrator rights)"
+actions = [{ op = "command", task = "journal-vacuum" }]
+
+[[cleaner.option]]
+id = "free_disk_space"
+name = "Free disk space"
+description = "Overwrite the free space of the drive holding your temporary files, after everything else"
+warning = "This is slow: it writes over all the free space on the drive, which is full while it runs."
+actions = [{ op = "free-disk-space" }]
+
+[[cleaner.option]]
+id = "custom"
+name = "Custom paths"
+description = "The files and folders you list in Settings › Custom paths"
+actions = [{ op = "custom-paths" }]
+
+[[cleaner]]
+id = "shell"
+name = "Shells"
+description = "Command histories of bash, zsh, fish and Python"
+category = "system"
+
+[[cleaner.option]]
+id = "history"
+name = "Command history"
+description = "The commands you typed in terminals"
+warning = "Commands you typed before can no longer be recalled with the Up key."
+actions = [
+  { op = "delete", path = '%HOME%/.bash_history' },
+  { op = "delete", path = '%HOME%/.zsh_history' },
+  { op = "delete", path = '%HOME%/.histfile' },
+  { op = "delete", path = '%XDG_DATA_HOME%/fish/fish_history' },
+  { op = "delete", path = '%HOME%/.python_history' },
+  { op = "delete", path = '%HOME%/.node_repl_history' },
+  { op = "delete", path = '%HOME%/.lesshst' },
+  { op = "delete", path = '%HOME%/.wget-hsts' },
+]
+
+[[cleaner]]
+id = "gpu_caches"
+name = "Graphics shader caches"
+description = "Compiled shaders kept by Mesa and the NVIDIA driver"
+category = "system"
+
+[[cleaner.option]]
+id = "shaders"
+name = "Shader caches"
+description = "Games and apps compile them again the next time they need them"
+warning = "Games may stutter briefly while their shaders are compiled again."
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/mesa_shader_cache' },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/mesa_shader_cache_db' },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/radv_builtin_shaders' },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/nvidia/GLCache' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.nv/GLCache' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.nv/ComputeCache' },
+]

@@ -1,9 +1,10 @@
 # WattClean
 
 Clean your disk and your registry, and uninstall programs completely, from
-one Windows app with a modern Windows 11 look and an icon by the clock.
-WattClean brings together what were three tools (WattCompClean,
-WattRegClean and WattUninstaller) and replaces them.
+one app with a modern Windows 11 look and an icon by the clock. WattClean
+brings together what were three tools (WattCompClean, WattRegClean and
+WattUninstaller) and replaces them. It runs on Windows, and on Linux and
+macOS without the registry tools (see [Linux and macOS](#linux-and-macos)).
 
 ## Disk
 
@@ -55,6 +56,41 @@ WattRegClean and WattUninstaller) and replaces them.
   `wattclean-cmd --help` lists both.
 - No telemetry and no network use, except downloading winapp2.ini when you
   click it.
+
+## Linux and macOS
+
+The disk tools and the uninstaller run on Linux and macOS too; the registry
+tools are Windows-only, as only Windows has a registry.
+
+- **Disk cleaner** with each system's own cleaners: temporary files, the
+  Trash, thumbnails, caches, session and crash logs, the system journal,
+  shell histories, shader caches, browsers (native, Snap and Flatpak builds
+  of Chrome, Chromium, Edge, Brave, Vivaldi, Opera, Firefox, LibreWolf,
+  Safari, Arc…), chat, music and office apps, Steam and Lutris, Xcode, and
+  developer caches (npm, Yarn, pnpm, Bun, Deno, pip, uv, Conda, Cargo, Go,
+  Gradle, NuGet, Composer, ccache, Docker, CocoaPods).
+- **Package managers**: APT, DNF, Zypper, pacman (and AUR helpers),
+  Flatpak, Snap, Nix, Homebrew and MacPorts clean their caches and remove
+  what nothing needs through their own commands; the preview shows each
+  command and what it lists. Commands that need administrator rights ask
+  for your password each time (the system's own prompt); WattClean itself
+  never runs as administrator there.
+- **Uninstall programs** lists what every package manager installed (APT,
+  DNF/Zypper/RPM, pacman, Flatpak, Snap, Homebrew formulae and casks,
+  MacPorts), AppImages and app bundles; applications first, every package
+  on request. It removes one with its own package manager, optionally with
+  its settings, then offers what it left in your home folder or Library,
+  nothing ticked, to move to the Trash.
+- BleachBit CleanerML files work with their Linux or macOS parts;
+  winapp2.ini, deleting in-use files at restart and starting with the
+  system are Windows-only.
+
+Linux packages: `.deb`, `.rpm` and AppImage (WebKitGTK 4.1; the icon by
+the clock needs an AppIndicator-capable desktop). macOS: an app in a
+`.dmg` (macOS 11 or later); some folders (the Trash, Safari's) need Full
+Disk Access in System Settings › Privacy & Security. Data:
+`~/.local/share/WattClean` on Linux, `~/Library/Application
+Support/WattClean` on macOS. The command line is `wattclean-cmd disk …`.
 
 ## Moving from the separate tools
 

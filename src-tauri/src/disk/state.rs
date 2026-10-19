@@ -45,7 +45,11 @@ impl Drop for Job<'_> {
 impl AppState {
     pub fn new(system: Arc<dyn System>, data_dir: PathBuf, fake: bool) -> Self {
         let settings = Settings::load(&data_dir.join("settings.json"));
-        let catalog = Catalog::load(Some(&store::cleaners_dir(&data_dir)), settings.community);
+        let catalog = Catalog::load(
+            system.platform(),
+            Some(&store::cleaners_dir(&data_dir)),
+            settings.community,
+        );
         Self {
             system,
             data_dir,
@@ -98,7 +102,11 @@ impl AppState {
     /// community setting).
     pub fn reload_catalog(&self) {
         let community = self.settings().community;
-        let catalog = Catalog::load(Some(&self.cleaners_dir()), community);
+        let catalog = Catalog::load(
+            self.system.platform(),
+            Some(&self.cleaners_dir()),
+            community,
+        );
         *self.catalog.write().unwrap_or_else(PoisonError::into_inner) = Arc::new(catalog);
     }
 

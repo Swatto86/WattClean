@@ -1,0 +1,71 @@
+# Deep scan on Linux and macOS: searches your home folder for leftovers by
+# name. It skips hidden folders (settings, caches and toolchains), Library
+# on macOS, and the package, build and Git folders of developer tools,
+# which hold huge numbers of files and never a person's leftovers. Slower
+# than other cleaners all the same.
+#
+# A `*` in an exclusion spans folders, so '%HOME%/*/node_modules' skips
+# every node_modules folder at any depth.
+
+[[cleaner]]
+id = "deep_scan"
+name = "Deep scan"
+description = "Leftover files anywhere in your home folder, found by name"
+category = "deep-scan"
+
+[[cleaner.option]]
+id = "backup"
+name = "Backup files"
+description = "Files ending in .bak or ~ left by editors"
+warning = "Searches your whole home folder, which can take a while. Check the preview: a backup you still want would go too."
+actions = [
+  { op = "delete", search = "walk.files", path = '%HOME%', regex = '(\.bak|~)$', exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*/target',
+  ] },
+]
+
+[[cleaner.option]]
+id = "thumbs_db"
+name = "Thumbs.db and desktop.ini"
+description = "Files Windows leaves in folders on shared and external drives"
+actions = [
+  { op = "delete", search = "walk.files", path = '%HOME%', regex = '^(Thumbs\.db|ehthumbs\.db)$', exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*/target',
+  ] },
+]
+
+[[cleaner.option]]
+id = "ds_store"
+name = ".DS_Store and ._ files"
+description = "Folder settings and resource forks macOS leaves (Finder makes them again)"
+actions = [
+  { op = "delete", search = "walk.files", path = '%HOME%', regex = '^(\.DS_Store|\._.+)$', exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*/target',
+  ] },
+]
+
+[[cleaner.option]]
+id = "temp_files"
+name = "Temporary files"
+description = "Files ending in .tmp or .temp, unchanged for a week"
+warning = "Searches your whole home folder, which can take a while."
+actions = [
+  { op = "delete", search = "walk.files", path = '%HOME%', regex = '\.(tmp|temp)$', older_than_days = 7, exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*/target',
+  ] },
+]
+
+[[cleaner.option]]
+id = "office_lock"
+name = "Office lock files"
+description = "Lock files LibreOffice and Office leave beside documents after a crash"
+actions = [
+  { op = "delete", search = "walk.files", path = '%HOME%', regex = '^(\.~lock\..*#|~\$.*)$', older_than_days = 1, exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*/target',
+  ] },
+]

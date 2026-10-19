@@ -6,6 +6,7 @@ import type { Context, Page } from "../context.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { plural } from "../format.ts";
+import { trashName } from "../platform.ts";
 import {
   defaults,
   everything,
@@ -186,7 +187,7 @@ export const cleanerPage = (ctx: Context): Page => {
       title: "Clean now?",
       message: settings.shred
         ? `What the ${plural(keys.length, "ticked option")} find will be overwritten and permanently deleted. This cannot be undone.`
-        : `What the ${plural(keys.length, "ticked option")} find will be permanently deleted (not moved to the Recycle Bin).`,
+        : `What the ${plural(keys.length, "ticked option")} find will be permanently deleted (not moved to the ${trashName()}).`,
       ok: "Clean",
       danger: true,
       list: lines,

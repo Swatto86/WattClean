@@ -8,6 +8,7 @@ import * as wire from "./wire.ts";
 
 export const CATEGORIES = [
   "system",
+  "packages",
   "browsers",
   "applications",
   "developer",
@@ -31,11 +32,16 @@ export const ITEM_KINDS = [
   "recycle-bin",
   "clipboard",
   "free-space",
+  "command",
 ] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
+export const PLATFORMS = ["windows", "linux", "macos"] as const;
+export type Platform = (typeof PLATFORMS)[number];
 
 export interface AppInfo {
   version: string;
+  /** Which modules exist and what the system's things are called. */
+  platform: Platform;
   elevated: boolean;
   testMachine: boolean;
   /** WattClean's data folder; each module has its own folder inside. */

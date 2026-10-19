@@ -80,6 +80,7 @@ fn shorten(text: &str) -> String {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

@@ -76,6 +76,17 @@ impl Executor<'_> {
                 .map(|()| true),
             Op::RecycleBin { .. } => self.system.empty_recycle_bin().map(|()| true),
             Op::Clipboard => self.system.clear_clipboard().map(|()| true),
+            Op::Command {
+                task,
+                program,
+                listed,
+                size,
+            } => self.command(task, program, listed).inspect(|_| {
+                if !task.measure.is_empty() {
+                    item.size =
+                        size.saturating_sub(crate::command::measure(self.system, task.measure));
+                }
+            }),
             Op::FreeSpace { folder, .. } => {
                 shred::wipe_free_space(folder, self.system.wipe_limit(), self.cancelled, &|_| {})
                     .map(|report| {
@@ -159,6 +170,15 @@ pub fn remove_dir(path: &Path) -> io::Result<()> {
     }
 }
 
+/// On Linux and macOS whether a file may be removed depends on its folder,
+/// not the file, and clearing "read-only" would make the file writable by
+/// every account: the refusal stands.
+#[cfg(not(windows))]
+fn clear_read_only(_path: &Path) -> io::Result<()> {
+    Err(io::Error::from(io::ErrorKind::PermissionDenied))
+}
+
+#[cfg(windows)]
 fn clear_read_only(path: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(path)?;
     let mut permissions = meta.permissions();

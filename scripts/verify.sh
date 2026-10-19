@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# The full gate. verify.ps1 is a shim that runs this file through Git for
-# Windows' Bash. WattClean is a Windows program, so the WebDriver suite
-# runs on Windows only.
+# The full gate, on Windows, Linux and macOS. verify.ps1 is a shim that runs
+# this file through Git for Windows' Bash. The window's acceptance differs
+# by platform: the WebdriverIO suite on Windows (the fake machine, registry
+# and all), e2e/linux/smoke.py on Linux (the real package managers, read
+# only, in a throwaway home folder), and none on macOS, where WKWebView has
+# no WebDriver for apps: there the window is checked by hand.
 #
 # Cheapest checks first, so a formatting slip fails in seconds rather than
 # after a WebDriver run. Nothing here packages an installer: that is the
@@ -15,6 +18,13 @@ package=0
 [ "${1:-}" = "--package" ] && package=1
 
 say() { printf '\n== %s ==\n' "$1"; }
+
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) os=windows ;;
+  Darwin) os=macos ;;
+  *) os=linux ;;
+esac
+echo "platform: $os"
 
 say "rust fmt"
 cargo fmt --all -- --check
@@ -93,12 +103,31 @@ done < <(find . -type f \( -name '*.rs' -o -name '*.ts' \))
 [ "$over" -eq 0 ] || { echo "Split these by responsibility before committing."; exit 1; }
 echo "file sizes OK (none over $hard lines)"
 
-say "debug application (fake machine, no bundle)"
-npx --no-install tauri build --debug --no-bundle --features fake-system --config e2e/tauri.conf.json
+if [ "$os" = "windows" ]; then
+  say "debug application (fake machine, no bundle)"
+  npx --no-install tauri build --debug --no-bundle --features fake-system --config e2e/tauri.conf.json
 
-say "native WebDriver acceptance"
-export PATH="$root/.webdriver:$PATH"
-npm run --silent e2e:run
+  say "native WebDriver acceptance"
+  export PATH="$root/.webdriver:$PATH"
+  npm run --silent e2e:run
+else
+  say "debug application (this machine, no bundle)"
+  npx --no-install tauri build --debug --no-bundle
+fi
+
+if [ "$os" = "linux" ]; then
+  say "Linux WebDriver acceptance"
+  export PATH="$root/.webdriver:$PATH"
+  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    python3 e2e/linux/smoke.py target/debug/wattclean
+  else
+    xvfb-run -a python3 e2e/linux/smoke.py target/debug/wattclean
+  fi
+fi
+
+if [ "$os" = "macos" ]; then
+  echo "macOS: no WebDriver for WKWebView; open target/debug/wattclean and check the window by hand."
+fi
 
 if [ "$package" = "1" ]; then
   [ "${AGENT_RELEASE:-}" = "1" ] || {

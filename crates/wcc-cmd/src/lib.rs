@@ -237,7 +237,11 @@ pub fn execute(
     out: &mut (dyn Write + Send),
 ) -> std::io::Result<i32> {
     let settings = Settings::load(&data_dir.join("settings.json"));
-    let catalog = Catalog::load(Some(&store::cleaners_dir(data_dir)), settings.community);
+    let catalog = Catalog::load(
+        system.platform(),
+        Some(&store::cleaners_dir(data_dir)),
+        settings.community,
+    );
     let keep: Vec<PathBuf> = settings
         .keep
         .iter()

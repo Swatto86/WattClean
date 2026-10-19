@@ -121,6 +121,7 @@ fn utc(millis: u64) -> String {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
     use crate::model::{Hive, RegPath};

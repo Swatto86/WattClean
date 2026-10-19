@@ -5,6 +5,34 @@
 //! to several paths. A variable the machine does not know drops the pattern:
 //! a literal `%NAME%` folder is never cleaned by mistake.
 
+/// Every variable Linux and macOS definitions may use; `wcc-unix` gives
+/// each one a value (the XDG folders fall back to their defaults). `CONFIG`
+/// and `CACHE` are where applications keep settings and caches: the XDG
+/// folders on Linux, `~/Library/Application Support` and `~/Library/Caches`
+/// on macOS, so one definition serves both.
+pub const UNIX_VARIABLES: &[&str] = &[
+    "HOME",
+    "CONFIG",
+    "CACHE",
+    "XDG_CONFIG_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "TRASH",
+    "DESKTOP",
+    "DOCUMENTS",
+    "DOWNLOADS",
+    "MUSIC",
+    "PICTURES",
+    "VIDEOS",
+    "HOMEBREW_CACHE",
+    "GOPATH",
+    "CARGO_HOME",
+];
+
 /// Looks a variable up by name (case-insensitive); empty when unknown.
 pub trait Vars {
     fn values(&self, name: &str) -> Vec<String>;

@@ -115,6 +115,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
     use crate::backup::capture::Child;

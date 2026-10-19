@@ -35,8 +35,17 @@ fn run(command: &crate::Command, data_dir: &std::path::Path) -> i32 {
     })
 }
 
-#[cfg(not(windows))]
-fn run(_command: &crate::Command, _data_dir: &std::path::Path) -> i32 {
-    eprintln!("WattClean runs on Windows.");
-    2
+#[cfg(unix)]
+fn run(command: &crate::Command, data_dir: &std::path::Path) -> i32 {
+    static NEVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let stop = wcc_unix::stop_on_ctrl_c().unwrap_or_else(|error| {
+        eprintln!("Ctrl+C will end the program at once: {error}");
+        &NEVER
+    });
+    let system = wcc_unix::UnixSystem::new();
+    let mut out = std::io::stdout();
+    crate::execute(command, &system, data_dir, stop, &mut out).unwrap_or_else(|error| {
+        eprintln!("{error}");
+        1
+    })
 }

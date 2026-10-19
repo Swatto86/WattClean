@@ -11,6 +11,7 @@ use crate::report::{Item, ItemKind};
 use crate::search::{Filter, Findings, Problem, Searcher};
 use crate::sqlite;
 use crate::system::System;
+use crate::tasks::{Listed, Task};
 use crate::vars::Vars;
 
 /// A file or folder from Settings > Custom paths.
@@ -64,6 +65,14 @@ pub enum Op {
         bytes: u64,
     },
     Clipboard,
+    /// A maintenance command (`tasks::TASKS`), with what its listing step
+    /// found and the size of what it frees, when that can be measured.
+    Command {
+        task: &'static Task,
+        program: PathBuf,
+        listed: Vec<Listed>,
+        size: u64,
+    },
 }
 
 impl Op {
@@ -107,7 +116,7 @@ impl Op {
             ),
             Self::RecycleBin { items, bytes } => (
                 ItemKind::RecycleBin,
-                "Recycle Bin".to_string(),
+                TRASH.to_string(),
                 *bytes,
                 Some(format!(
                     "{items} item{}",
@@ -115,6 +124,14 @@ impl Op {
                 )),
             ),
             Self::Clipboard => (ItemKind::Clipboard, "Clipboard".to_string(), 0, None),
+            Self::Command {
+                task, listed, size, ..
+            } => (
+                ItemKind::Command,
+                task.command_line(),
+                *size,
+                crate::command::note(task, listed),
+            ),
             Self::FreeSpace { folder, free } => (
                 ItemKind::FreeSpace,
                 show(folder),
@@ -140,6 +157,13 @@ impl Op {
         }
     }
 }
+
+/// What the system calls the place deleted files wait.
+const TRASH: &str = if cfg!(windows) {
+    "Recycle Bin"
+} else {
+    "Trash"
+};
 
 fn show(path: &Path) -> String {
     path.to_string_lossy().to_string()
@@ -215,7 +239,7 @@ impl Planner<'_> {
                 Ok((items, bytes)) if items > 0 => ops.push(Op::RecycleBin { items, bytes }),
                 Ok(_) => {}
                 Err(error) => problems.push(Problem {
-                    path: PathBuf::from("Recycle Bin"),
+                    path: PathBuf::from(TRASH),
                     message: error.to_string(),
                 }),
             },
@@ -229,6 +253,11 @@ impl Planner<'_> {
                     ops.push(op);
                 }
             }
+            Action::Command(task) => match self.command(task) {
+                Ok(Some(op)) => ops.push(op),
+                Ok(None) => {}
+                Err(problem) => problems.push(problem),
+            },
             Action::CustomPaths => {
                 for custom in self.custom_paths {
                     let search = if custom.folder {

@@ -167,6 +167,7 @@ fn add_quiet_switches(program: &Path, args: String) -> String {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
     use crate::fake::FakeSystem;

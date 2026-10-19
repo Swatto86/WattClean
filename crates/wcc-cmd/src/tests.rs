@@ -58,9 +58,10 @@ fn preview_prints_every_item_and_a_summary_then_clean_deletes() {
         text.contains("vlc-qt-interface.ini"),
         "the ini edit is listed: {text}"
     );
-    let temp = system
-        .drive_c()
-        .join(r"Users\Tester\AppData\Local\Temp\setup-1234.tmp");
+    let temp = wcc_core::paths::join(
+        &system.drive_c(),
+        r"Users\Tester\AppData\Local\Temp\setup-1234.tmp",
+    );
     assert!(temp.exists());
     let clean = parse(&args("--clean system.temp")).unwrap();
     let (code, text) = output(&clean, &system, dir.path());
@@ -91,7 +92,7 @@ fn listing_and_bad_names() {
 #[test]
 fn shredding_from_the_command_line() {
     let (dir, system) = machine();
-    let secret = system.drive_c().join(r"Users\Tester\Documents\Secret");
+    let secret = wcc_core::paths::join(&system.drive_c(), r"Users\Tester\Documents\Secret");
     let (code, text) = output(&Command::Shred(vec![secret.clone()]), &system, dir.path());
     assert_eq!(code, 0, "{text}");
     assert!(text.starts_with("Shredded 1 files and 1 folders"), "{text}");

@@ -11,10 +11,12 @@ repository = "https://github.com/Swatto86/WattClean"
 [workspace.dependencies]
 wcc-core = { path = "crates/wcc-core" }
 wcc-windows = { path = "crates/wcc-windows" }
+wcc-unix = { path = "crates/wcc-unix" }
 wrc-core = { path = "crates/wrc-core" }
 wrc-windows = { path = "crates/wrc-windows" }
 wu-core = { path = "crates/wu-core" }
 wu-windows = { path = "crates/wu-windows" }
+wu-unix = { path = "crates/wu-unix" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"

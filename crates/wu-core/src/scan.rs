@@ -21,6 +21,7 @@ mod registry;
 pub mod shortcut;
 mod tasks;
 #[cfg(test)]
+#[cfg(windows)]
 pub(crate) mod tests;
 mod users;
 

@@ -273,6 +273,7 @@ mod hex {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

@@ -1,5 +1,6 @@
 //! Cleaner definitions in TOML: the built-in ones (compiled in from
-//! `src/defs/*.toml`) and any custom `.toml` file a person adds.
+//! `src/defs/`, one folder per platform plus the shared templates) and any
+//! custom `.toml` file a person adds.
 //!
 //! A definition file holds `[[template]]` blocks (options shared by several
 //! applications, such as every Chromium browser) and `[[cleaner]]` blocks.
@@ -12,17 +13,13 @@ use serde::Deserialize;
 use crate::model::{
     Action, Category, Cleaner, CleanerOption, Detect, FileSpec, Kind, Search, Source, SqliteOp,
 };
+use crate::system::Platform;
+use crate::tasks;
 use crate::vars::fill_placeholders;
 
-/// The built-in definitions, by file name.
-pub const BUILT_IN: &[(&str, &str)] = &[
-    ("system.toml", include_str!("defs/system.toml")),
-    ("browsers.toml", include_str!("defs/browsers.toml")),
-    ("applications.toml", include_str!("defs/applications.toml")),
-    ("developer.toml", include_str!("defs/developer.toml")),
-    ("games.toml", include_str!("defs/games.toml")),
-    ("deepscan.toml", include_str!("defs/deepscan.toml")),
-];
+mod built_in;
+
+pub use built_in::{LINUX, MACOS, WINDOWS, built_in_files};
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum DefError {
@@ -71,6 +68,9 @@ struct CleanerDef {
     detect: Vec<String>,
     #[serde(default)]
     detect_registry: Vec<String>,
+    /// Programs (`apt-get`) the machine must find for the cleaner to show.
+    #[serde(default)]
+    detect_program: Vec<String>,
     #[serde(default)]
     running: Vec<String>,
     /// Template options this cleaner leaves out.
@@ -106,6 +106,7 @@ enum Op {
     Clipboard,
     CustomPaths,
     FreeDiskSpace,
+    Command,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -130,11 +131,14 @@ struct ActionDef {
     parameter: Option<String>,
     key: Option<String>,
     value: Option<String>,
+    /// A command action's task id (`tasks::TASKS`).
+    task: Option<String>,
 }
 
-/// Parses every built-in file; a problem in one file leaves the others.
-pub fn built_in() -> (Vec<Cleaner>, Vec<DefError>) {
-    parse_files(BUILT_IN, Source::BuiltIn)
+/// Parses a platform's built-in files; a problem in one file leaves the
+/// others.
+pub fn built_in(platform: Platform) -> (Vec<Cleaner>, Vec<DefError>) {
+    parse_files(built_in_files(platform), Source::BuiltIn)
 }
 
 /// Parses several files that may share templates.
@@ -241,6 +245,7 @@ fn build_cleaner(
             .iter()
             .map(|d| Detect::Registry(fill(d))),
     );
+    detect.extend(def.detect_program.into_iter().map(Detect::Program));
     Ok(Cleaner {
         id: def.id,
         name: def.name,
@@ -304,6 +309,10 @@ fn build_action(def: &ActionDef, fill: &dyn Fn(&str) -> String) -> Result<Action
         Op::Clipboard => Action::Clipboard,
         Op::CustomPaths => Action::CustomPaths,
         Op::FreeDiskSpace => Action::FreeDiskSpace,
+        Op::Command => {
+            let id = def.task.as_deref().ok_or("a command action needs a task")?;
+            Action::Command(tasks::find(id).ok_or_else(|| format!("no task {id:?}"))?)
+        }
     })
 }
 

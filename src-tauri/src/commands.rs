@@ -1,9 +1,15 @@
 //! Every command the page may call: the shell's, then each module's, all
-//! prefixed by module (`disk_`, `reg_`, `un_`) so no two share a name.
+//! prefixed by module (`disk_`, `reg_`, `un_`) so no two share a name. The
+//! registry cleaner and the registry-based uninstaller are Windows' only;
+//! on Linux and macOS the uninstaller's commands are `packages`'.
 
+#[cfg(not(windows))]
+use crate::{disk, packages, shell};
+#[cfg(windows)]
 use crate::{disk, registry, shell, uninstall};
 
 /// One line per command: a list, not logic, so it is allowed to be long.
+#[cfg(windows)]
 #[allow(clippy::too_many_lines)]
 pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
@@ -100,5 +106,37 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         uninstall::traced::un_list_logs,
         uninstall::traced::un_get_log,
         uninstall::traced::un_delete_log,
+    ]
+}
+
+#[cfg(not(windows))]
+pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
+    tauri::generate_handler![
+        shell::app_info,
+        shell::get_shell_settings,
+        shell::update_shell_settings,
+        shell::open_data_folder,
+        shell::quit_app,
+        shell::restart_as_admin,
+        disk::cleaner::disk_get_catalog,
+        disk::cleaner::disk_run_cleaner,
+        disk::cleaner::disk_cancel_job,
+        disk::cleaner::disk_reload_catalog,
+        disk::community::disk_import_winapp2,
+        disk::community::disk_download_winapp2,
+        disk::community::disk_remove_winapp2,
+        disk::disk_get_settings,
+        disk::disk_update_settings,
+        disk::disk_pick_path,
+        disk::disk_get_history,
+        disk::disk_clear_history,
+        disk::disk_open_cleaners_folder,
+        disk::tools::disk_pick_to_shred,
+        disk::tools::disk_shred,
+        disk::tools::disk_get_drives,
+        disk::tools::disk_wipe_free_space,
+        packages::un_pkg_list,
+        packages::un_pkg_uninstall,
+        packages::un_pkg_trash_leftovers,
     ]
 }

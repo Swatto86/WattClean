@@ -3,10 +3,13 @@
 
 import type { Category, CleanerView } from "../api.ts";
 import { el, glyph } from "../dom.ts";
+import { osName } from "../platform.ts";
 import { cleanerState, key, matches } from "../selection.ts";
 
-export const GROUPS: Record<Category, string> = {
-  system: "Windows",
+/** Each category's heading, in the tree's order. */
+export const groups = (): Record<Category, string> => ({
+  system: osName(),
+  packages: "Package managers",
   browsers: "Browsers",
   applications: "Applications",
   developer: "Developer tools",
@@ -14,7 +17,7 @@ export const GROUPS: Record<Category, string> = {
   "deep-scan": "Deep scan",
   custom: "Custom cleaners",
   community: "Community (winapp2.ini)",
-};
+});
 
 export interface TreeEvents {
   /** An option's box was clicked; resolves whether to keep the new state. */
@@ -61,7 +64,7 @@ export class Tree {
         ),
     );
     const nodes: HTMLElement[] = [];
-    for (const [category, label] of Object.entries(GROUPS)) {
+    for (const [category, label] of Object.entries(groups())) {
       const members = shown.filter((c) => c.category === category);
       if (members.length === 0) continue;
       nodes.push(el("div", { class: "group-title", text: label }));

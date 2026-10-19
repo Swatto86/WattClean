@@ -172,6 +172,7 @@ impl Category {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

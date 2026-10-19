@@ -1,0 +1,150 @@
+# Web browsers on macOS, on the shared templates (templates.toml). Chromium
+# browsers keep the profile in Application Support and the disk cache in
+# Caches. Safari's folders are protected by macOS (Full Disk Access).
+
+[[cleaner]]
+id = "safari"
+name = "Safari"
+description = "Web browser"
+category = "browsers"
+detect = ['%HOME%/Library/Safari', '%HOME%/Library/Containers/com.apple.Safari']
+running = ["safari"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Web pages, images and scripts kept to load sites faster"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Caches/com.apple.Safari' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.apple.Safari/Data/Library/Caches' },
+]
+
+[[cleaner.option]]
+id = "history"
+name = "History"
+description = "Visited pages"
+warning = "Quit Safari first. History synced through iCloud may come back from your other devices."
+actions = [{ op = "delete", search = "glob", path = '%HOME%/Library/Safari/History.db*', kind = "file" }]
+
+[[cleaner.option]]
+id = "cookies"
+name = "Cookies"
+description = "Small files sites keep to recognise you, including sign-ins"
+warning = "You will be signed out of most websites."
+actions = [
+  { op = "delete", path = '%HOME%/Library/Cookies/Cookies.binarycookies' },
+  { op = "delete", path = '%HOME%/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies' },
+]
+
+[[cleaner]]
+id = "chrome"
+name = "Google Chrome"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/Library/Application Support/Google/Chrome', cache = '%HOME%/Library/Caches/Google/Chrome/*' }
+detect = ['{root}']
+running = ["google chrome"]
+
+[[cleaner]]
+id = "chromium"
+name = "Chromium"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/Library/Application Support/Chromium', cache = '%HOME%/Library/Caches/Chromium/*' }
+detect = ['{root}']
+running = ["chromium"]
+
+[[cleaner]]
+id = "edge"
+name = "Microsoft Edge"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/Library/Application Support/Microsoft Edge', cache = '%HOME%/Library/Caches/Microsoft Edge/*' }
+detect = ['{root}']
+running = ["microsoft edge"]
+
+[[cleaner]]
+id = "brave"
+name = "Brave"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/Library/Application Support/BraveSoftware/Brave-Browser', cache = '%HOME%/Library/Caches/BraveSoftware/Brave-Browser/*' }
+detect = ['{root}']
+running = ["brave browser"]
+
+[[cleaner]]
+id = "vivaldi"
+name = "Vivaldi"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/Library/Application Support/Vivaldi', cache = '%HOME%/Library/Caches/Vivaldi/*' }
+detect = ['{root}']
+running = ["vivaldi"]
+
+[[cleaner]]
+id = "opera"
+name = "Opera"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/Library/Application Support/com.operasoftware.Opera', profile = '{root}', cache = '%HOME%/Library/Caches/com.operasoftware.Opera' }
+detect = ['{root}']
+running = ["opera"]
+
+[[cleaner]]
+id = "arc"
+name = "Arc"
+description = "Web browser"
+category = "browsers"
+template = "chromium"
+vars = { root = '%HOME%/Library/Application Support/Arc/User Data', cache = '%HOME%/Library/Caches/Arc/User Data/*' }
+detect = ['{root}']
+running = ["arc"]
+
+[[cleaner]]
+id = "firefox"
+name = "Firefox"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/Library/Application Support/Firefox', cachebase = '%HOME%/Library/Caches/Firefox' }
+detect = ['{root}']
+running = ["firefox"]
+
+[[cleaner]]
+id = "librewolf"
+name = "LibreWolf"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/Library/Application Support/librewolf', cachebase = '%HOME%/Library/Caches/librewolf' }
+detect = ['{root}']
+running = ["librewolf"]
+
+[[cleaner]]
+id = "zen"
+name = "Zen Browser"
+description = "Web browser"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/Library/Application Support/zen', cachebase = '%HOME%/Library/Caches/zen' }
+detect = ['{root}']
+running = ["zen"]
+
+[[cleaner]]
+id = "thunderbird"
+name = "Thunderbird"
+description = "Mail"
+category = "browsers"
+template = "firefox"
+vars = { base = '%HOME%/Library/Thunderbird', cachebase = '%HOME%/Library/Caches/Thunderbird' }
+# Mail account passwords and open mail tabs are not browsing data.
+skip = ["passwords", "session", "downloads", "backups", "telemetry"]
+detect = ['{root}']
+running = ["thunderbird"]

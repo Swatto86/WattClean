@@ -14,6 +14,7 @@ import {
 import {
   CATEGORIES,
   ITEM_KINDS,
+  PLATFORMS,
   TEXT_SIZES,
   THEMES,
   type AppInfo,
@@ -52,6 +53,7 @@ export const appInfo = (v: unknown): AppInfo => {
   const o = obj(v, "app info");
   return {
     version: str(o["version"], "version"),
+    platform: oneOf(o["platform"], "platform", PLATFORMS),
     elevated: bool(o["elevated"], "elevated"),
     testMachine: bool(o["testMachine"], "testMachine"),
     dataDir: str(o["dataDir"], "dataDir"),

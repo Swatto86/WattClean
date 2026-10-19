@@ -170,6 +170,7 @@ pub fn date_from_unix(seconds: u64) -> String {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
     use crate::fake::FakeSystem;

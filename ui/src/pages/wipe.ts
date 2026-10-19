@@ -71,7 +71,7 @@ export const wipePage = (_ctx: Context): Page => {
     if (running) return;
     const answer = await confirm({
       title: `Wipe the free space on ${drive.root}?`,
-      message: `WattClean fills about ${bytes(drive.free)} with zeros and then deletes what it wrote. Your files are not touched. It can take a long time, and while it runs the drive is full, so programs that need to save may complain. On SSDs, Windows' TRIM usually clears freed space already.`,
+      message: `WattClean fills about ${bytes(drive.free)} with zeros and then deletes what it wrote. Your files are not touched. It can take a long time, and while it runs the drive is full, so programs that need to save may complain. On SSDs, TRIM usually clears freed space already.`,
       ok: "Wipe",
       danger: true,
     });

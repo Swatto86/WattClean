@@ -1,0 +1,367 @@
+# Developer tools on Linux and macOS: editors, package caches and build
+# output. %CONFIG% and %CACHE% are ~/.config and ~/.cache on Linux and
+# ~/Library/Application Support and ~/Library/Caches on macOS, so one
+# definition serves both. Package caches only hold copies that are
+# downloaded again when a build needs them; build output is made again by
+# the next build.
+
+[[cleaner]]
+id = "vscode"
+name = "Visual Studio Code"
+description = "Code editor"
+category = "developer"
+template = "electron"
+vars = { root = '%CONFIG%/Code' }
+detect = ['{root}']
+running = ["code"]
+
+[[cleaner.option]]
+id = "cached_data"
+name = "Compiled code cache"
+description = "Extension and editor code compiled ahead, and downloaded extension packages"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Code/CachedData' },
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Code/CachedExtensionVSIXs' },
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Code/CachedProfilesData' },
+]
+
+[[cleaner]]
+id = "cursor"
+name = "Cursor"
+description = "Code editor"
+category = "developer"
+template = "electron"
+vars = { root = '%CONFIG%/Cursor' }
+detect = ['{root}']
+running = ["cursor"]
+
+[[cleaner]]
+id = "vscodium"
+name = "VSCodium"
+description = "Code editor"
+category = "developer"
+template = "electron"
+vars = { root = '%CONFIG%/VSCodium' }
+detect = ['{root}']
+running = ["codium"]
+
+[[cleaner]]
+id = "jetbrains"
+name = "JetBrains IDEs"
+description = "IntelliJ IDEA, PyCharm, RustRover, Rider and the others"
+category = "developer"
+detect = ['%CACHE%/JetBrains']
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "The IDEs' log files"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%CACHE%/JetBrains/*/log' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Logs/JetBrains' },
+]
+
+[[cleaner.option]]
+id = "caches"
+name = "Caches and indexes"
+description = "Project indexes and caches the IDEs build again"
+warning = "Each project is indexed again when you next open it, which takes a while."
+actions = [
+  { op = "delete", search = "walk.all", path = '%CACHE%/JetBrains/*/caches' },
+  { op = "delete", search = "walk.all", path = '%CACHE%/JetBrains/*/index' },
+]
+
+[[cleaner]]
+id = "npm"
+name = "npm"
+description = "Node.js package manager"
+category = "developer"
+detect = ['%HOME%/.npm/_cacache']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages npm keeps to install them again quickly"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%HOME%/.npm/_cacache' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.npm/_logs' },
+]
+
+[[cleaner]]
+id = "yarn"
+name = "Yarn"
+description = "Node.js package manager"
+category = "developer"
+detect = ['%CACHE%/yarn', '%HOME%/.yarn/berry/cache']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages Yarn keeps"
+actions = [
+  { op = "delete", search = "walk.all", path = '%CACHE%/yarn' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.yarn/berry/cache' },
+]
+
+[[cleaner]]
+id = "pnpm"
+name = "pnpm"
+description = "Node.js package manager"
+category = "developer"
+detect_program = ["pnpm"]
+
+[[cleaner.option]]
+id = "store"
+name = "Unused store packages"
+description = "Packages in pnpm's store no project uses (pnpm store prune)"
+actions = [{ op = "command", task = "pnpm-prune" }]
+
+[[cleaner]]
+id = "bun"
+name = "Bun"
+description = "JavaScript runtime and package manager"
+category = "developer"
+detect = ['%HOME%/.bun/install/cache']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages Bun keeps"
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/.bun/install/cache' }]
+
+[[cleaner]]
+id = "deno"
+name = "Deno"
+description = "JavaScript runtime"
+category = "developer"
+detect = ['%CACHE%/deno']
+
+[[cleaner.option]]
+id = "cache"
+name = "Module cache"
+description = "Downloaded modules and compiled code Deno keeps"
+actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/deno' }]
+
+[[cleaner]]
+id = "pip"
+name = "pip"
+description = "Python package manager"
+category = "developer"
+detect = ['%CACHE%/pip']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded and built packages pip keeps"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/pip' }]
+
+[[cleaner]]
+id = "uv"
+name = "uv"
+description = "Python package manager"
+category = "developer"
+detect = ['%CACHE%/uv']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages and Python builds uv keeps"
+warning = "Virtual environments uv made link to this cache: recreate them after cleaning."
+actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/uv' }]
+
+[[cleaner]]
+id = "conda"
+name = "Conda"
+description = "Python and data science package manager"
+category = "developer"
+detect_program = ["conda"]
+
+[[cleaner.option]]
+id = "clean"
+name = "Package cache"
+description = "Downloaded packages, index caches and unused packages (conda clean --all)"
+actions = [{ op = "command", task = "conda-clean" }]
+
+[[cleaner]]
+id = "ruby"
+name = "RubyGems"
+description = "Ruby package manager"
+category = "developer"
+detect_program = ["gem"]
+
+[[cleaner.option]]
+id = "old_gems"
+name = "Old gem versions"
+description = "Every installed gem version but the newest (gem cleanup)"
+warning = "Projects pinned to an older version must install it again."
+actions = [{ op = "command", task = "gem-cleanup" }]
+
+[[cleaner]]
+id = "composer"
+name = "Composer"
+description = "PHP package manager"
+category = "developer"
+detect = ['%CACHE%/composer']
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages Composer keeps"
+actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/composer' }]
+
+[[cleaner]]
+id = "nuget"
+name = "NuGet"
+description = ".NET package manager"
+category = "developer"
+detect = ['%HOME%/.nuget/packages', '%HOME%/.local/share/NuGet']
+
+[[cleaner.option]]
+id = "http_cache"
+name = "Download cache"
+description = "Packages NuGet downloaded, kept to restore them again"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/.local/share/NuGet/v3-cache' }]
+
+[[cleaner.option]]
+id = "packages"
+name = "Global packages"
+description = "Every package restored for your projects"
+warning = "Each project downloads its packages again on its next restore or build."
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/.nuget/packages' }]
+
+[[cleaner]]
+id = "cargo"
+name = "Cargo"
+description = "Rust package manager"
+category = "developer"
+detect = ['%CARGO_HOME%/registry']
+
+[[cleaner.option]]
+id = "registry"
+name = "Crate downloads"
+description = "Downloaded crates and their unpacked sources"
+warning = "Builds download crates again, so building without internet fails until they have."
+actions = [
+  { op = "delete", search = "walk.all", path = '%CARGO_HOME%/registry/cache' },
+  { op = "delete", search = "walk.all", path = '%CARGO_HOME%/registry/src' },
+]
+
+[[cleaner]]
+id = "go"
+name = "Go"
+description = "Go toolchain"
+category = "developer"
+detect = ['%CACHE%/go-build', '%GOPATH%/pkg/mod']
+
+[[cleaner.option]]
+id = "build_cache"
+name = "Build cache"
+description = "Compiled packages Go builds again when needed"
+actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/go-build' }]
+
+[[cleaner.option]]
+id = "module_cache"
+name = "Module cache"
+description = "Downloaded modules (go clean -modcache)"
+warning = "Builds download their modules again, so building without internet fails until they have."
+actions = [{ op = "command", task = "go-modcache" }]
+
+[[cleaner]]
+id = "gradle"
+name = "Gradle"
+description = "Java build tool"
+category = "developer"
+detect = ['%HOME%/.gradle/caches']
+
+[[cleaner.option]]
+id = "caches"
+name = "Caches"
+description = "Downloaded dependencies and build caches"
+warning = "Builds download their dependencies again."
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/.gradle/caches' }]
+
+[[cleaner]]
+id = "ccache"
+name = "Compiler caches"
+description = "ccache and sccache"
+category = "developer"
+detect = ['%CACHE%/ccache', '%HOME%/.ccache', '%CACHE%/sccache', '%CACHE%/Mozilla.sccache']
+
+[[cleaner.option]]
+id = "cache"
+name = "Compiled objects"
+description = "Object files kept to compile unchanged code faster"
+warning = "The next builds take longer while the cache fills again."
+actions = [
+  { op = "delete", search = "walk.all", path = '%CACHE%/ccache' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.ccache' },
+  { op = "delete", search = "walk.all", path = '%CACHE%/sccache' },
+  { op = "delete", search = "walk.all", path = '%CACHE%/Mozilla.sccache' },
+]
+
+[[cleaner]]
+id = "docker"
+name = "Docker"
+description = "Containers"
+category = "developer"
+detect_program = ["docker"]
+
+[[cleaner.option]]
+id = "build_cache"
+name = "Build cache"
+description = "Layers kept to build images faster (docker builder prune)"
+actions = [{ op = "command", task = "docker-builder" }]
+
+[[cleaner.option]]
+id = "dangling_images"
+name = "Untagged images"
+description = "Image layers no tag or container uses (docker image prune)"
+actions = [{ op = "command", task = "docker-images" }]
+
+# Build output is found by the folder's name and the project file beside it
+# (a target folder beside Cargo.toml), never by the name alone. The search
+# covers your home folder, skipping hidden folders (settings, caches and
+# toolchains), Library on macOS, package folders and Git folders.
+
+[[cleaner]]
+id = "build_output"
+name = "Build output"
+description = "Files compilers make again on the next build, in your projects"
+category = "developer"
+
+[[cleaner.option]]
+id = "rust"
+name = "Rust build folders"
+description = "target folders beside a Cargo.toml, anywhere in your home folder"
+warning = "Each Rust project is compiled from scratch on its next build, which can take many minutes. Searches your whole home folder."
+actions = [
+  { op = "delete", search = "find.dirs", path = '%HOME%', names = 'target', beside = 'Cargo.toml', exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+  ] },
+]
+
+[[cleaner.option]]
+id = "dotnet"
+name = ".NET build folders"
+description = "bin and obj folders beside a .csproj, .fsproj or .vbproj file"
+warning = "Each .NET project is built from scratch on its next build. Searches your whole home folder."
+actions = [
+  { op = "delete", search = "find.dirs", path = '%HOME%', names = 'bin;obj', beside = '*.csproj;*.fsproj;*.vbproj', exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+  ] },
+]
+
+[[cleaner.option]]
+id = "python"
+name = "Python bytecode"
+description = "__pycache__ folders, which Python fills again as it runs"
+actions = [
+  { op = "delete", search = "find.dirs", path = '%HOME%', names = '__pycache__', exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+  ] },
+]

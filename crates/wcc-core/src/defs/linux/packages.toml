@@ -1,0 +1,192 @@
+# Package managers. System-wide caches belong to root, so they are cleared
+# by each package manager's own command (see crates/wcc-core/src/tasks.rs,
+# the only place a command is defined); WattClean asks for administrator
+# rights for those through the desktop's own prompt. Caches in your home
+# folder are cleaned directly. A cleaner shows only when its package
+# manager is installed.
+
+[[cleaner]]
+id = "apt"
+name = "APT"
+description = "Debian, Ubuntu and Mint package manager"
+category = "packages"
+detect_program = ["apt-get"]
+running = ["apt", "apt-get", "dpkg"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Downloaded packages"
+description = "Package files kept after they were installed (apt-get clean)"
+default = true
+actions = [{ op = "command", task = "apt-clean" }]
+
+[[cleaner.option]]
+id = "autoremove"
+name = "Unneeded packages"
+description = "Packages installed only for others that no longer need them (apt-get autoremove)"
+warning = "Check the preview's list: packages you use directly but installed only as a dependency would go too."
+actions = [{ op = "command", task = "apt-autoremove" }]
+
+[[cleaner.option]]
+id = "residual"
+name = "Leftover settings"
+description = "System settings files of packages already removed (apt-get purge)"
+warning = "Settings of removed packages are deleted; reinstalling one starts from its defaults."
+actions = [{ op = "command", task = "apt-residual" }]
+
+[[cleaner]]
+id = "dnf"
+name = "DNF"
+description = "Fedora, RHEL and CentOS package manager"
+category = "packages"
+detect_program = ["dnf"]
+running = ["dnf", "dnf5"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages and repository data (dnf clean all)"
+default = true
+actions = [{ op = "command", task = "dnf-clean" }]
+
+[[cleaner.option]]
+id = "autoremove"
+name = "Unneeded packages"
+description = "Packages installed only for others that no longer need them (dnf autoremove)"
+warning = "Packages you use directly but installed only as a dependency would go too."
+actions = [{ op = "command", task = "dnf-autoremove" }]
+
+[[cleaner]]
+id = "zypper"
+name = "Zypper"
+description = "openSUSE package manager"
+category = "packages"
+detect_program = ["zypper"]
+running = ["zypper"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Downloaded packages and repository data (zypper clean --all)"
+default = true
+actions = [{ op = "command", task = "zypper-clean" }]
+
+[[cleaner]]
+id = "pacman"
+name = "pacman"
+description = "Arch, Manjaro and EndeavourOS package manager"
+category = "packages"
+detect_program = ["pacman"]
+running = ["pacman"]
+
+[[cleaner.option]]
+id = "uninstalled"
+name = "Packages no longer installed"
+description = "Cached packages of software you removed, and unused repository data (pacman -Sc)"
+default = true
+actions = [{ op = "command", task = "pacman-uninstalled" }]
+
+[[cleaner.option]]
+id = "old_versions"
+name = "Old package versions"
+description = "Every cached version but the newest (paccache -rk1, from pacman-contrib)"
+warning = "You can no longer downgrade a package from the cache."
+actions = [{ op = "command", task = "paccache-old" }]
+
+[[cleaner.option]]
+id = "orphans"
+name = "Orphaned packages"
+description = "Dependencies nothing installed needs any more (pacman -Rns)"
+warning = "Check the preview's list: a package you use directly but installed only as a dependency would go too."
+actions = [{ op = "command", task = "pacman-orphans" }]
+
+[[cleaner]]
+id = "aur_helpers"
+name = "AUR helpers"
+description = "Build folders yay and paru keep"
+category = "packages"
+detect = ['%XDG_CACHE_HOME%/yay', '%XDG_CACHE_HOME%/paru']
+
+[[cleaner.option]]
+id = "cache"
+name = "Build cache"
+description = "Downloaded sources and built packages of AUR software"
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/yay' },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/paru/clone' },
+]
+
+[[cleaner]]
+id = "flatpak"
+name = "Flatpak"
+description = "Sandboxed applications"
+category = "packages"
+detect_program = ["flatpak"]
+
+[[cleaner.option]]
+id = "unused"
+name = "Unused runtimes"
+description = "Runtimes and extensions no installed application uses (flatpak uninstall --unused)"
+actions = [{ op = "command", task = "flatpak-unused" }]
+
+[[cleaner.option]]
+id = "app_caches"
+name = "Application caches"
+description = "The cache folder of every Flatpak application"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/.var/app/*/cache' }]
+
+[[cleaner]]
+id = "snap"
+name = "Snap"
+description = "Canonical's application packages"
+category = "packages"
+detect_program = ["snap"]
+
+[[cleaner.option]]
+id = "disabled"
+name = "Old revisions"
+description = "Earlier versions of each snap kept after an update (snap remove --revision)"
+warning = "You can no longer go back to an earlier version of these snaps."
+actions = [{ op = "command", task = "snap-disabled" }]
+
+[[cleaner.option]]
+id = "app_caches"
+name = "Application caches"
+description = "The cache folder of every snap"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/snap/*/common/.cache' }]
+
+[[cleaner]]
+id = "nix"
+name = "Nix"
+description = "Nix package manager"
+category = "packages"
+detect_program = ["nix-collect-garbage"]
+
+[[cleaner.option]]
+id = "garbage"
+name = "Unreferenced store paths"
+description = "Packages in the Nix store nothing refers to (nix-collect-garbage)"
+actions = [{ op = "command", task = "nix-gc" }]
+
+[[cleaner]]
+id = "homebrew"
+name = "Homebrew"
+description = "Homebrew on Linux"
+category = "packages"
+detect_program = ["brew"]
+
+[[cleaner.option]]
+id = "cleanup"
+name = "Downloads and old versions"
+description = "Cached downloads and outdated versions of what Homebrew installed (brew cleanup)"
+default = true
+actions = [{ op = "command", task = "brew-cleanup" }]
+
+[[cleaner.option]]
+id = "autoremove"
+name = "Unneeded dependencies"
+description = "Formulae installed only for others that no longer need them (brew autoremove)"
+warning = "Check the preview's list before cleaning."
+actions = [{ op = "command", task = "brew-autoremove" }]

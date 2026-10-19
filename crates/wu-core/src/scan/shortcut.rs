@@ -123,6 +123,7 @@ pub fn link_bytes(target: &str) -> Vec<u8> {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 pub(crate) mod tests {
     pub use super::link_bytes as link_to;
     use super::*;

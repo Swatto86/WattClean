@@ -1,0 +1,190 @@
+# Everyday applications on macOS. Electron apps share the "electron"
+# template (templates.toml); %CONFIG% is ~/Library/Application Support.
+
+[[cleaner]]
+id = "discord"
+name = "Discord"
+description = "Chat"
+category = "applications"
+template = "electron"
+vars = { root = '%CONFIG%/discord' }
+detect = ['{root}']
+running = ["discord"]
+
+[[cleaner]]
+id = "slack"
+name = "Slack"
+description = "Chat"
+category = "applications"
+template = "electron"
+vars = { root = '%CONFIG%/Slack' }
+detect = ['{root}']
+running = ["slack"]
+
+[[cleaner]]
+id = "signal"
+name = "Signal"
+description = "Chat"
+category = "applications"
+template = "electron"
+vars = { root = '%CONFIG%/Signal' }
+skip = ["logs"]
+detect = ['{root}']
+running = ["signal"]
+
+[[cleaner]]
+id = "obsidian"
+name = "Obsidian"
+description = "Notes"
+category = "applications"
+template = "electron"
+vars = { root = '%CONFIG%/obsidian' }
+detect = ['{root}']
+running = ["obsidian"]
+
+[[cleaner]]
+id = "notion"
+name = "Notion"
+description = "Notes"
+category = "applications"
+template = "electron"
+vars = { root = '%CONFIG%/Notion' }
+detect = ['{root}']
+running = ["notion"]
+
+[[cleaner]]
+id = "spotify"
+name = "Spotify"
+description = "Music"
+category = "applications"
+detect = ['%CACHE%/com.spotify.client', '%CONFIG%/Spotify']
+running = ["spotify"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Streamed music and pictures kept to play them again (offline songs stay)"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%CACHE%/com.spotify.client/Data' },
+  { op = "delete", search = "walk.all", path = '%CACHE%/com.spotify.client/Browser' },
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Spotify/PersistentCache' },
+]
+
+[[cleaner]]
+id = "zoom"
+name = "Zoom"
+description = "Meetings"
+category = "applications"
+detect = ['%HOME%/Library/Logs/zoom.us', '%CONFIG%/zoom.us']
+running = ["zoom.us"]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "Zoom's log files"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Logs/zoom.us' }]
+
+[[cleaner]]
+id = "libreoffice"
+name = "LibreOffice"
+description = "Office suite"
+category = "applications"
+detect = ['%CONFIG%/LibreOffice']
+running = ["soffice"]
+
+[[cleaner.option]]
+id = "backups"
+name = "Backup copies"
+description = "Automatic backup copies of documents"
+actions = [{ op = "delete", search = "walk.all", path = '%CONFIG%/LibreOffice/*/user/backup' }]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Pictures and extension data LibreOffice makes again"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%CONFIG%/LibreOffice/*/user/temp' },
+  { op = "delete", search = "walk.all", path = '%CONFIG%/LibreOffice/*/user/uno_packages/cache' },
+]
+
+[[cleaner]]
+id = "office"
+name = "Microsoft Office"
+description = "Word, Excel, PowerPoint and Outlook"
+category = "applications"
+detect = ['%HOME%/Library/Containers/com.microsoft.Word', '%HOME%/Library/Containers/com.microsoft.Excel', '%HOME%/Library/Containers/com.microsoft.Powerpoint', '%HOME%/Library/Containers/com.microsoft.Outlook']
+running = ["microsoft word", "microsoft excel", "microsoft powerpoint", "microsoft outlook"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Templates, fonts and add-in data Office downloads again"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.*/Data/Library/Caches' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.*/Data/Library/Logs' },
+]
+
+[[cleaner]]
+id = "teams"
+name = "Microsoft Teams"
+description = "Chat and meetings"
+category = "applications"
+detect = ['%HOME%/Library/Containers/com.microsoft.teams2']
+running = ["microsoft teams"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "Pictures, files and web data Teams downloads again"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.teams2/Data/Library/Caches' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.teams2/Data/Library/Logs' },
+]
+
+[[cleaner]]
+id = "vlc"
+name = "VLC"
+description = "Media player"
+category = "applications"
+detect = ['%CONFIG%/org.videolan.vlc']
+running = ["vlc"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Art cache"
+description = "Album art VLC downloaded"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%CONFIG%/org.videolan.vlc/art' }]
+
+[[cleaner]]
+id = "steam"
+name = "Steam"
+description = "Game launcher"
+category = "games"
+detect = ['%CONFIG%/Steam']
+running = ["steam_osx", "steam helper"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Web cache"
+description = "The store and community pages Steam kept"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Steam/appcache/httpcache' },
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Steam/config/htmlcache' },
+]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs and crash dumps"
+description = "Steam's log files and crash dumps"
+default = true
+actions = [
+  { op = "delete", search = "walk.files", path = '%CONFIG%/Steam/logs' },
+  { op = "delete", search = "walk.files", path = '%CONFIG%/Steam/dumps' },
+]

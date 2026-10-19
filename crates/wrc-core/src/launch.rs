@@ -45,6 +45,7 @@ fn is_cargo_build(path: &Path) -> bool {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

@@ -40,6 +40,40 @@ the fake machine is just a temp folder plus a JSON registry.
 | `msi` | Windows Installer records: packed product codes, component files, upgrade codes |
 | `history`, `settings`, `store` | JSON files written atomically; a damaged file is reported, never overwritten |
 
+## Linux and macOS (`wu-core::packages`, `wu-unix`, 2026-10-19)
+
+There is no uninstall registry outside Windows, so the registry engine above
+is Windows-only and Linux and macOS have a package engine instead. The app
+layer is `src-tauri/src/packages.rs` (`un_pkg_list`, `un_pkg_uninstall`,
+`un_pkg_trash_leftovers`) and the page `ui/src/packages/` (ids `un-pkg-`).
+
+| Module | Responsibility |
+| --- | --- |
+| `packages` | `Package`, `Manager`, the `PackageSystem` port; `list` (applications first; applications only unless every package is asked for) |
+| `packages::linux` | dpkg, rpm, pacman, Flatpak, Snap, Homebrew, AppImages in `~/Applications` and the like; a system package is an application when it installed a visible launcher (`dpkg -S`, `rpm -qf`, `pacman -Qqo` on `/usr/share/applications`), whose name it takes |
+| `packages::macos` | App bundles in `/Applications` and `~/Applications` (Apple's own left out), Homebrew formulae and casks (a cask takes its app's place and bundle id), MacPorts |
+| `packages::remove` | The removal for each manager: `apt-get remove`/`purge`, `dnf`/`zypper`/`rpm`, `pacman -R`/`-Rns`, `flatpak uninstall` (`--delete-data`), `snap remove` (`--purge`), `brew uninstall` (`--cask --zap`), `port uninstall`; an AppImage or bundle goes to the Trash |
+| `packages::leftovers` | Folders and files named exactly after the program in `~/.config`, `~/.local/share`, `~/.cache`, `~/.local/state`, `~/.var/app`, `~/snap`, home dot-folders, launchers and autostart entries, and the `~/Library` folders on macOS (by bundle id and name) |
+| `wu-unix` | The real machine: programs found and run through `wcc-unix::process` (polkit's `pkexec` or macOS's prompt for administrator rights), `Info.plist` through `plutil`, the freedesktop.org Trash on Linux and Finder's on macOS |
+
+Decisions in force:
+
+- **The package manager removes**, never WattClean by hand: it knows the
+  files, runs its scripts and keeps its database right. Names passed to it
+  must look like package names (no options, no shell characters).
+- **A removal is confirmed by the next listing**: when the program is still
+  listed, the removal failed (or the prompt was refused) and nothing is
+  offered as left over.
+- **Leftovers: exact names only, never another's.** A name another
+  installed program goes by (Firefox from APT next to Firefox from Snap) is
+  never offered, nor generic folder names (`fonts`, `autostart`, `cache`…).
+  None is pre-ticked, and the chosen go to the Trash: Linux and macOS undo
+  through the Trash, so no backup of WattClean's own is kept.
+- **Apps are what people start**: packages with a visible launcher, Flatpak
+  and Snap applications (not runtimes or base snaps), AppImages, bundles,
+  casks, formulae and ports asked for by name. "Show every package" lists
+  libraries too.
+
 ## Scan modes
 
 Every mode checks the program's install log first (when it was installed

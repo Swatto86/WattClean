@@ -80,7 +80,7 @@ impl WildcardSet {
 /// first wildcard on, no link is entered: a link can only be the last part
 /// (the part before the first wildcard is taken as written).
 pub fn glob(pattern: &str) -> Vec<PathBuf> {
-    let normalized = pattern.replace('/', "\\");
+    let normalized = crate::paths::native(pattern);
     let path = Path::new(&normalized);
     let mut base = PathBuf::new();
     let mut rest: Vec<String> = Vec::new();
@@ -192,10 +192,10 @@ mod tests {
         let elsewhere = dir.path().join("Documents");
         fs::create_dir_all(&elsewhere).unwrap();
         fs::write(elsewhere.join("thesis.tmp"), b"x").unwrap();
-        let real = dir.path().join(r"Profiles\Default\Service Worker");
+        let real = crate::paths::join(dir.path(), r"Profiles\Default\Service Worker");
         fs::create_dir_all(&real).unwrap();
         fs::write(real.join("cache.tmp"), b"x").unwrap();
-        let other = dir.path().join(r"Profiles\Other");
+        let other = crate::paths::join(dir.path(), r"Profiles\Other");
         fs::create_dir_all(&other).unwrap();
         crate::search::tests::junction(&other.join("Service Worker"), &elsewhere);
         let pattern = format!(r"{}\Profiles\*\Service Worker\*.tmp", dir.path().display());

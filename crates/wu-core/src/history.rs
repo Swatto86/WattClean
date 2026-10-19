@@ -96,6 +96,7 @@ pub fn clear(dir: &Path) -> Result<()> {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

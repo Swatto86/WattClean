@@ -147,6 +147,7 @@ pub fn made(change: &Change, write: &Write) -> bool {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
     use crate::model::Hive;

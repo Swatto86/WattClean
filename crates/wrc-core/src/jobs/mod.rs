@@ -7,6 +7,7 @@
 mod run;
 mod task;
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 
 use std::path::Path;

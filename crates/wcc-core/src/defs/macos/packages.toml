@@ -1,0 +1,60 @@
+# Package managers on macOS. Each package manager's own command does the
+# work (see crates/wcc-core/src/tasks.rs, the only place a command is
+# defined); MacPorts needs administrator rights, for which macOS asks.
+
+[[cleaner]]
+id = "homebrew"
+name = "Homebrew"
+description = "Package manager for macOS"
+category = "packages"
+detect_program = ["brew"]
+running = ["brew"]
+
+[[cleaner.option]]
+id = "cleanup"
+name = "Downloads and old versions"
+description = "Cached downloads and outdated versions of what Homebrew installed (brew cleanup)"
+default = true
+actions = [{ op = "command", task = "brew-cleanup" }]
+
+[[cleaner.option]]
+id = "autoremove"
+name = "Unneeded dependencies"
+description = "Formulae installed only for others that no longer need them (brew autoremove)"
+warning = "Check the preview's list before cleaning."
+actions = [{ op = "command", task = "brew-autoremove" }]
+
+[[cleaner]]
+id = "macports"
+name = "MacPorts"
+description = "Package manager for macOS"
+category = "packages"
+detect_program = ["port"]
+running = ["port"]
+
+[[cleaner.option]]
+id = "clean"
+name = "Build files and downloads"
+description = "Work folders, downloaded sources and logs of installed ports (port clean)"
+default = true
+actions = [{ op = "command", task = "port-clean" }]
+
+[[cleaner.option]]
+id = "inactive"
+name = "Inactive versions"
+description = "Older versions kept after an upgrade (port uninstall inactive)"
+warning = "You can no longer switch back to these versions with port activate."
+actions = [{ op = "command", task = "port-inactive" }]
+
+[[cleaner]]
+id = "nix"
+name = "Nix"
+description = "Nix package manager"
+category = "packages"
+detect_program = ["nix-collect-garbage"]
+
+[[cleaner.option]]
+id = "garbage"
+name = "Unreferenced store paths"
+description = "Packages in the Nix store nothing refers to (nix-collect-garbage)"
+actions = [{ op = "command", task = "nix-gc" }]

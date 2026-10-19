@@ -1,0 +1,115 @@
+# macOS itself. Format: see docs/disk-cleaner.md ("Cleaner definitions").
+# Paths take %VARIABLES% (vars::UNIX_VARIABLES) and * ? wildcards. Only
+# what this account owns is cleaned. Some folders (the Trash, Safari's,
+# Mail's) are protected by macOS: WattClean reports them as refused until
+# you give it Full Disk Access in System Settings › Privacy & Security.
+
+[[cleaner]]
+id = "system"
+name = "System"
+description = "Temporary files, the Trash, logs and caches macOS keeps for you"
+category = "system"
+
+[[cleaner.option]]
+id = "temp"
+name = "Temporary files"
+description = "Your temporary folder's files unchanged for two days"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%TEMP%', older_than_days = 2, exclude = ['%TEMP%/.*', '%TEMP%/wattclean-*'] },
+]
+
+[[cleaner.option]]
+id = "trash"
+name = "Trash"
+description = "Empty the Trash"
+actions = [{ op = "recycle-bin" }]
+
+[[cleaner.option]]
+id = "clipboard"
+name = "Clipboard"
+description = "Clear whatever was last copied"
+actions = [{ op = "clipboard" }]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "Log files apps keep in your Library, unchanged for a week"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Logs', older_than_days = 7, exclude = ['%HOME%/Library/Logs/DiagnosticReports'] },
+]
+
+[[cleaner.option]]
+id = "crash_reports"
+name = "Crash reports"
+description = "Reports kept after apps crashed or hung"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Logs/DiagnosticReports' }]
+
+[[cleaner.option]]
+id = "cache"
+name = "Application caches"
+description = "Everything in your Library's Caches folder unchanged for a week; apps fill it again"
+warning = "Apps may start slower while they rebuild their caches. Quit them first for the most space."
+actions = [
+  { op = "delete", search = "walk.all", path = '%CACHE%', older_than_days = 7 },
+]
+
+[[cleaner.option]]
+id = "quicklook"
+name = "Quick Look thumbnails"
+description = "Previews Finder and Quick Look made of your files (qlmanage -r cache)"
+default = true
+actions = [{ op = "command", task = "quicklook-reset" }]
+
+[[cleaner.option]]
+id = "recent"
+name = "Recent items"
+description = "The recent documents, apps and servers lists in the Apple menu, Finder and apps"
+actions = [
+  { op = "delete", search = "glob", path = '%HOME%/Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.Recent*', kind = "file" },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments' },
+]
+
+[[cleaner.option]]
+id = "saved_state"
+name = "Saved window state"
+description = "The windows each app reopens where you left them"
+warning = "Apps open with fresh windows instead of the ones you had open."
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Saved Application State' }]
+
+[[cleaner.option]]
+id = "free_disk_space"
+name = "Free disk space"
+description = "Overwrite the free space of the drive holding your temporary files, after everything else"
+warning = "This is slow: it writes over all the free space on the drive, which is full while it runs. On an SSD the drive itself decides where data goes, so this cannot promise every old block is overwritten."
+actions = [{ op = "free-disk-space" }]
+
+[[cleaner.option]]
+id = "custom"
+name = "Custom paths"
+description = "The files and folders you list in Settings › Custom paths"
+actions = [{ op = "custom-paths" }]
+
+[[cleaner]]
+id = "shell"
+name = "Shells"
+description = "Command histories of zsh, bash, fish and Python"
+category = "system"
+
+[[cleaner.option]]
+id = "history"
+name = "Command history"
+description = "The commands you typed in Terminal"
+warning = "Commands you typed before can no longer be recalled with the Up key."
+actions = [
+  { op = "delete", path = '%HOME%/.zsh_history' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.zsh_sessions' },
+  { op = "delete", path = '%HOME%/.bash_history' },
+  { op = "delete", search = "walk.all", path = '%HOME%/.bash_sessions' },
+  { op = "delete", path = '%HOME%/.local/share/fish/fish_history' },
+  { op = "delete", path = '%HOME%/.python_history' },
+  { op = "delete", path = '%HOME%/.node_repl_history' },
+  { op = "delete", path = '%HOME%/.lesshst' },
+]

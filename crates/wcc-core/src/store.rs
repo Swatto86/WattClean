@@ -8,16 +8,40 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-/// The disk cleaner's folder inside WattClean's data folder:
-/// `%LOCALAPPDATA%\WattClean\disk`, or `disk` inside `WATTCLEAN_DATA_DIR`
-/// (the WebDriver suite isolates each run this way).
+/// The disk cleaner's folder inside WattClean's data folder (`disk`).
 pub fn data_dir() -> Result<PathBuf, String> {
+    app_root().map(|root| root.join("disk"))
+}
+
+/// WattClean's data folder: `%LOCALAPPDATA%\WattClean` on Windows,
+/// `~/.local/share/WattClean` (or under `XDG_DATA_HOME`) on Linux and
+/// `~/Library/Application Support/WattClean` on macOS.
+/// `WATTCLEAN_DATA_DIR` replaces it (the WebDriver suite isolates each run
+/// this way).
+pub fn app_root() -> Result<PathBuf, String> {
     if let Some(dir) = std::env::var_os("WATTCLEAN_DATA_DIR").filter(|dir| !dir.is_empty()) {
-        return Ok(PathBuf::from(dir).join("disk"));
+        return Ok(PathBuf::from(dir));
     }
-    std::env::var_os("LOCALAPPDATA")
-        .map(|local| PathBuf::from(local).join("WattClean").join("disk"))
-        .ok_or_else(|| "Windows did not report a Local AppData folder".to_owned())
+    platform_data_folder(&|name| std::env::var_os(name).map(PathBuf::from))
+        .map(|base| base.join("WattClean"))
+}
+
+/// Where this platform keeps applications' data, from its environment.
+fn platform_data_folder(env: &dyn Fn(&str) -> Option<PathBuf>) -> Result<PathBuf, String> {
+    let absolute = |name: &str| env(name).filter(|path| path.is_absolute());
+    if cfg!(windows) {
+        return absolute("LOCALAPPDATA")
+            .ok_or_else(|| "Windows did not report a Local AppData folder".to_owned());
+    }
+    let home = absolute("HOME").filter(|home| home.parent().is_some());
+    if cfg!(target_os = "macos") {
+        return home
+            .map(|home| home.join("Library").join("Application Support"))
+            .ok_or_else(|| "macOS did not report a home folder".to_owned());
+    }
+    absolute("XDG_DATA_HOME")
+        .or_else(|| home.map(|home| home.join(".local").join("share")))
+        .ok_or_else(|| "Linux did not report a home folder".to_owned())
 }
 
 /// Where custom cleaner files and an imported winapp2.ini live.

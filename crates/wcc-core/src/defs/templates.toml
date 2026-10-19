@@ -1,7 +1,14 @@
-# Web browsers. Chromium-based browsers share the "chromium" template and
-# Firefox-based ones the "firefox" template; each cleaner only says where
-# its folders are. {root} is the browser's data folder; {profile} matches
-# each profile folder in it, {cache} each folder holding a profile's cache.
+# Templates every platform's cleaners share: options for all Chromium
+# browsers, all Firefox browsers and all Electron apps. A cleaner names a
+# template and says where its folders are; paths here may use either
+# separator, each platform reads them its own way.
+#
+# chromium: {root} is the browser's data folder, {profile} each profile
+#   folder in it, {cache} each folder holding a profile's cache (on Linux
+#   and macOS the cache lives apart from the profile).
+# firefox: {base} holds Profiles (or set {root} to the profiles folder),
+#   {cachebase} the cache's Profiles folder (or set {cache}).
+# electron: {root} is the app's data folder.
 
 [[template]]
 id = "chromium"
@@ -21,6 +28,13 @@ actions = [
   { op = "delete", search = "walk.all", path = '{cache}\DawnCache' },
   { op = "delete", search = "walk.all", path = '{cache}\DawnGraphiteCache' },
   { op = "delete", search = "walk.all", path = '{cache}\DawnWebGPUCache' },
+  # Where the disk cache lives apart from the profile (Linux, macOS, Opera),
+  # the profile still holds these.
+  { op = "delete", search = "walk.all", path = '{profile}\Code Cache' },
+  { op = "delete", search = "walk.all", path = '{profile}\GPUCache' },
+  { op = "delete", search = "walk.all", path = '{profile}\DawnCache' },
+  { op = "delete", search = "walk.all", path = '{profile}\DawnGraphiteCache' },
+  { op = "delete", search = "walk.all", path = '{profile}\DawnWebGPUCache' },
   { op = "delete", search = "walk.all", path = '{profile}\Service Worker\CacheStorage' },
   { op = "delete", search = "walk.all", path = '{profile}\Service Worker\ScriptCache' },
   { op = "delete", search = "walk.all", path = '{root}\GrShaderCache' },
@@ -260,187 +274,39 @@ actions = [{ op = "sqlite", search = "glob", path = '{root}\*\*.sqlite', sql = "
 
 # Chromium family
 
-[[cleaner]]
-id = "chrome"
-name = "Google Chrome"
-description = "Web browser"
-category = "browsers"
-template = "chromium"
-vars = { root = '%LOCALAPPDATA%\Google\Chrome\User Data' }
-detect = ['{root}']
-running = ["chrome.exe"]
+[[template]]
+id = "electron"
 
-[[cleaner]]
-id = "edge"
-name = "Microsoft Edge"
-description = "Web browser"
-category = "browsers"
-template = "chromium"
-vars = { root = '%LOCALAPPDATA%\Microsoft\Edge\User Data' }
-detect = ['{root}']
-running = ["msedge.exe"]
-
-[[cleaner]]
-id = "brave"
-name = "Brave"
-description = "Web browser"
-category = "browsers"
-template = "chromium"
-vars = { root = '%LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data' }
-detect = ['{root}']
-running = ["brave.exe"]
-
-[[cleaner]]
-id = "vivaldi"
-name = "Vivaldi"
-description = "Web browser"
-category = "browsers"
-template = "chromium"
-vars = { root = '%LOCALAPPDATA%\Vivaldi\User Data' }
-detect = ['{root}']
-running = ["vivaldi.exe"]
-
-[[cleaner]]
-id = "chromium"
-name = "Chromium"
-description = "Web browser"
-category = "browsers"
-template = "chromium"
-vars = { root = '%LOCALAPPDATA%\Chromium\User Data' }
-detect = ['{root}']
-running = ["chrome.exe"]
-
-[[cleaner]]
-id = "opera"
-name = "Opera"
-description = "Web browser"
-category = "browsers"
-template = "chromium"
-vars = { root = '%APPDATA%\Opera Software\Opera Stable', profile = '{root}', cache = '%LOCALAPPDATA%\Opera Software\Opera Stable' }
-detect = ['{root}']
-running = ["opera.exe"]
-
-[[cleaner]]
-id = "opera_gx"
-name = "Opera GX"
-description = "Web browser"
-category = "browsers"
-template = "chromium"
-vars = { root = '%APPDATA%\Opera Software\Opera GX Stable', profile = '{root}', cache = '%LOCALAPPDATA%\Opera Software\Opera GX Stable' }
-detect = ['{root}']
-running = ["opera.exe"]
-
-# Firefox family
-
-[[cleaner]]
-id = "firefox"
-name = "Firefox"
-description = "Web browser"
-category = "browsers"
-template = "firefox"
-vars = { base = '%APPDATA%\Mozilla\Firefox', cachebase = '%LOCALAPPDATA%\Mozilla\Firefox' }
-detect = ['{root}']
-running = ["firefox.exe"]
-
-[[cleaner]]
-id = "waterfox"
-name = "Waterfox"
-description = "Web browser"
-category = "browsers"
-template = "firefox"
-vars = { base = '%APPDATA%\Waterfox', cachebase = '%LOCALAPPDATA%\Waterfox' }
-detect = ['{root}']
-running = ["waterfox.exe"]
-
-[[cleaner]]
-id = "librewolf"
-name = "LibreWolf"
-description = "Web browser"
-category = "browsers"
-template = "firefox"
-vars = { base = '%APPDATA%\librewolf', cachebase = '%LOCALAPPDATA%\librewolf' }
-detect = ['{root}']
-running = ["librewolf.exe"]
-
-[[cleaner]]
-id = "floorp"
-name = "Floorp"
-description = "Web browser"
-category = "browsers"
-template = "firefox"
-vars = { base = '%APPDATA%\Floorp', cachebase = '%LOCALAPPDATA%\Floorp' }
-detect = ['{root}']
-running = ["floorp.exe"]
-
-[[cleaner]]
-id = "zen"
-name = "Zen Browser"
-description = "Web browser"
-category = "browsers"
-template = "firefox"
-vars = { base = '%APPDATA%\zen', cachebase = '%LOCALAPPDATA%\zen' }
-detect = ['{root}']
-running = ["zen.exe"]
-
-[[cleaner]]
-id = "palemoon"
-name = "Pale Moon"
-description = "Web browser"
-category = "browsers"
-template = "firefox"
-vars = { base = '%APPDATA%\Moonchild Productions\Pale Moon', cachebase = '%LOCALAPPDATA%\Moonchild Productions\Pale Moon' }
-detect = ['{root}']
-running = ["palemoon.exe"]
-
-[[cleaner]]
-id = "seamonkey"
-name = "SeaMonkey"
-description = "Web browser and mail"
-category = "browsers"
-template = "firefox"
-vars = { base = '%APPDATA%\Mozilla\SeaMonkey', cachebase = '%LOCALAPPDATA%\Mozilla\SeaMonkey' }
-detect = ['{root}']
-running = ["seamonkey.exe"]
-
-[[cleaner]]
-id = "thunderbird"
-name = "Thunderbird"
-description = "Mail"
-category = "browsers"
-template = "firefox"
-vars = { base = '%APPDATA%\Thunderbird', cachebase = '%LOCALAPPDATA%\Thunderbird' }
-# Mail account passwords and open mail tabs are not browsing data.
-skip = ["passwords", "session", "downloads", "backups", "telemetry"]
-detect = ['{root}']
-running = ["thunderbird.exe"]
-
-[[cleaner]]
-id = "internet_explorer"
-name = "Internet Explorer"
-description = "Windows' own web cache, also used by many programs"
-category = "browsers"
-running = ["iexplore.exe"]
-
-[[cleaner.option]]
+[[template.option]]
 id = "cache"
 name = "Cache"
-description = "Temporary Internet Files"
+description = "Downloaded images, scripts and compiled code the app keeps"
 default = true
-actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Windows\INetCache' }]
-
-[[cleaner.option]]
-id = "cookies"
-name = "Cookies"
-description = "Cookies kept by Windows' web components"
-warning = "Programs that use Windows' web components may sign you out."
-actions = [{ op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Windows\INetCookies' }]
-
-[[cleaner.option]]
-id = "history"
-name = "History"
-description = "Pages visited with Internet Explorer and typed addresses"
 actions = [
-  { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Windows\History' },
-  { op = "registry", key = 'HKCU\Software\Microsoft\Internet Explorer\TypedURLs' },
-  { op = "registry", key = 'HKCU\Software\Microsoft\Internet Explorer\TypedURLsTime' },
+  { op = "delete", search = "walk.all", path = '{root}\Cache' },
+  { op = "delete", search = "walk.all", path = '{root}\Code Cache' },
+  { op = "delete", search = "walk.all", path = '{root}\GPUCache' },
+  { op = "delete", search = "walk.all", path = '{root}\DawnCache' },
+  { op = "delete", search = "walk.all", path = '{root}\DawnGraphiteCache' },
+  { op = "delete", search = "walk.all", path = '{root}\DawnWebGPUCache' },
+  { op = "delete", search = "walk.all", path = '{root}\Service Worker\CacheStorage' },
+  { op = "delete", search = "walk.all", path = '{root}\Service Worker\ScriptCache' },
+]
+
+[[template.option]]
+id = "logs"
+name = "Logs"
+description = "The app's log files"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '{root}\logs' }]
+
+[[template.option]]
+id = "crash_reports"
+name = "Crash reports"
+description = "Reports kept after the app crashed"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\reports' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\completed' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\pending' },
 ]

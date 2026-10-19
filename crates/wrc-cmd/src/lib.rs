@@ -383,5 +383,7 @@ mod console;
 
 pub use console::console;
 
+// The registry exists only on Windows.
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;

@@ -95,6 +95,7 @@ pub fn findings_table(findings: &[Finding]) -> Table {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

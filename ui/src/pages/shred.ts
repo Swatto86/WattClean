@@ -5,6 +5,7 @@ import type { Context, Page } from "../context.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, count, plural } from "../format.ts";
+import { diskEncryption } from "../platform.ts";
 
 export const shredPage = (_ctx: Context): Page => {
   const queue: string[] = [];
@@ -176,7 +177,7 @@ export const shredPage = (_ctx: Context): Page => {
         el("h2", { text: "Delete files beyond recovery" }),
         el("p", {
           class: "muted",
-          text: "Each file is overwritten with zeros, emptied, renamed and then deleted, so recovery tools cannot bring it back. On SSDs and USB sticks the drive itself may keep old copies out of reach of any program; Windows' own BitLocker encryption is the reliable answer there.",
+          text: `Each file is overwritten with zeros, emptied, renamed and then deleted, so recovery tools cannot bring it back. On SSDs and USB sticks the drive itself may keep old copies out of reach of any program; ${diskEncryption()} is the reliable answer there.`,
         }),
       ),
       list,

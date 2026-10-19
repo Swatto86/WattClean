@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::store;
-use crate::system::{Drive, Registry, System, split_hive};
+use crate::system::{Drive, Platform, ProgramOutput, Registry, System, split_hive};
 
 /// Text only a build with the test machine contains; the suite checks for it.
 pub const MARKER: &str = "Northwind Browser (test machine)";
@@ -29,6 +29,11 @@ pub struct State {
     pub running: Vec<String>,
     pub reboot_deletions: Vec<String>,
     pub shell_notifications: u32,
+    /// Programs a task may run, with what each prints whenever it runs.
+    pub programs: BTreeMap<String, String>,
+    /// Every program run, as `name arg …`, `admin ` first when it asked
+    /// for administrator rights.
+    pub ran: Vec<String>,
 }
 
 pub struct FakeSystem {
@@ -65,7 +70,19 @@ impl FakeSystem {
     }
 
     fn profile(&self) -> PathBuf {
-        self.drive_c().join(r"Users\Tester")
+        crate::paths::join(&self.drive_c(), r"Users\Tester")
+    }
+
+    /// Gives the test machine a program for tasks to find and run.
+    pub fn add_program(&self, name: &str, prints: &str) -> io::Result<()> {
+        self.with_state(|s| {
+            s.programs.insert(name.to_string(), prints.to_string());
+        })
+    }
+
+    /// Every program run so far (see [`State::ran`]).
+    pub fn ran(&self) -> Vec<String> {
+        self.read(|s| s.ran.clone()).unwrap_or_default()
     }
 
     fn with_state<T>(&self, change: impl FnOnce(&mut State) -> T) -> io::Result<T> {
@@ -107,10 +124,49 @@ fn tree_size(dir: &Path) -> (u64, u64) {
 }
 
 impl System for FakeSystem {
+    /// The test machine is shaped as a Windows PC on every platform.
+    fn platform(&self) -> Platform {
+        Platform::Windows
+    }
+
+    fn find_program(&self, name: &str) -> Option<PathBuf> {
+        self.read(|s| s.programs.contains_key(name))
+            .unwrap_or(false)
+            .then(|| self.root.join("bin").join(name))
+    }
+
+    fn run_program(
+        &self,
+        program: &Path,
+        args: &[String],
+        admin: bool,
+    ) -> io::Result<ProgramOutput> {
+        let name = program
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let stdout = self
+            .read(|s| s.programs.get(&name).cloned())
+            .flatten()
+            .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+        let mut line = if admin { format!("admin {name}") } else { name };
+        for arg in args {
+            line.push(' ');
+            line.push_str(arg);
+        }
+        self.with_state(|s| s.ran.push(line))?;
+        Ok(ProgramOutput {
+            success: true,
+            stdout,
+            stderr: String::new(),
+        })
+    }
+
     fn var(&self, name: &str) -> Vec<String> {
         let c = self.drive_c();
         let profile = self.profile();
-        let join = |base: &Path, rel: &str| base.join(rel).to_string_lossy().to_string();
+        let join =
+            |base: &Path, rel: &str| crate::paths::join(base, rel).to_string_lossy().to_string();
         let one = |p: String| vec![p];
         match name.to_ascii_uppercase().as_str() {
             "USERPROFILE" => one(profile.to_string_lossy().to_string()),
@@ -180,7 +236,9 @@ impl System for FakeSystem {
 
     fn drives(&self) -> Vec<Drive> {
         vec![Drive {
-            root: r"C:\".to_string(),
+            // The sandbox lives on the host's own drive: on Linux and macOS
+            // that is the root, which holds the sandbox's temporary folder.
+            root: if cfg!(windows) { r"C:\" } else { "/" }.to_string(),
             label: "Test machine".to_string(),
             file_system: "NTFS".to_string(),
             free: WIPE_LIMIT,

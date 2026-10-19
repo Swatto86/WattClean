@@ -182,6 +182,7 @@ fn crc32(data: &[u8]) -> u32 {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 

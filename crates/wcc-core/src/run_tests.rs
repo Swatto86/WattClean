@@ -19,7 +19,7 @@ fn machine() -> Machine {
     let dir = tempfile::tempdir().unwrap();
     let sandbox = dir.path().to_path_buf();
     let system = FakeSystem::open(&sandbox).unwrap();
-    let catalog = Catalog::load(Some(&sandbox.join("cleaners")), false);
+    let catalog = Catalog::load(system.platform(), Some(&sandbox.join("cleaners")), false);
     assert!(catalog.problems.is_empty(), "{:?}", catalog.problems);
     Machine {
         _dir: dir,
@@ -30,7 +30,7 @@ fn machine() -> Machine {
 
 impl Machine {
     fn path(&self, rel: &str) -> PathBuf {
-        self.system.drive_c().join(rel)
+        crate::paths::join(&self.system.drive_c(), rel)
     }
 
     fn run(&self, keys: &[&str], mode: Mode, settings: &RunSettings) -> crate::report::Report {
@@ -298,9 +298,13 @@ fn deep_scan_finds_leftovers_by_name() {
         .options
         .iter()
         .flat_map(|o| {
-            o.items
-                .iter()
-                .map(|i| i.path.rsplit('\\').next().unwrap_or_default().to_string())
+            o.items.iter().map(|i| {
+                i.path
+                    .rsplit(['\\', '/'])
+                    .next()
+                    .unwrap_or_default()
+                    .to_string()
+            })
         })
         .collect();
     assert_eq!(

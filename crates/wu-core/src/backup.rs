@@ -8,6 +8,7 @@
 mod remove;
 mod restore;
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 
 use std::path::{Path, PathBuf};

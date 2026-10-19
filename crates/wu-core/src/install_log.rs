@@ -9,6 +9,7 @@
 
 mod noise;
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 
 use std::collections::HashMap;

@@ -24,7 +24,7 @@ fn tree() -> tempfile::TempDir {
         r"Other\Profile2\Cache\d.bin",
         r"Other\Profile2\Settings\e.bin",
     ] {
-        let path = root.join(file);
+        let path = crate::paths::join(root, file);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, b"12345").unwrap();
     }
@@ -56,7 +56,7 @@ fn rel(root: &Path, found: Vec<(String, Kind)>) -> Vec<(String, Kind)> {
 }
 
 fn path(root: &Path, rel: &str) -> String {
-    root.join(rel).to_string_lossy().to_string()
+    crate::paths::join(root, rel).to_string_lossy().to_string()
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn a_bad_regex_is_reported() {
 fn links_are_listed_but_never_followed() {
     let dir = tree();
     let target = dir.path().join("Other");
-    let link = dir.path().join(r"App\Cache\link");
+    let link = crate::paths::join(dir.path(), r"App\Cache\link");
     junction(&link, &target);
     let spec = FileSpec::new(path(dir.path(), r"App\Cache"), Search::WalkAll);
     let found = rel(dir.path(), run(&spec, &Guard::default()));
@@ -175,7 +175,7 @@ fn links_are_listed_but_never_followed() {
     // A clean removes folders with remove_dir: only the link goes.
     crate::exec::remove_dir(&link).unwrap();
     assert!(!link.exists());
-    assert!(target.join(r"Profile1\Cache\c.bin").exists());
+    assert!(crate::paths::join(&target, r"Profile1\Cache\c.bin").exists());
 }
 
 /// A junction, which Windows lets any user create (a symlink needs rights).
@@ -196,10 +196,14 @@ pub(crate) fn junction(link: &Path, target: &Path) {
 #[test]
 fn walk_all_with_a_name_filter_leaves_folders_alone() {
     let dir = tree();
-    fs::create_dir_all(dir.path().join(r"App\Reports\WATCHDOG")).unwrap();
-    fs::create_dir_all(dir.path().join(r"App\Reports\Full")).unwrap();
-    fs::write(dir.path().join(r"App\Reports\Full\x.dmp"), b"1").unwrap();
-    fs::write(dir.path().join(r"App\Reports\top.dmp"), b"1").unwrap();
+    fs::create_dir_all(crate::paths::join(dir.path(), r"App\Reports\WATCHDOG")).unwrap();
+    fs::create_dir_all(crate::paths::join(dir.path(), r"App\Reports\Full")).unwrap();
+    fs::write(
+        crate::paths::join(dir.path(), r"App\Reports\Full\x.dmp"),
+        b"1",
+    )
+    .unwrap();
+    fs::write(crate::paths::join(dir.path(), r"App\Reports\top.dmp"), b"1").unwrap();
     let mut spec = FileSpec::new(path(dir.path(), r"App\Reports"), Search::WalkAll);
     spec.names = Some("*.dmp".into());
     let mut found = rel(dir.path(), run(&spec, &Guard::default()));
@@ -235,7 +239,7 @@ fn a_wildcard_exclusion_skips_matching_folders_at_any_depth() {
         r"Proj\deep\node_modules\Thumbs.db",
         r"Proj\Thumbs.db",
     ] {
-        let path = dir.path().join(file);
+        let path = crate::paths::join(dir.path(), file);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, b"t").unwrap();
     }
@@ -261,7 +265,7 @@ fn projects() -> tempfile::TempDir {
         r"Code\kept\Cargo.toml",
         r"Code\kept\target\y.bin",
     ] {
-        let path = dir.path().join(file);
+        let path = crate::paths::join(dir.path(), file);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, b"build").unwrap();
     }
@@ -309,4 +313,22 @@ fn find_dirs_without_a_marker_takes_every_folder_of_that_name() {
             ("Code/notes/target".to_string(), Kind::Dir),
         ]
     );
+}
+
+/// Sockets and pipes in a temporary folder belong to running programs.
+#[cfg(unix)]
+#[test]
+fn sockets_and_pipes_are_never_listed() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("session.sock");
+    let _listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    let status = std::process::Command::new("mkfifo")
+        .arg(dir.path().join("pipe"))
+        .status()
+        .unwrap();
+    assert!(status.success());
+    fs::write(dir.path().join("old.tmp"), b"x").unwrap();
+    let spec = FileSpec::new(dir.path().to_string_lossy(), Search::WalkAll);
+    let found = rel(dir.path(), run(&spec, &Guard::default()));
+    assert_eq!(found, vec![("old.tmp".to_string(), Kind::File)]);
 }

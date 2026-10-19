@@ -1,16 +1,34 @@
 # Licences the shipped app may include (`cargo deny check licenses`, run
 # before each release). The app itself is MIT. MPL-2.0 (cssparser and
 # selectors, through Tauri) is copyleft per file only and shipped unmodified.
+# Linux adds two permissive ones: ISC (libloading, through the tray icon's
+# appindicator) and Apache-2.0 with the LLVM exception (target-lexicon, a
+# build-time dependency of the GTK bindings). Check every shipped target:
+# `cargo deny --target <triple> check advisories licenses`.
 [licenses]
 allow = [
     "0BSD",
     "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
     "BSD-3-Clause",
     "CC0-1.0",
+    "ISC",
     "MIT",
     "MIT-0",
     "MPL-2.0",
     "Unicode-3.0",
     "Unlicense",
     "Zlib",
+]
+
+# Linux only, all "unmaintained" notices (no vulnerability) in Tauri's own
+# Linux stack, which WattClean cannot replace: GTK 3's bindings (through
+# tauri and wry) and zbus (through tauri-plugin-single-instance). Look again
+# on 2027-01-19 or at the next Tauri upgrade, whichever comes first.
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error, via gtk 0.18 in Tauri's Linux runtime; review 2027-01-19" },
+    { id = "RUSTSEC-2026-0370", reason = "zbus_names, via zbus in tauri-plugin-single-instance on Linux; review 2027-01-19" },
+    { id = "RUSTSEC-2026-0371", reason = "zvariant_derive, via zbus in tauri-plugin-single-instance on Linux; review 2027-01-19" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant, via zbus in tauri-plugin-single-instance on Linux; review 2027-01-19" },
 ]

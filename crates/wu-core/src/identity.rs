@@ -380,4 +380,5 @@ fn executables(dir: &Path) -> Vec<String> {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;

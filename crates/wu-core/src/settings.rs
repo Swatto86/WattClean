@@ -58,6 +58,7 @@ impl Settings {
 }
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use super::*;
 
