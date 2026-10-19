@@ -4296,7 +4296,7 @@ dependencies = [
 
 [[package]]
 name = "wattclean"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -4315,7 +4315,7 @@ dependencies = [
 
 [[package]]
 name = "wattclean-cmd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "wcc-cmd",
  "wrc-cmd",
@@ -4323,7 +4323,7 @@ dependencies = [
 
 [[package]]
 name = "wcc-cmd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "tempfile",
  "wcc-core",
@@ -4332,7 +4332,7 @@ dependencies = [
 
 [[package]]
 name = "wcc-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "regex",
  "roxmltree",
@@ -4346,7 +4346,7 @@ dependencies = [
 
 [[package]]
 name = "wcc-windows"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "tempfile",
  "wcc-core",
@@ -4821,7 +4821,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wrc-cmd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "tempfile",
  "windows-sys 0.61.2",
@@ -4831,7 +4831,7 @@ dependencies = [
 
 [[package]]
 name = "wrc-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -4841,7 +4841,7 @@ dependencies = [
 
 [[package]]
 name = "wrc-windows"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "tempfile",
  "windows",
@@ -4902,7 +4902,7 @@ dependencies = [
 
 [[package]]
 name = "wu-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -4912,7 +4912,7 @@ dependencies = [
 
 [[package]]
 name = "wu-windows"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "tempfile",
  "windows-sys 0.61.2",
