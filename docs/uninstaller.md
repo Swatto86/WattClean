@@ -51,9 +51,10 @@ layer is `src-tauri/src/packages.rs` (`un_pkg_list`, `un_pkg_uninstall`,
 | --- | --- |
 | `packages` | `Package`, `Manager`, the `PackageSystem` port; `list` (applications first; applications only unless every package is asked for) |
 | `packages::linux` | dpkg, rpm, pacman, Flatpak, Snap, Homebrew, AppImages in `~/Applications` and the like; a system package is an application when it installed a visible launcher (`dpkg -S`, `rpm -qf`, `pacman -Qqo` on `/usr/share/applications`), whose name it takes |
-| `packages::macos` | App bundles in `/Applications` and `~/Applications` (Apple's own left out), Homebrew formulae and casks (a cask takes its app's place and bundle id), MacPorts |
+| `packages::macos` | App bundles in `/Applications` and `~/Applications` (Apple's own left out), Homebrew formulae and casks (a cask takes its app's place, bundle id, version and size, matched by the app it installs or its uninstall step deletes; fonts and plugins are not applications), MacPorts |
 | `packages::remove` | The removal for each manager: `apt-get remove`/`purge`, `dnf`/`zypper`/`rpm`, `pacman -R`/`-Rns`, `flatpak uninstall` (`--delete-data`), `snap remove` (`--purge`), `brew uninstall` (`--cask --zap`), `port uninstall`; an AppImage or bundle goes to the Trash |
-| `packages::leftovers` | Folders and files named exactly after the program in `~/.config`, `~/.local/share`, `~/.cache`, `~/.local/state`, `~/.var/app`, `~/snap`, home dot-folders, launchers and autostart entries, and the `~/Library` folders on macOS (by bundle id and name) |
+| `packages::leftovers` | Folders and files named exactly after the program in `~/.config`, `~/.local/share`, `~/.cache`, `~/.local/state`, `~/.var/app`, `~/snap`, home dot-folders, launchers and autostart entries, and the `~/Library` folders on macOS (by bundle id and name, and `<bundle id>.<suffix>` entries such as updaters unless a longer installed id owns them) |
+| `packages::extra` | macOS leftovers names cannot reach: a cask's own zap list (only `~/Library/…`, at least two folders down, entries another installed cask shares left out) and the folder a lone app came in (`/Applications/World of Warcraft` once no app is left in it) |
 | `wu-unix` | The real machine: programs found and run through `wcc-unix::process` (polkit's `pkexec` or macOS's prompt for administrator rights), `Info.plist` through `plutil`, the freedesktop.org Trash on Linux and Finder's on macOS |
 
 Decisions in force:
@@ -67,7 +68,13 @@ Decisions in force:
 - **Leftovers: exact names only, never another's.** A name another
   installed program goes by (Firefox from APT next to Firefox from Snap) is
   never offered, nor generic folder names (`fonts`, `autostart`, `cache`…).
-  None is pre-ticked, and the chosen go to the Trash: Linux and macOS undo
+  A command-line tool's folders (`~/.name`, `~/.config/name`…) stay while a
+  program of that name is still found (Apple's git after Homebrew's goes),
+  and an app, cask, Flatpak or Snap never offers a `~/.name` folder (the
+  Claude app is not Claude Code's `~/.claude`). While another copy of the
+  app (the same bundle identifier) stays installed, nothing is offered: the
+  copies share every file. A leftover whose size cannot
+  be read says "size unknown". None is pre-ticked, and the chosen go to the Trash: Linux and macOS undo
   through the Trash, so no backup of WattClean's own is kept.
 - **Apps are what people start**: packages with a visible launcher, Flatpak
   and Snap applications (not runtimes or base snaps), AppImages, bundles,

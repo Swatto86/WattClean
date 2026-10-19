@@ -80,6 +80,15 @@ impl WildcardSet {
 /// first wildcard on, no link is entered: a link can only be the last part
 /// (the part before the first wildcard is taken as written).
 pub fn glob(pattern: &str) -> Vec<PathBuf> {
+    glob_report(pattern).0
+}
+
+/// As [`glob`], with the folder before the first wildcard when the system
+/// refused to list it (macOS protects other apps' folders), so a search can
+/// say so instead of finding nothing. A missing folder is no problem, and
+/// folders deeper down are not reported (on Windows many are
+/// administrator-only).
+pub fn glob_report(pattern: &str) -> (Vec<PathBuf>, Vec<(PathBuf, std::io::Error)>) {
     let normalized = crate::paths::native(pattern);
     let path = Path::new(&normalized);
     let mut base = PathBuf::new();
@@ -101,13 +110,17 @@ pub fn glob(pattern: &str) -> Vec<PathBuf> {
             _ => rest.push(component.as_os_str().to_string_lossy().to_string()),
         }
     }
+    let refused = |error: &std::io::Error| error.kind() == std::io::ErrorKind::PermissionDenied;
     if rest.is_empty() {
-        return if fs::symlink_metadata(&base).is_ok() {
-            vec![base]
-        } else {
-            Vec::new()
+        // A path the system will not even describe is still named: the
+        // search reports why it cannot look at it.
+        return match fs::symlink_metadata(&base) {
+            Ok(_) => (vec![base], Vec::new()),
+            Err(error) if refused(&error) => (vec![base], Vec::new()),
+            Err(_) => (Vec::new(), Vec::new()),
         };
     }
+    let mut problems = Vec::new();
     let mut current = vec![base];
     for (index, part) in rest.iter().enumerate() {
         let last = index + 1 == rest.len();
@@ -115,8 +128,14 @@ pub fn glob(pattern: &str) -> Vec<PathBuf> {
         for dir in &current {
             if Wildcard::has_wildcards(part) {
                 let wildcard = Wildcard::new(part);
-                let Ok(entries) = fs::read_dir(dir) else {
-                    continue;
+                let entries = match fs::read_dir(dir) {
+                    Ok(entries) => entries,
+                    Err(error) => {
+                        if index == 0 && refused(&error) {
+                            problems.push((dir.clone(), error));
+                        }
+                        continue;
+                    }
                 };
                 for entry in entries.flatten() {
                     let name = entry.file_name().to_string_lossy().to_string();
@@ -147,7 +166,7 @@ pub fn glob(pattern: &str) -> Vec<PathBuf> {
             break;
         }
     }
-    current
+    (current, problems)
 }
 
 #[cfg(test)]

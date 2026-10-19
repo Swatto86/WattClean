@@ -7,8 +7,9 @@ id = "homebrew"
 name = "Homebrew"
 description = "Package manager for macOS"
 category = "packages"
+# brew and port are scripts: macOS names their processes after the
+# interpreter (ruby, bash, tclsh), so "running" could never match them.
 detect_program = ["brew"]
-running = ["brew"]
 
 [[cleaner.option]]
 id = "cleanup"
@@ -30,7 +31,6 @@ name = "MacPorts"
 description = "Package manager for macOS"
 category = "packages"
 detect_program = ["port"]
-running = ["port"]
 
 [[cleaner.option]]
 id = "clean"

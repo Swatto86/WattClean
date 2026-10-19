@@ -19,6 +19,8 @@ pub enum Parse {
     DpkgResidual,
     /// `snap list --all`: revisions marked disabled, kept after an update.
     SnapDisabled,
+    /// `xcrun --find simctl`: any path printed means the tool is there.
+    Tool,
 }
 
 /// How the listed names are used.
@@ -55,6 +57,10 @@ pub struct Task {
     /// the task frees; measured before and after.
     pub measure: &'static [&'static str],
     pub list: Option<List>,
+    /// A dry run of the same program whose output says how much the task
+    /// would free (`brew cleanup -n`); the preview shows that instead of
+    /// the measured size.
+    pub estimate: Option<&'static [&'static str]>,
 }
 
 impl Task {
@@ -86,6 +92,7 @@ const fn task(id: &'static str, program: &'static str, args: &'static [&'static 
         admin: false,
         measure: &[],
         list: None,
+        estimate: None,
     }
 }
 
@@ -101,6 +108,11 @@ const fn measured(mut task: Task, measure: &'static [&'static str]) -> Task {
 
 const fn listed(mut task: Task, list: List) -> Task {
     task.list = Some(list);
+    task
+}
+
+const fn estimated(mut task: Task, dry_run: &'static [&'static str]) -> Task {
+    task.estimate = Some(dry_run);
     task
 }
 
@@ -183,9 +195,12 @@ pub const TASKS: &[Task] = &[
         &["--vacuum-time=2weeks"],
     )),
     // Homebrew (macOS and Linux).
-    measured(
-        task("brew-cleanup", "brew", &["cleanup", "--prune=all"]),
-        &["%HOMEBREW_CACHE%"],
+    estimated(
+        measured(
+            task("brew-cleanup", "brew", &["cleanup", "--prune=all"]),
+            &["%HOMEBREW_CACHE%"],
+        ),
+        &["cleanup", "--prune=all", "-n"],
     ),
     listed(
         task("brew-autoremove", "brew", &["autoremove"]),
@@ -222,10 +237,19 @@ pub const TASKS: &[Task] = &[
     task("docker-builder", "docker", &["builder", "prune", "-f"]),
     task("docker-images", "docker", &["image", "prune", "-f"]),
     // macOS.
-    task(
-        "simctl-unavailable",
-        "xcrun",
-        &["simctl", "delete", "unavailable"],
+    // xcrun is on every Mac; simctl only comes with Xcode.
+    listed(
+        task(
+            "simctl-unavailable",
+            "xcrun",
+            &["simctl", "delete", "unavailable"],
+        ),
+        List {
+            program: "xcrun",
+            args: &["--find", "simctl"],
+            parse: Parse::Tool,
+            then: Use::Preview,
+        },
     ),
     task("quicklook-reset", "qlmanage", &["-r", "cache"]),
 ];
@@ -235,73 +259,9 @@ pub fn find(id: &str) -> Option<&'static Task> {
     TASKS.iter().find(|task| task.id == id)
 }
 
-/// A package name safe to hand back to a package manager: no option
-/// (`-x`), no spaces or shell characters.
-pub fn safe_name(name: &str) -> bool {
-    name.len() <= 200
-        && name
-            .chars()
-            .next()
-            .is_some_and(|first| first.is_ascii_alphanumeric())
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '_' | '-' | ':' | '@'))
-}
+mod listing;
 
-/// What a listing step's output names, unsafe names left out.
-pub fn parse(parse: Parse, output: &str) -> Vec<Listed> {
-    let one = |name: &str| Listed {
-        label: name.to_string(),
-        args: vec![name.to_string()],
-    };
-    let mut out: Vec<Listed> = match parse {
-        Parse::Lines => output
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty() && !line.starts_with("==>"))
-            .filter_map(|line| line.split_whitespace().next())
-            .map(one)
-            .collect(),
-        Parse::AptRemoved => output
-            .lines()
-            .filter_map(|line| line.strip_prefix("Remv "))
-            .filter_map(|rest| rest.split_whitespace().next())
-            .map(one)
-            .collect(),
-        Parse::DpkgResidual => output
-            .lines()
-            .filter_map(|line| {
-                let mut words = line.split_whitespace();
-                (words.next() == Some("rc")).then(|| words.next()).flatten()
-            })
-            .map(one)
-            .collect(),
-        Parse::SnapDisabled => output
-            .lines()
-            .skip(1)
-            .filter_map(|line| {
-                let words: Vec<&str> = line.split_whitespace().collect();
-                let disabled = words
-                    .last()
-                    .is_some_and(|notes| notes.split(',').any(|note| note == "disabled"));
-                match (disabled, words.first(), words.get(2)) {
-                    (true, Some(name), Some(revision))
-                        if revision.chars().all(|c| c.is_ascii_digit()) =>
-                    {
-                        Some(Listed {
-                            label: format!("{name} (revision {revision})"),
-                            args: vec![(*name).to_string(), format!("--revision={revision}")],
-                        })
-                    }
-                    _ => None,
-                }
-            })
-            .collect(),
-    };
-    out.retain(|listed| listed.args.first().is_some_and(|name| safe_name(name)));
-    out.dedup();
-    out
-}
+pub use listing::{parse, safe_name};
 
 #[cfg(test)]
 mod tests {
@@ -323,49 +283,5 @@ mod tests {
             Some("apt-get clean")
         );
         assert!(find("rm-rf").is_none());
-    }
-
-    #[test]
-    fn names_that_could_be_options_or_shell_text_are_refused() {
-        assert!(safe_name("libfoo1"));
-        assert!(safe_name("g++-13"));
-        assert!(safe_name("python3.12:amd64"));
-        assert!(!safe_name("-rf"));
-        assert!(!safe_name("a b"));
-        assert!(!safe_name("a;reboot"));
-        assert!(!safe_name("$(id)"));
-        assert!(!safe_name(""));
-    }
-
-    #[test]
-    fn listings_are_read_from_each_package_manager() {
-        let apt = "NOTE: This is only a simulation!\nRemv libold1 [1.0-1]\nRemv -bad [1]\nInst x\n";
-        assert_eq!(
-            parse(Parse::AptRemoved, apt),
-            vec![Listed {
-                label: "libold1".into(),
-                args: vec!["libold1".into()],
-            }]
-        );
-        let dpkg = "ii  bash\nrc  oldapp\nrc  other:amd64\n";
-        let names: Vec<_> = parse(Parse::DpkgResidual, dpkg)
-            .into_iter()
-            .map(|l| l.label)
-            .collect();
-        assert_eq!(names, ["oldapp", "other:amd64"]);
-        let brew = "==> Would autoremove 2 unneeded formulae:\nlibyaml\nopenssl@1.1\n";
-        let names: Vec<_> = parse(Parse::Lines, brew)
-            .into_iter()
-            .map(|l| l.label)
-            .collect();
-        assert_eq!(names, ["libyaml", "openssl@1.1"]);
-        let snap = "Name  Version  Rev  Tracking  Publisher  Notes\n\
-                    core  16-2.61  16928  latest/stable  canonical✓  core,disabled\n\
-                    core  16-2.62  17200  latest/stable  canonical✓  core\n\
-                    firefox  128.0  4650  latest/stable  mozilla✓  disabled\n";
-        let listed = parse(Parse::SnapDisabled, snap);
-        assert_eq!(listed.len(), 2);
-        assert_eq!(listed[0].label, "core (revision 16928)");
-        assert_eq!(listed[1].args, ["firefox", "--revision=4650"]);
     }
 }

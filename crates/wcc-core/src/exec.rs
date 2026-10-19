@@ -81,6 +81,7 @@ impl Executor<'_> {
                 program,
                 listed,
                 size,
+                ..
             } => self.command(task, program, listed).inspect(|_| {
                 if !task.measure.is_empty() {
                     item.size =

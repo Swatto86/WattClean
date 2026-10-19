@@ -15,7 +15,14 @@ pub struct Folders {
 impl Folders {
     /// The folders of the account this program runs as.
     pub fn of_this_account() -> Self {
-        Self::from_env(Platform::current(), &|name| std::env::var(name).ok())
+        Self::from_env(Platform::current(), &|name| {
+            let value = std::env::var(name).ok();
+            #[cfg(target_os = "macos")]
+            if name == "TMPDIR" && !value.as_deref().is_some_and(|v| v.trim().starts_with('/')) {
+                return crate::sys::user_temp_dir();
+            }
+            value
+        })
     }
 
     /// The folders from an environment (`env`), so tests need no real one.
@@ -66,7 +73,10 @@ impl Folders {
                 set("HOMEBREW_CACHE").unwrap_or_else(|| under("Library/Caches/Homebrew")),
             );
             for (name, folder, _) in USER_FOLDERS {
-                put(name, under(folder));
+                put(
+                    name,
+                    under(if name == "VIDEOS" { "Movies" } else { folder }),
+                );
             }
         } else {
             put("CONFIG", config.clone());

@@ -133,7 +133,14 @@ id = "crash_reports"
 name = "Crash reports"
 description = "Reports kept after the browser crashed"
 default = true
-actions = [{ op = "delete", search = "walk.all", path = '{root}\Crashpad\reports' }]
+actions = [
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\reports' },
+  # macOS and Linux keep them by state.
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\completed' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\pending' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\new' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\attachments' },
+]
 
 [[template.option]]
 id = "vacuum"
@@ -289,6 +296,7 @@ actions = [
   { op = "delete", search = "walk.all", path = '{root}\DawnCache' },
   { op = "delete", search = "walk.all", path = '{root}\DawnGraphiteCache' },
   { op = "delete", search = "walk.all", path = '{root}\DawnWebGPUCache' },
+  { op = "delete", search = "walk.all", path = '{root}\GraphiteDawnCache' },
   { op = "delete", search = "walk.all", path = '{root}\Service Worker\CacheStorage' },
   { op = "delete", search = "walk.all", path = '{root}\Service Worker\ScriptCache' },
 ]
@@ -309,4 +317,6 @@ actions = [
   { op = "delete", search = "walk.all", path = '{root}\Crashpad\reports' },
   { op = "delete", search = "walk.all", path = '{root}\Crashpad\completed' },
   { op = "delete", search = "walk.all", path = '{root}\Crashpad\pending' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\new' },
+  { op = "delete", search = "walk.all", path = '{root}\Crashpad\attachments' },
 ]

@@ -22,6 +22,14 @@ export const osName = (): string =>
 export const trashName = (): string =>
   current === "windows" ? "Recycle Bin" : "Trash";
 
+/** Where the app's icon waits while the window is closed. */
+export const trayName = (): string =>
+  current === "windows"
+    ? "notification area"
+    : current === "macos"
+      ? "menu bar"
+      : "system tray";
+
 /** How a drive's own encryption is called, for advice on SSDs. */
 export const diskEncryption = (): string =>
   current === "macos"

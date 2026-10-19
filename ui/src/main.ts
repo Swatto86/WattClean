@@ -38,7 +38,12 @@ const inputById = (id: string): HTMLInputElement => {
 
 /** Show the window once the page has painted, so it never flashes white. */
 const reveal = async (): Promise<void> => {
-  await new Promise((resolve) => requestAnimationFrame(resolve));
+  // A hidden WKWebView (macOS) draws no frames until it is shown, so a short
+  // timer stands in for the first frame there.
+  await Promise.race([
+    new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    new Promise<void>((resolve) => setTimeout(resolve, 120)),
+  ]);
   await getCurrentWindow()
     .show()
     .catch(() => undefined);

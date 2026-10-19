@@ -10,6 +10,7 @@ use std::time::Duration;
 use wcc_core::system::{Drive, ProgramOutput, Registry, System};
 
 use crate::folders::Folders;
+use crate::protected::{HOME_FOLDERS, SYSTEM_FOLDERS};
 use crate::{drives, process, sys, trash};
 
 /// How long a clipboard or process query may take.
@@ -231,8 +232,26 @@ impl System for UnixSystem {
         sys::is_elevated()
     }
 
+    /// Volumes nothing on them lets this account write to cannot be wiped.
     fn drives(&self) -> Vec<Drive> {
         drives::drives()
+            .into_iter()
+            .filter(|drive| sys::can_write(&self.wipe_folder(drive)))
+            .collect()
+    }
+
+    /// The drive with the same device as `path`; else by path (a
+    /// memory-backed `/tmp` belongs to the root's drive, where the wipe then
+    /// picks a folder on the real disk).
+    fn drive_of(&self, path: &Path) -> Option<Drive> {
+        let device = |p: &Path| std::fs::metadata(p).ok().map(|meta| meta.dev());
+        let drives = self.drives();
+        let wanted = device(path);
+        drives
+            .iter()
+            .find(|drive| wanted.is_some() && device(Path::new(&drive.root)) == wanted)
+            .cloned()
+            .or_else(|| wcc_core::system::drive_holding(drives, path))
     }
 
     fn free_space(&self, path: &Path) -> io::Result<u64> {
@@ -284,78 +303,6 @@ impl System for UnixSystem {
         process::run(program, args, admin)
     }
 }
-
-/// Folders no cleaner may remove (they may be emptied), besides every
-/// variable's folder.
-const SYSTEM_FOLDERS: &[&str] = &[
-    "/",
-    "/bin",
-    "/boot",
-    "/dev",
-    "/etc",
-    "/home",
-    "/lib",
-    "/lib32",
-    "/lib64",
-    "/libx32",
-    "/media",
-    "/mnt",
-    "/opt",
-    "/proc",
-    "/root",
-    "/run",
-    "/sbin",
-    "/snap",
-    "/srv",
-    "/sys",
-    "/tmp",
-    "/usr",
-    "/usr/local",
-    "/var",
-    "/var/tmp",
-    "/var/cache",
-    "/var/lib",
-    "/var/log",
-    "/var/crash",
-    "/nix",
-    "/nix/store",
-    "/Applications",
-    "/Library",
-    "/System",
-    "/Users",
-    "/Volumes",
-    "/private",
-    "/private/tmp",
-    "/private/var",
-    "/private/var/folders",
-];
-
-/// Folders in the home folder no cleaner may remove.
-const HOME_FOLDERS: &[&str] = &[
-    ".local",
-    ".ssh",
-    ".gnupg",
-    ".var",
-    ".var/app",
-    "snap",
-    "Applications",
-    "Movies",
-    "Public",
-    "Library",
-    "Library/Application Support",
-    "Library/Caches",
-    "Library/Containers",
-    "Library/Group Containers",
-    "Library/Preferences",
-    "Library/Mobile Documents",
-    "Library/CloudStorage",
-    "Library/Mail",
-    "Library/Messages",
-    "Library/Keychains",
-    "Library/Logs",
-    "Library/Developer",
-    "Library/Safari",
-];
 
 #[cfg(test)]
 mod tests {

@@ -43,6 +43,17 @@ detect = ['{root}']
 running = ["obsidian"]
 
 [[cleaner]]
+id = "claude"
+name = "Claude"
+description = "Anthropic's assistant"
+category = "applications"
+template = "electron"
+vars = { root = '%CONFIG%/Claude' }
+# claude-code there is the app's own copy of Claude Code: not a cache.
+detect = ['{root}']
+running = ["claude"]
+
+[[cleaner]]
 id = "notion"
 name = "Notion"
 description = "Notes"
@@ -63,13 +74,19 @@ running = ["spotify"]
 [[cleaner.option]]
 id = "cache"
 name = "Cache"
-description = "Streamed music and pictures kept to play them again (offline songs stay)"
+description = "Pictures and web pages Spotify kept"
 default = true
 actions = [
   { op = "delete", search = "walk.all", path = '%CACHE%/com.spotify.client/Data' },
   { op = "delete", search = "walk.all", path = '%CACHE%/com.spotify.client/Browser' },
-  { op = "delete", search = "walk.all", path = '%CONFIG%/Spotify/PersistentCache' },
 ]
+
+[[cleaner.option]]
+id = "storage"
+name = "Music storage"
+description = "Streamed music Spotify kept to play it again"
+warning = "Songs downloaded for offline listening are kept here too and will need downloading again."
+actions = [{ op = "delete", search = "walk.all", path = '%CONFIG%/Spotify/PersistentCache' }]
 
 [[cleaner]]
 id = "zoom"
@@ -113,10 +130,10 @@ actions = [
 [[cleaner]]
 id = "office"
 name = "Microsoft Office"
-description = "Word, Excel, PowerPoint and Outlook"
+description = "Word, Excel, PowerPoint, Outlook and OneNote"
 category = "applications"
-detect = ['%HOME%/Library/Containers/com.microsoft.Word', '%HOME%/Library/Containers/com.microsoft.Excel', '%HOME%/Library/Containers/com.microsoft.Powerpoint', '%HOME%/Library/Containers/com.microsoft.Outlook']
-running = ["microsoft word", "microsoft excel", "microsoft powerpoint", "microsoft outlook"]
+detect = ['%HOME%/Library/Containers/com.microsoft.Word', '%HOME%/Library/Containers/com.microsoft.Excel', '%HOME%/Library/Containers/com.microsoft.Powerpoint', '%HOME%/Library/Containers/com.microsoft.Outlook', '%HOME%/Library/Containers/com.microsoft.onenote.mac']
+running = ["microsoft word", "microsoft excel", "microsoft powerpoint", "microsoft outlook", "microsoft onenote"]
 
 [[cleaner.option]]
 id = "cache"
@@ -124,8 +141,16 @@ name = "Cache"
 description = "Templates, fonts and add-in data Office downloads again"
 default = true
 actions = [
-  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.*/Data/Library/Caches' },
-  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.*/Data/Library/Logs' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.Word/Data/Library/Caches' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.Word/Data/Library/Logs' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.Excel/Data/Library/Caches' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.Excel/Data/Library/Logs' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.Powerpoint/Data/Library/Caches' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.Powerpoint/Data/Library/Logs' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.Outlook/Data/Library/Caches' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.Outlook/Data/Library/Logs' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.onenote.mac/Data/Library/Caches' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Containers/com.microsoft.onenote.mac/Data/Library/Logs' },
 ]
 
 [[cleaner]]
@@ -160,31 +185,3 @@ name = "Art cache"
 description = "Album art VLC downloaded"
 default = true
 actions = [{ op = "delete", search = "walk.all", path = '%CONFIG%/org.videolan.vlc/art' }]
-
-[[cleaner]]
-id = "steam"
-name = "Steam"
-description = "Game launcher"
-category = "games"
-detect = ['%CONFIG%/Steam']
-running = ["steam_osx", "steam helper"]
-
-[[cleaner.option]]
-id = "cache"
-name = "Web cache"
-description = "The store and community pages Steam kept"
-default = true
-actions = [
-  { op = "delete", search = "walk.all", path = '%CONFIG%/Steam/appcache/httpcache' },
-  { op = "delete", search = "walk.all", path = '%CONFIG%/Steam/config/htmlcache' },
-]
-
-[[cleaner.option]]
-id = "logs"
-name = "Logs and crash dumps"
-description = "Steam's log files and crash dumps"
-default = true
-actions = [
-  { op = "delete", search = "walk.files", path = '%CONFIG%/Steam/logs' },
-  { op = "delete", search = "walk.files", path = '%CONFIG%/Steam/dumps' },
-]

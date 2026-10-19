@@ -71,7 +71,10 @@ pub enum Op {
         task: &'static Task,
         program: PathBuf,
         listed: Vec<Listed>,
+        /// What the measured folders held when planned.
         size: u64,
+        /// What the task's own dry run says it would free, when it has one.
+        estimate: Option<u64>,
     },
 }
 
@@ -125,11 +128,15 @@ impl Op {
             ),
             Self::Clipboard => (ItemKind::Clipboard, "Clipboard".to_string(), 0, None),
             Self::Command {
-                task, listed, size, ..
+                task,
+                listed,
+                size,
+                estimate,
+                ..
             } => (
                 ItemKind::Command,
                 task.command_line(),
-                *size,
+                estimate.unwrap_or(*size),
                 crate::command::note(task, listed),
             ),
             Self::FreeSpace { folder, free } => (
@@ -296,12 +303,7 @@ impl Planner<'_> {
     /// The free space of the drive holding the temporary folder.
     fn free_space(&self) -> Option<Op> {
         let temp = self.system.var("TEMP").into_iter().next()?;
-        let temp_key = paths::key(Path::new(&temp));
-        let drive = self
-            .system
-            .drives()
-            .into_iter()
-            .find(|d| paths::is_within(&temp_key, &paths::key(Path::new(&d.root))))?;
+        let drive = self.system.drive_of(Path::new(&temp))?;
         let folder = self.system.wipe_folder(&drive);
         let free = self.system.free_space(&folder).unwrap_or(drive.free);
         Some(Op::FreeSpace { folder, free })

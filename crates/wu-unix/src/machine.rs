@@ -48,20 +48,35 @@ impl PackageSystem for UnixPackages {
     }
 
     /// `Info.plist` through macOS's own `plutil`, which reads both the text
-    /// and the binary form.
+    /// and the binary form. A plist holding dates or data cannot become
+    /// JSON; its keys are then read one by one.
     fn bundle_info(&self, bundle: &Path) -> Option<BundleInfo> {
         if !self.is_macos() {
             return None;
         }
         let plist = bundle.join("Contents").join("Info.plist");
-        let output = std::process::Command::new("/usr/bin/plutil")
-            .args(["-convert", "json", "-o", "-"])
-            .arg(&plist)
-            .stdin(std::process::Stdio::null())
-            .output()
-            .ok()
-            .filter(|output| output.status.success())?;
-        bundle_info_from_json(&String::from_utf8_lossy(&output.stdout))
+        if !plist.is_file() {
+            return None;
+        }
+        let whole = plutil(&["-convert", "json", "-o", "-"], &plist);
+        if let Some(info) = whole.as_deref().and_then(bundle_info_from_json) {
+            return Some(info);
+        }
+        let key = |name: &str| {
+            let is_text = plutil(&["-type", name, "-o", "-"], &plist)
+                .is_some_and(|kind| kind.trim() == "string");
+            is_text
+                .then(|| plutil(&["-extract", name, "raw", "-o", "-"], &plist))
+                .flatten()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        };
+        let info = BundleInfo {
+            bundle_id: key("CFBundleIdentifier"),
+            name: key("CFBundleDisplayName").or_else(|| key("CFBundleName")),
+            version: key("CFBundleShortVersionString").or_else(|| key("CFBundleVersion")),
+        };
+        (info != BundleInfo::default()).then_some(info)
     }
 
     fn trash(&self, paths: &[PathBuf]) -> Vec<io::Result<()>> {
@@ -87,6 +102,18 @@ impl PackageSystem for UnixPackages {
                 .collect()
         }
     }
+}
+
+/// What `plutil` printed, when it succeeded.
+fn plutil(args: &[&str], plist: &Path) -> Option<String> {
+    std::process::Command::new("/usr/bin/plutil")
+        .args(args)
+        .arg(plist)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 pub(crate) fn bundle_info_from_json(text: &str) -> Option<BundleInfo> {
@@ -120,6 +147,31 @@ mod tests {
         assert_eq!(info.name.as_deref(), Some("Slack"));
         assert_eq!(info.version.as_deref(), Some("4.41.97"));
         assert!(bundle_info_from_json("[").is_none());
+    }
+
+    /// A plist with a date or data value cannot become JSON.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_plist_json_cannot_hold_is_read_key_by_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let contents = dir.path().join("Odd.app/Contents");
+        std::fs::create_dir_all(&contents).unwrap();
+        std::fs::write(
+            contents.join("Info.plist"),
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.example.odd</string>
+<key>CFBundleName</key><string>Odd</string>
+<key>Stamp</key><data>AAEC</data>
+</dict></plist>"#,
+        )
+        .unwrap();
+        let info = UnixPackages::new()
+            .bundle_info(&dir.path().join("Odd.app"))
+            .unwrap();
+        assert_eq!(info.bundle_id.as_deref(), Some("com.example.odd"));
+        assert_eq!(info.name.as_deref(), Some("Odd"));
     }
 
     #[test]

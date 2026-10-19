@@ -92,6 +92,11 @@ pub trait System: Send + Sync {
         None
     }
 
+    /// The drive holding `path`.
+    fn drive_of(&self, path: &Path) -> Option<Drive> {
+        drive_holding(self.drives(), path)
+    }
+
     /// Where a free-space wipe writes on a drive: the temporary folder when
     /// it is on that drive (no rights needed), else the drive's root.
     fn wipe_folder(&self, drive: &Drive) -> PathBuf {
@@ -171,6 +176,14 @@ pub struct Drive {
     pub free: u64,
     pub total: u64,
     pub removable: bool,
+}
+
+/// The first drive whose root holds `path`, by the text of their paths.
+pub fn drive_holding(drives: Vec<Drive>, path: &Path) -> Option<Drive> {
+    let key = crate::paths::key(path);
+    drives
+        .into_iter()
+        .find(|d| crate::paths::is_within(&key, &crate::paths::key(Path::new(&d.root))))
 }
 
 /// The hive and the rest of a registry key, with the hive in short form.

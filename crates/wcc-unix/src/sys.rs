@@ -58,6 +58,61 @@ pub fn space(path: &Path) -> io::Result<Space> {
     })
 }
 
+/// How macOS mounted a volume.
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mount {
+    /// Not shown in Finder (Recovery, Preboot, VM, Update).
+    pub hidden: bool,
+    /// On this Mac, not a network share.
+    pub local: bool,
+    /// `apfs`, `hfs`, `exfat`, `msdos`…
+    pub file_system: String,
+}
+
+#[cfg(target_os = "macos")]
+pub fn mount_info(path: &Path) -> io::Result<Mount> {
+    const MNT_LOCAL: u32 = 0x0000_1000;
+    const MNT_DONTBROWSE: u32 = 0x0010_0000;
+    let c = c_path(path)?;
+    // SAFETY: statfs is plain data; all-zero bytes are a valid value.
+    let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `c` is a NUL-terminated path and `stat` a writable statfs that
+    // outlives the call.
+    if unsafe { libc::statfs(c.as_ptr(), &raw mut stat) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let name: Vec<u8> = stat
+        .f_fstypename
+        .iter()
+        .take_while(|c| **c != 0)
+        .map(|c| c.to_ne_bytes()[0])
+        .collect();
+    Ok(Mount {
+        hidden: stat.f_flags & MNT_DONTBROWSE != 0,
+        local: stat.f_flags & MNT_LOCAL != 0,
+        file_system: String::from_utf8_lossy(&name).into_owned(),
+    })
+}
+
+/// The account's own temporary folder (`/var/folders/…/T`), which macOS
+/// knows even when `TMPDIR` is not set (ssh, cron, launchd).
+#[cfg(target_os = "macos")]
+pub fn user_temp_dir() -> Option<String> {
+    const CS_DARWIN_USER_TEMP_DIR: libc::c_int = 65537;
+    let mut buf = vec![0u8; 1024];
+    // SAFETY: `buf` is writable for `buf.len()` bytes and confstr writes at
+    // most that many, NUL included.
+    let n = unsafe { libc::confstr(CS_DARWIN_USER_TEMP_DIR, buf.as_mut_ptr().cast(), buf.len()) };
+    if n == 0 || n > buf.len() {
+        return None;
+    }
+    buf.truncate(n - 1);
+    let dir = String::from_utf8(buf).ok()?;
+    let dir = dir.trim_end_matches('/').to_string();
+    (dir.starts_with('/') && dir != "/").then_some(dir)
+}
+
 /// Whether this account may create files in a folder.
 pub fn can_write(path: &Path) -> bool {
     let Ok(c) = c_path(path) else {
@@ -89,6 +144,20 @@ mod tests {
         let root = space(Path::new("/")).unwrap();
         assert!(root.total > 0 && root.free <= root.total);
         assert!(space(Path::new("/no/such/folder")).is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_knows_the_accounts_temporary_folder_and_its_volumes() {
+        let temp = user_temp_dir().unwrap();
+        assert!(
+            Path::new(&temp).is_dir() && can_write(Path::new(&temp)),
+            "{temp}"
+        );
+        // The data volume is hidden from Finder itself: only /Volumes
+        // entries are judged by that.
+        let data = mount_info(Path::new("/System/Volumes/Data")).unwrap();
+        assert!(data.local && data.file_system == "apfs", "{data:?}");
     }
 
     #[test]

@@ -24,7 +24,8 @@ crates/wcc-core             the engine; no Tauri, no OS API
   │                restart, finding and running maintenance programs)
 crates/wcc-windows          the real Windows PC (`unsafe`: Win32)
 crates/wcc-unix             the real Linux or macOS machine (`unsafe`
-                             only in sys.rs: geteuid, statvfs, access)
+                             only in sys.rs: geteuid, statvfs, access,
+                             and on macOS statfs and confstr)
 wcc-core::fake (feature)    a test machine over a sandbox folder
 crates/wcc-cmd              wattclean-cmd.exe disk, BleachBit-style console
                              options, on wcc-core and wcc-windows (no Tauri)
@@ -98,7 +99,9 @@ mozilla-history, mozilla-downloads), `json` (`address` a/b/c), `ini`
 `recycle-bin` (the Trash on Linux and macOS), `clipboard`, `custom-paths`,
 `command` (`task` = an id from `tasks::TASKS`: a package manager's clean,
 run with administrator rights when it needs them, its listing shown in the
-preview; a definition can name a task, never a command). File actions take `path`,
+preview; a definition can name a task, never a command; the preview's size
+comes from the tool's own dry run when it has one, such as `brew cleanup -n`,
+and a task whose tool is missing, such as Xcode's `simctl`, is not offered). File actions take `path`,
 `search` (file, glob, walk.files, walk.all, walk.top, find.dirs), and filters
 `regex`, `nregex`, `wholeregex`, `nwholeregex`, `names` (wildcards),
 `kind` (file/dir), `older_than_days`, `exclude` (paths; a `*` in an
@@ -126,7 +129,9 @@ Custom `.toml` and CleanerML `.xml` files go in the data folder's
    catalog and starts the one job (`AppState::start_job`).
 2. `run::run` takes the options in catalog order. For each action the
    `Planner` expands variables, finds files (`search`), and asks the
-   `Guard`; files already planned by an earlier option are left out.
+   `Guard`; files already planned by an earlier option are left out. A
+   folder the system will not let it list is a problem in the report (once
+   per option, with a Full Disk Access hint on macOS), never "nothing found".
 3. Preview reports the plan; clean hands each operation to the `Executor`,
    which checks the guard again, deletes (or shreds), and reports what was
    done, what was in use, and what failed.

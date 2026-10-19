@@ -85,7 +85,12 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   one table in Rust (`wcc-core/src/tasks.rs`): apt, dnf, zypper, pacman,
   Flatpak, Snap, Nix, Homebrew, MacPorts, journald and developer tools. A
   definition file can only name a task, never a command; names a listing
-  step reads back are checked before they are passed on. System caches
+  step reads back are checked before they are passed on. Programs are
+  looked for where package managers install, then on `PATH`; only `gem` is
+  looked for first in the version managers' folders (rbenv, asdf, mise,
+  rvm), as in the account's terminal. Those folders are the account's to
+  write, so nothing run as administrator is ever taken from them
+  (`wcc-unix/src/process.rs`). System caches
   belong to root, so those commands ask for administrator rights each time
   (polkit's `pkexec`, macOS's own prompt): the app itself never runs as
   root, and there is no "restart as administrator" outside Windows.
@@ -115,10 +120,22 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   "unmaintained" advisories in Tauri's Linux stack, to review 2027-01-19.
 - **Verification**: the full gate runs on Linux with `e2e/linux/smoke.py`
   (WebKitGTK through tauri-driver: real package managers, read only, and a
-  throwaway AppImage uninstalled to the Trash, in a temporary home). macOS
-  has no WebDriver for WKWebView; it was compile-checked from Linux
-  (`cargo clippy --target aarch64-apple-darwin`) and has not yet run on a
-  Mac.
+  throwaway AppImage uninstalled to the Trash, in a temporary home). On a
+  Mac the same gate runs natively (first on 2026-10-19); macOS has no
+  WebDriver for WKWebView, so the window is checked by hand.
+- **macOS specifics** (from the first run on a Mac): one folder has several
+  spellings (`/System/Volumes/Data/…`, `/private/var/…`,
+  `/Volumes/<startup disk>/…`), so the guard folds them into one key. What
+  macOS will not let WattClean read (Safari, Mail, other apps' containers)
+  is reported with a Full Disk Access hint; WattClean never asks for that
+  access itself. Free-space wipes are offered only for local, visible,
+  writable volumes. Finder counts and empties the Trash and moves removed
+  apps there, which macOS asks the user to allow once
+  (`NSAppleEventsUsageDescription` in `src-tauri/Info.plist`). The
+  menu-bar icon is a template image, and clicking the Dock icon brings the
+  window back. Developer and deep-scan cleaners never look inside
+  libraries, bundles or disk images (`*.photoslibrary`, `*.app`,
+  `*.sparsebundle`, OrbStack's folder).
 
 ## Repository
 

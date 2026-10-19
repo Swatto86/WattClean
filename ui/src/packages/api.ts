@@ -25,7 +25,8 @@ export interface PackageList {
 export interface LeftoverView {
   number: number;
   path: string;
-  size: number;
+  /** Null when the system would not let WattClean look inside. */
+  size: number | null;
   folder: boolean;
 }
 
@@ -61,7 +62,7 @@ const leftoverView = (v: unknown, w: string): LeftoverView => {
   return {
     number: num(o["number"], `${w}.number`),
     path: str(o["path"], `${w}.path`),
-    size: num(o["size"], `${w}.size`),
+    size: optNum(o["size"], `${w}.size`),
     folder: bool(o["folder"], `${w}.folder`),
   };
 };

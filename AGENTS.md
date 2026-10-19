@@ -29,8 +29,9 @@ decisions; each engine's own structure and decisions are in
 - Linux (WSL Ubuntu here: build with `CARGO_TARGET_DIR` on ext4): the same
   `bash scripts/verify.sh`, ending with `e2e/linux/smoke.py` (needs the
   WebKitGTK dev packages, `webkit2gtk-driver`, `xvfb`, Linux node_modules
-  and `scripts/setup-tauri-driver.sh`). macOS: the gate builds but has no
-  WebDriver; the window is checked by hand (not yet run on a Mac).
+  and `scripts/setup-tauri-driver.sh`). macOS: the same `bash
+  scripts/verify.sh` on the Mac; there is no WebDriver, so open the built
+  app (`npx tauri build --debug --bundles app`) and check the window by hand.
 - WebDriver setup once per WebView2 update: `pwsh scripts/setup-e2e.ps1`
   (run it from PowerShell: from Git Bash it cannot find Git's bash.exe).
 - Read-only checks on this PC (they change nothing):
@@ -108,6 +109,5 @@ decisions; each engine's own structure and decisions are in
   for every Watt* repo): the local full gate is the only verdict.
 - `SRSetRestorePoint` may be throttled by Windows to one point per 24 hours;
   both cleaners report what it returns and carry on.
-- macOS has only been compile-checked (from Linux); run the app and the
-  gate on a Mac. Linux and macOS releases are not published yet; macOS
-  signing and notarization are undecided.
+- Linux and macOS releases are not published yet; macOS signing and
+  notarization are undecided (entitlements wait for signing).

@@ -3,6 +3,7 @@
 //! administrator restart, quitting).
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
@@ -252,29 +253,44 @@ fn removing(app: &AppHandle) -> bool {
         .is_some_and(|state| state.is_removing())
 }
 
-/// Quits once the running disk job (a wipe gives its space back when
-/// stopped) has stopped, waiting at most a minute, and once any registry
-/// clean or uninstall removal has finished.
+/// Quits once the app is idle (`wait_until_idle`), at once when it already is.
 pub fn quit_when_idle(app: &AppHandle) {
-    let disk = app
-        .try_state::<Arc<disk::state::AppState>>()
-        .map(|disk| Arc::clone(&disk));
-    let disk_busy = move || disk.as_ref().is_some_and(|disk| disk.is_busy());
-    if !disk_busy() && !removing(app) {
+    if !disk_busy(app) && !removing(app) {
         app.exit(0);
         return;
     }
-    if let Some(disk) = app.try_state::<Arc<disk::state::AppState>>() {
-        disk.cancel();
-    }
     let app = app.clone();
     std::thread::spawn(move || {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
-        while (disk_busy() && std::time::Instant::now() < deadline) || removing(&app) {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
+        wait_until_idle(&app);
         app.exit(0);
     });
+}
+
+/// Stops the running disk job (a wipe gives its space back when stopped)
+/// and waits for it, at most a minute, and for any registry clean or
+/// uninstall removal to finish. macOS's own Quit (Cmd+Q, the Dock) ends the
+/// app without asking, so the Exit event waits here too, unless the quit
+/// already waited.
+pub fn wait_until_idle(app: &AppHandle) {
+    static WAITED: AtomicBool = AtomicBool::new(false);
+    if WAITED.load(Ordering::SeqCst) {
+        return;
+    }
+    if disk_busy(app)
+        && let Some(disk) = app.try_state::<Arc<disk::state::AppState>>()
+    {
+        disk.cancel();
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while (disk_busy(app) && std::time::Instant::now() < deadline) || removing(app) {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    WAITED.store(true, Ordering::SeqCst);
+}
+
+fn disk_busy(app: &AppHandle) -> bool {
+    app.try_state::<Arc<disk::state::AppState>>()
+        .is_some_and(|disk| disk.is_busy())
 }
 
 #[cfg(test)]

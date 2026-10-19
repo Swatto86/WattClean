@@ -15,6 +15,8 @@ mod machine;
 #[cfg(unix)]
 pub mod process;
 #[cfg(unix)]
+mod protected;
+#[cfg(unix)]
 mod sys;
 #[cfg(unix)]
 mod trash;

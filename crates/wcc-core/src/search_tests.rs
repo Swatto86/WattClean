@@ -332,3 +332,56 @@ fn sockets_and_pipes_are_never_listed() {
     let found = rel(dir.path(), run(&spec, &Guard::default()));
     assert_eq!(found, vec![("old.tmp".to_string(), Kind::File)]);
 }
+
+/// A folder the system refuses to list is reported, not taken for empty.
+#[cfg(unix)]
+#[test]
+fn a_folder_that_cannot_be_listed_is_a_problem_not_nothing() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let locked = dir.path().join("Locked");
+    fs::create_dir_all(locked.join("Profile")).unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    // As root everything can be listed: nothing to show then.
+    let listable = fs::read_dir(&locked).is_ok();
+    let spec = FileSpec::new(format!("{}/*/History", locked.display()), Search::Glob);
+    let filter = Filter::new(&spec, &no_vars, SystemTime::now()).unwrap();
+    let never = || false;
+    let searcher = Searcher {
+        guard: &Guard::default(),
+        cancelled: &never,
+    };
+    let mut out = Findings::default();
+    searcher.find(&spec, &filter, &no_vars, &mut out);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    if !listable {
+        assert_eq!(out.problems.len(), 1, "{:?}", out.problems);
+        assert_eq!(out.problems[0].path, locked);
+    }
+    // A folder that is simply not there is no problem.
+    let missing = FileSpec::new(format!("{}/Nothing/*", dir.path().display()), Search::Glob);
+    let mut none = Findings::default();
+    searcher.find(&missing, &filter, &no_vars, &mut none);
+    assert!(none.problems.is_empty());
+}
+
+#[test]
+fn error_texts_fit_the_platform() {
+    let text = |code| describe(&std::io::Error::from_raw_os_error(code));
+    assert_eq!(text(32), "in use by another program");
+    if cfg!(windows) {
+        assert!(text(5).contains("administrator"));
+    } else {
+        assert!(
+            !text(5).contains("administrator"),
+            "EIO is not access denied"
+        );
+    }
+    if cfg!(target_os = "macos") {
+        assert!(text(1).contains("Full Disk Access"));
+        assert!(
+            !text(13).contains("Full Disk Access"),
+            "EACCES is plain permissions"
+        );
+    }
+}

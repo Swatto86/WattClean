@@ -56,6 +56,7 @@ pub const MACOS: &[(&str, &str)] = &[
     ),
     ("unix/developer.toml", include_str!("unix/developer.toml")),
     ("macos/developer.toml", include_str!("macos/developer.toml")),
+    ("macos/games.toml", include_str!("macos/games.toml")),
     ("unix/deepscan.toml", include_str!("unix/deepscan.toml")),
 ];
 

@@ -12,7 +12,7 @@ pub use crate::filter::{Filter, SpecError};
 use crate::model::{FileSpec, Kind, Search};
 use crate::paths::{self, Guard};
 use crate::vars::{self, Vars};
-use crate::wildcard::glob;
+use crate::wildcard::glob_report;
 
 /// Walks stop this deep, far below any real application's folders.
 const MAX_DEPTH: usize = 64;
@@ -49,7 +49,15 @@ impl Searcher<'_> {
         for pattern in vars::expand(&spec.path, vars) {
             let roots = match spec.search {
                 Search::File => vec![PathBuf::from(paths::native(&pattern))],
-                _ => glob(&pattern),
+                _ => {
+                    let (roots, refused) = glob_report(&pattern);
+                    out.problems
+                        .extend(refused.into_iter().map(|(path, error)| Problem {
+                            message: describe(&error),
+                            path,
+                        }));
+                    roots
+                }
             };
             for root in roots {
                 if (self.cancelled)() {
@@ -61,8 +69,16 @@ impl Searcher<'_> {
     }
 
     fn search_root(&self, root: &Path, search: Search, filter: &Filter, out: &mut Findings) {
-        let Ok(meta) = fs::symlink_metadata(root) else {
-            return;
+        let meta = match fs::symlink_metadata(root) {
+            Ok(meta) => meta,
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                out.problems.push(Problem {
+                    path: root.to_path_buf(),
+                    message: describe(&error),
+                });
+                return;
+            }
+            Err(_) => return,
         };
         if paths::is_special(&meta) {
             return;
@@ -259,8 +275,17 @@ impl Searcher<'_> {
 /// A short reason for an I/O failure that a person can act on.
 pub fn describe(error: &std::io::Error) -> String {
     match error.raw_os_error() {
-        Some(5) => "access denied (administrator rights may be needed)".to_string(),
+        // ERROR_ACCESS_DENIED; on Linux and macOS 5 is an input/output error.
+        Some(5) if cfg!(windows) => {
+            "access denied (administrator rights may be needed)".to_string()
+        }
+        // ERROR_SHARING_VIOLATION, which sqlite.rs also reports for a busy
+        // database on every platform.
         Some(32) => "in use by another program".to_string(),
+        // EPERM: macOS's privacy protection, not file permissions.
+        Some(1) if cfg!(target_os = "macos") => "macOS did not allow this (a protected item: \
+             giving WattClean Full Disk Access in System Settings › Privacy & Security may help)"
+            .to_string(),
         _ => error.to_string(),
     }
 }

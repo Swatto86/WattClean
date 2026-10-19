@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the macOS app's Info.plist by Tauri. macOS shows this text
+     when WattClean first asks Finder to empty the Trash or to move a
+     program's leftovers there. -->
+<plist version="1.0">
+<dict>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>WattClean asks Finder to count and empty the Trash, and to move a removed program and its leftovers to the Trash.</string>
+</dict>
+</plist>

@@ -109,7 +109,8 @@ pub async fn un_pkg_list(state: App<'_>, all: bool) -> CommandResult<PackageList
 pub struct LeftoverView {
     number: usize,
     path: String,
-    size: u64,
+    /// `None` when its size could not be read.
+    size: Option<u64>,
     folder: bool,
 }
 

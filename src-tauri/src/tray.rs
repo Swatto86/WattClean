@@ -87,6 +87,15 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                 show_main(tray.app_handle());
             }
         });
+    // The menu bar shows a monochrome glyph it tints for light and dark
+    // appearance; elsewhere the app's own icon.
+    #[cfg(target_os = "macos")]
+    {
+        tray = tray
+            .icon(tauri::include_image!("icons/tray-template.png"))
+            .icon_as_template(true);
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }

@@ -63,7 +63,11 @@ const chooseLeftovers = (
               box,
               el("span", { class: "path", text: leftover.path }),
             ),
-            el("span", { class: "muted", text: bytes(leftover.size) }),
+            el("span", {
+              class: "muted",
+              text:
+                leftover.size === null ? "size unknown" : bytes(leftover.size),
+            }),
           ),
         ),
       ),
@@ -223,9 +227,15 @@ export const programsPage = (_ctx: Context): Page => {
     const target = selectedPackage();
     if (!target) return;
     const purge = PURGE[target.source];
+    const how =
+      target.source === "Application"
+        ? `Finder moves it to the ${trashName()}, asking for an administrator's password if it is not yours to move.`
+        : target.source === "AppImage"
+          ? `The file moves to the ${trashName()}.`
+          : `${target.source} removes it, asking for an administrator's password when it needs one.`;
     const answer = await confirm({
       title: `Uninstall ${target.name}?`,
-      message: `${target.source} removes it, asking for an administrator's password when it needs one. Then WattClean looks for what it left in your home folder.`,
+      message: `${how} Then WattClean looks for what it left in your home folder.`,
       ok: "Uninstall",
       danger: true,
       ...(purge ? { checkbox: purge } : {}),

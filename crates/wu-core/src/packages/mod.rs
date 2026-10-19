@@ -5,6 +5,7 @@
 //! Windows has no package manager to ask; its uninstaller reads the
 //! registry instead (the rest of this crate).
 
+mod extra;
 mod leftovers;
 mod linux;
 mod macos;
@@ -75,6 +76,15 @@ pub struct Package {
     pub bundle_id: Option<String>,
     /// Flatpak installations: `user` or `system`.
     pub installation: Option<String>,
+    /// A cask's own list of what to trash when it is zapped (`~/Library/…`).
+    #[serde(skip)]
+    pub zap: Vec<String>,
+    /// The file names (lower case) of the app bundles a cask installs.
+    #[serde(skip)]
+    pub app_files: Vec<String>,
+    /// Other names it goes by: a cask's app's own name.
+    #[serde(skip)]
+    pub known_as: Vec<String>,
 }
 
 impl Package {
@@ -89,6 +99,9 @@ impl Package {
             app: false,
             bundle_id: None,
             installation: None,
+            zap: Vec::new(),
+            app_files: Vec::new(),
+            known_as: Vec::new(),
         }
     }
 

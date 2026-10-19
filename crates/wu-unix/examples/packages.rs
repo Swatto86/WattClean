@@ -51,11 +51,10 @@ fn main() {
     }
     let (everything, _) = list(&machine, true);
     for leftover in find_leftovers(&machine, package, &everything) {
-        println!(
-            "leftover: {} ({} bytes)",
-            leftover.path.display(),
-            leftover.size
-        );
+        let size = leftover
+            .size
+            .map_or_else(|| "size unknown".to_string(), |s| format!("{s} bytes"));
+        println!("leftover: {} ({size})", leftover.path.display());
     }
 }
 

@@ -122,7 +122,19 @@ fn on_event(handle: &tauri::AppHandle, event: tauri::RunEvent) {
     }
 }
 
-#[cfg(not(windows))]
+/// Clicking the Dock icon (or opening the app again) shows the window that
+/// closing hid. macOS's own Quit (Cmd+Q, the Dock's menu, logging out)
+/// skips the close and tray paths, so Exit waits for a running job.
+#[cfg(target_os = "macos")]
+fn on_event(handle: &tauri::AppHandle, event: tauri::RunEvent) {
+    match event {
+        tauri::RunEvent::Reopen { .. } => tray::show_main(handle),
+        tauri::RunEvent::Exit => shell::wait_until_idle(handle),
+        _ => {}
+    }
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
 fn on_event(_handle: &tauri::AppHandle, _event: tauri::RunEvent) {}
 
 /// Find the data folder, open each module's machine and state, start the

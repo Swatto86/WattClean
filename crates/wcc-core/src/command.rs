@@ -86,13 +86,53 @@ impl Planner<'_> {
                 return Ok(None);
             }
         }
+        // The dry run only refines the preview: when it fails, the measured
+        // size stands.
+        let estimate = task.estimate.and_then(|dry_run| {
+            let args: Vec<String> = dry_run.iter().map(ToString::to_string).collect();
+            self.system
+                .run_program(&program, &args, false)
+                .ok()
+                .filter(|output| output.success)
+                .and_then(|output| freed_estimate(&output.stdout))
+        });
         Ok(Some(Op::Command {
             task,
             program,
             listed,
             size: measure(self.system, task.measure),
+            estimate,
         }))
     }
+}
+
+/// Bytes a dry run says it would free, from Homebrew's closing line
+/// `==> This operation would free approximately 390.1MB of disk space.`
+/// (decimal units, as Homebrew prints them).
+pub(crate) fn freed_estimate(stdout: &str) -> Option<u64> {
+    let line = stdout
+        .lines()
+        .rev()
+        .find(|line| line.contains("would free approximately "))?;
+    let amount = line
+        .split("would free approximately ")
+        .nth(1)?
+        .split_whitespace()
+        .next()?;
+    let split = amount
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(amount.len());
+    let (number, unit) = amount.split_at(split);
+    let number: f64 = number.parse().ok()?;
+    let factor = match unit {
+        "B" => 1.0,
+        "KB" => 1e3,
+        "MB" => 1e6,
+        "GB" => 1e9,
+        "TB" => 1e12,
+        _ => return None,
+    };
+    format!("{:.0}", number * factor).parse().ok()
 }
 
 impl Executor<'_> {
@@ -135,5 +175,30 @@ impl Executor<'_> {
             }
         }
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::freed_estimate;
+
+    #[test]
+    fn homebrews_own_estimate_is_read_in_decimal_units() {
+        let out = "Would remove: /Users/t/Library/Caches/Homebrew/downloads/x--claude.zip (390.1MB)\n\
+                   ==> This operation would free approximately 390.1MB of disk space.\n";
+        assert_eq!(freed_estimate(out), Some(390_100_000));
+        assert_eq!(
+            freed_estimate("==> This operation would free approximately 14.2KB of disk space."),
+            Some(14_200)
+        );
+        assert_eq!(
+            freed_estimate("==> This operation would free approximately 55B of disk space."),
+            Some(55)
+        );
+        assert_eq!(freed_estimate("Nothing to clean"), None);
+        assert_eq!(
+            freed_estimate("would free approximately lots of disk space"),
+            None
+        );
     }
 }

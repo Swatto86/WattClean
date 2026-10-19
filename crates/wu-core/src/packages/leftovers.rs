@@ -1,22 +1,28 @@
 //! What a removed program left in the home folder: its settings, caches and
 //! data, found by the names it goes by in the folders programs keep them
-//! in. Only exact names are matched, never parts of names; generic folder
-//! names and names another installed program goes by are never offered.
-//! Nothing is pre-selected, and what is chosen goes to the Trash.
+//! in. Names are matched whole, never as parts, except that on macOS an
+//! entry named after the app's bundle identifier plus a suffix
+//! (`com.vendor.App.ShipIt`) is the app's unless a longer installed
+//! identifier owns it. Generic folder names, names another installed
+//! program goes by, and the folders of a command-line tool still installed
+//! (Apple's git, Claude Code's `~/.claude`) are never offered. Nothing is
+//! pre-selected, and what is chosen goes to the Trash. `extra` adds a
+//! cask's own zap list and the folder a lone app came in.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use super::{Manager, Package, PackageSystem, tree_size};
+use super::{Manager, Package, PackageSystem, extra, tree_size};
 
 /// A file or folder a removed program left behind.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Leftover {
     pub path: PathBuf,
-    pub size: u64,
+    /// `None` when macOS will not let WattClean look inside.
+    pub size: Option<u64>,
     pub folder: bool,
 }
 
@@ -80,8 +86,9 @@ const SUFFIXES: &[&str] = &[
 /// The lower-case names a package's leftovers may carry.
 pub fn keys_for(package: &Package) -> Vec<String> {
     let mut keys: Vec<String> = Vec::new();
-    let mut add = |key: String| {
-        if key.len() >= 3 && !GENERIC.contains(&key.as_str()) && !keys.contains(&key) {
+    // A package manager's own id may be two letters (`gh`); a name is three.
+    let mut add = |key: String, shortest: usize| {
+        if key.len() >= shortest && !GENERIC.contains(&key.as_str()) && !keys.contains(&key) {
             keys.push(key);
         }
     };
@@ -89,24 +96,26 @@ pub fn keys_for(package: &Package) -> Vec<String> {
     match package.manager {
         Manager::AppImage | Manager::MacApp => {}
         Manager::Flatpak => {
-            add(id.clone());
-            add(id.rsplit('.').next().unwrap_or(&id).to_string());
+            add(id.clone(), 3);
+            add(id.rsplit('.').next().unwrap_or(&id).to_string(), 3);
         }
         _ => {
             for suffix in SUFFIXES {
                 if let Some(base) = id.strip_suffix(suffix) {
-                    add(base.to_string());
+                    add(base.to_string(), 3);
                 }
             }
-            add(id.clone());
+            add(id.clone(), 2);
         }
     }
-    let name = package.name.trim().to_lowercase();
-    add(name.replace(' ', "-"));
-    add(name.replace(' ', ""));
-    add(name.clone());
+    for name in std::iter::once(&package.name).chain(&package.known_as) {
+        let name = name.trim().to_lowercase();
+        add(name.replace(' ', "-"), 3);
+        add(name.replace(' ', ""), 3);
+        add(name.clone(), 3);
+    }
     if let Some(bundle) = &package.bundle_id {
-        add(bundle.to_lowercase());
+        add(bundle.to_lowercase(), 3);
     }
     keys
 }
@@ -126,6 +135,10 @@ const LINUX: &[(&str, &[&str])] = &[
 ];
 
 const MACOS: &[(&str, &[&str])] = &[
+    (".config", &["{}"]),
+    (".local/share", &["{}"]),
+    (".local/state", &["{}"]),
+    (".cache", &["{}"]),
     ("Library/Application Support", &["{}"]),
     ("Library/Caches", &["{}"]),
     ("Library/Preferences", &["{}.plist"]),
@@ -137,8 +150,20 @@ const MACOS: &[(&str, &[&str])] = &[
     ("Library/WebKit", &["{}"]),
     ("Library/Cookies", &["{}.binarycookies"]),
     ("Library/LaunchAgents", &["{}.plist"]),
-    ("Library/Application Scripts", &["{}"]),
+    ("Library/Application Scripts", &["{}", "*.{}", "group.{}"]),
     ("", &[".{}"]),
+];
+
+/// Where command-line tools keep their files: never offered while a
+/// program of that name is still installed.
+const TOOL_FOLDERS: &[&str] = &["", ".config", ".local/share", ".local/state", ".cache"];
+
+/// Where macOS apps keep entries named after their bundle identifier plus a
+/// suffix (`.ShipIt` updates, `.FinderSyncExt` extensions).
+const SUFFIXED: &[&str] = &[
+    "Library/Caches",
+    "Library/Containers",
+    "Library/Application Scripts",
 ];
 
 /// Whether an entry's name (lower case) is a key in one of the forms.
@@ -160,155 +185,112 @@ pub fn find_leftovers(
     let Some(home) = system.home() else {
         return Vec::new();
     };
-    let keys = keys_for(removed);
-    let theirs: HashSet<String> = installed
+    let others: Vec<&Package> = installed
         .iter()
         .filter(|other| other.key() != removed.key())
-        .flat_map(keys_for)
         .collect();
-    let mine: Vec<String> = keys
+    // Another copy of the same app (one bundle identifier) shares every
+    // file the app keeps, whatever names the copies go by.
+    if let Some(id) = &removed.bundle_id
+        && others.iter().any(|other| {
+            other
+                .bundle_id
+                .as_ref()
+                .is_some_and(|o| o.eq_ignore_ascii_case(id))
+        })
+    {
+        return Vec::new();
+    }
+    let theirs: HashSet<String> = others.iter().flat_map(|other| keys_for(other)).collect();
+    let mine: Vec<String> = keys_for(removed)
         .into_iter()
         .filter(|key| !theirs.contains(key))
         .collect();
     let theirs: Vec<String> = theirs.into_iter().collect();
-    if mine.is_empty() {
-        return Vec::new();
-    }
+    let tools: Vec<String> = mine
+        .iter()
+        .filter(|key| system.find_program(key).is_none())
+        .cloned()
+        .collect();
+    // `~/.name` is a command-line tool's: an app's name or a cask's token is
+    // shared with other tools, and apps keep their files elsewhere.
+    let gui = matches!(
+        removed.manager,
+        Manager::MacApp
+            | Manager::HomebrewCask
+            | Manager::Flatpak
+            | Manager::Snap
+            | Manager::AppImage
+    );
+    let bundle = removed
+        .bundle_id
+        .as_deref()
+        .map(str::to_lowercase)
+        .filter(|id| id.matches('.').count() >= 2);
+    let other_bundles: Vec<String> = others
+        .iter()
+        .filter_map(|other| other.bundle_id.as_deref())
+        .map(str::to_lowercase)
+        .collect();
     let places = if system.is_macos() { MACOS } else { LINUX };
-    let mut out = Vec::new();
+    let mut out = extra::leftovers(system, &home, removed, &others);
     for (folder, forms) in places {
-        let folder = if folder.is_empty() {
+        if folder.is_empty() && gui {
+            continue;
+        }
+        let keys = if TOOL_FOLDERS.contains(folder) {
+            &tools
+        } else {
+            &mine
+        };
+        let suffixed = bundle.as_deref().filter(|_| SUFFIXED.contains(folder));
+        if keys.is_empty() && suffixed.is_none() {
+            continue;
+        }
+        let dir = if folder.is_empty() {
             home.clone()
         } else {
             home.join(folder)
         };
-        let Ok(entries) = std::fs::read_dir(&folder) else {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_lowercase();
-            if !named(&name, forms, &mine) || named(&name, forms, &theirs) {
-                continue;
+            let by_name = named(&name, forms, keys) && !named(&name, forms, &theirs);
+            let by_bundle = suffixed.is_some_and(|id| owns(id, &name, &other_bundles));
+            if by_name || by_bundle {
+                out.push(leftover(&entry.path()));
             }
-            out.push(leftover(&entry.path()));
         }
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
+    out.dedup_by(|a, b| a.path == b.path);
     out
 }
 
-fn leftover(path: &Path) -> Leftover {
+/// `entry` is `<id>.<something>`, and no other installed app has a longer
+/// identifier that it belongs to (Chrome Canary's `com.google.chrome.canary`
+/// when Chrome is removed).
+fn owns(id: &str, entry: &str, other_ids: &[String]) -> bool {
+    entry.len() > id.len() + 1
+        && entry.starts_with(id)
+        && entry.as_bytes().get(id.len()) == Some(&b'.')
+        && !other_ids.iter().any(|other| {
+            other.len() > id.len() && (entry == other || entry.starts_with(&format!("{other}.")))
+        })
+}
+
+pub(super) fn leftover(path: &Path) -> Leftover {
     let folder = std::fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir());
+    let readable = !folder || std::fs::read_dir(path).is_ok();
     Leftover {
         path: path.to_path_buf(),
-        size: tree_size(path),
+        size: readable.then(|| tree_size(path)),
         folder,
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::packages::testing::Machine;
-
-    #[test]
-    fn keys_come_from_the_id_the_name_and_the_bundle() {
-        let mut chrome = Package::new(Manager::Apt, "google-chrome-stable", "Google Chrome");
-        chrome.app = true;
-        let keys = keys_for(&chrome);
-        assert!(keys.contains(&"google-chrome".to_string()), "{keys:?}");
-        assert!(keys.contains(&"googlechrome".to_string()));
-        let flatpak = Package::new(
-            Manager::Flatpak,
-            "org.gimp.GIMP",
-            "GNU Image Manipulation Program",
-        );
-        assert!(keys_for(&flatpak).contains(&"org.gimp.gimp".to_string()));
-        let generic = Package::new(Manager::Apt, "fonts", "Fonts");
-        assert!(keys_for(&generic).is_empty());
-    }
-
-    #[test]
-    fn leftovers_are_found_by_exact_name_and_never_another_programs() {
-        let machine = Machine::new(&[]);
-        let home = machine.home().unwrap();
-        for folder in [
-            ".config/vlc",
-            ".cache/vlc",
-            ".local/share/vlc",
-            ".vlc",
-            ".config/vlc-extras",
-            ".config/mpv",
-            ".config/firefox",
-            ".mozilla",
-            ".var/app/org.videolan.VLC",
-        ] {
-            std::fs::create_dir_all(home.join(folder)).unwrap();
-        }
-        std::fs::write(home.join(".config/vlc/vlcrc"), b"settings").unwrap();
-        std::fs::create_dir_all(home.join(".local/share/applications")).unwrap();
-        std::fs::write(home.join(".local/share/applications/vlc.desktop"), b"").unwrap();
-
-        let vlc = Package::new(Manager::Apt, "vlc", "VLC media player");
-        let installed = vec![
-            vlc.clone(),
-            Package::new(Manager::Snap, "firefox", "firefox"),
-        ];
-        let found = find_leftovers(&machine, &vlc, &installed);
-        let names: Vec<String> = found
-            .iter()
-            .map(|l| {
-                l.path
-                    .strip_prefix(&home)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/")
-            })
-            .collect();
-        assert_eq!(
-            names,
-            [
-                ".cache/vlc",
-                ".config/vlc",
-                ".local/share/applications/vlc.desktop",
-                ".local/share/vlc",
-                ".vlc"
-            ]
-        );
-        assert!(found.iter().any(|l| l.size == 8 && l.folder));
-
-        // Firefox from APT goes while the snap stays: its folders are the snap's too.
-        let deb = Package::new(Manager::Apt, "firefox", "Firefox");
-        let mut both = installed.clone();
-        both.push(deb.clone());
-        assert!(find_leftovers(&machine, &deb, &both).is_empty());
-    }
-
-    #[test]
-    fn macos_leftovers_follow_the_bundle_identifier() {
-        let machine = Machine::macos();
-        let home = machine.home().unwrap();
-        let library = home.join("Library");
-        for folder in [
-            "Application Support/Slack",
-            "Caches/com.tinyspeck.slackmacgap",
-            "Containers/com.tinyspeck.slackmacgap",
-            "Group Containers/BQR82RBBHL.com.tinyspeck.slackmacgap",
-            "Saved Application State/com.tinyspeck.slackmacgap.savedState",
-            "Caches/com.apple.Safari",
-        ] {
-            std::fs::create_dir_all(library.join(folder)).unwrap();
-        }
-        std::fs::create_dir_all(library.join("Preferences")).unwrap();
-        std::fs::write(
-            library.join("Preferences/com.tinyspeck.slackmacgap.plist"),
-            b"p",
-        )
-        .unwrap();
-        let mut slack = Package::new(Manager::MacApp, "/Applications/Slack.app", "Slack");
-        slack.bundle_id = Some("com.tinyspeck.slackmacgap".into());
-        let found = find_leftovers(&machine, &slack, std::slice::from_ref(&slack));
-        assert_eq!(found.len(), 6, "{found:#?}");
-        assert!(!found.iter().any(|l| l.path.ends_with("com.apple.Safari")));
-    }
-}
+#[path = "leftovers_tests.rs"]
+mod tests;

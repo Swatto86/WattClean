@@ -5,7 +5,9 @@
 # than other cleaners all the same.
 #
 # A `*` in an exclusion spans folders, so '%HOME%/*/node_modules' skips
-# every node_modules folder at any depth.
+# every node_modules folder at any depth. Document packages (the Photos and
+# Music libraries, Final Cut and Logic projects, disk images) and app
+# bundles are files to their owners: no walk goes inside them.
 
 [[cleaner]]
 id = "deep_scan"
@@ -21,17 +23,19 @@ warning = "Searches your whole home folder, which can take a while. Check the pr
 actions = [
   { op = "delete", search = "walk.files", path = '%HOME%', regex = '(\.bak|~)$', exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
     '%HOME%/*/target',
   ] },
 ]
 
 [[cleaner.option]]
 id = "thumbs_db"
-name = "Thumbs.db and desktop.ini"
-description = "Files Windows leaves in folders on shared and external drives"
+name = "Thumbs.db"
+description = "Thumbnail caches Windows leaves in folders on shared and external drives"
 actions = [
   { op = "delete", search = "walk.files", path = '%HOME%', regex = '^(Thumbs\.db|ehthumbs\.db)$', exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
     '%HOME%/*/target',
   ] },
 ]
@@ -43,6 +47,7 @@ description = "Folder settings and resource forks macOS leaves (Finder makes the
 actions = [
   { op = "delete", search = "walk.files", path = '%HOME%', regex = '^(\.DS_Store|\._.+)$', exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
     '%HOME%/*/target',
   ] },
 ]
@@ -55,6 +60,7 @@ warning = "Searches your whole home folder, which can take a while."
 actions = [
   { op = "delete", search = "walk.files", path = '%HOME%', regex = '\.(tmp|temp)$', older_than_days = 7, exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
     '%HOME%/*/target',
   ] },
 ]
@@ -66,6 +72,7 @@ description = "Lock files LibreOffice and Office leave beside documents after a 
 actions = [
   { op = "delete", search = "walk.files", path = '%HOME%', regex = '^(\.~lock\..*#|~\$.*)$', older_than_days = 1, exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
     '%HOME%/*/target',
   ] },
 ]

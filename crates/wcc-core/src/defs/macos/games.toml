@@ -1,0 +1,86 @@
+# Games on macOS: Steam, Battle.net and World of Warcraft.
+
+[[cleaner]]
+id = "steam"
+name = "Steam"
+description = "Game launcher"
+category = "games"
+detect = ['%CONFIG%/Steam']
+running = ["steam_osx", "steam helper"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Web cache"
+description = "The store and community pages Steam kept"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Steam/appcache/httpcache' },
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Steam/config/htmlcache' },
+]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs and crash dumps"
+description = "Steam's log files and crash dumps"
+default = true
+actions = [
+  { op = "delete", search = "walk.files", path = '%CONFIG%/Steam/logs' },
+  { op = "delete", search = "walk.files", path = '%CONFIG%/Steam/dumps' },
+]
+
+[[cleaner]]
+id = "battlenet"
+name = "Battle.net"
+description = "Blizzard's game launcher"
+category = "games"
+detect = ['%CONFIG%/Battle.net']
+running = ["battle.net"]
+
+# Versions holds the launcher's own copies and CachedData.db its state:
+# neither is listed.
+[[cleaner.option]]
+id = "cache"
+name = "Cache"
+description = "The launcher's own and web caches"
+default = true
+actions = [
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Battle.net/Cache' },
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Battle.net/BrowserCaches' },
+]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "The launcher's log files"
+default = true
+actions = [{ op = "delete", search = "walk.files", path = '%CONFIG%/Battle.net/Logs' }]
+
+[[cleaner]]
+id = "wow"
+name = "World of Warcraft"
+description = "Retail, Classic and Classic Era"
+category = "games"
+detect = ['/Applications/World of Warcraft']
+running = ["world of warcraft", "world of warcraft classic", "world of warcraft launcher"]
+
+# WTF (settings) and Interface (add-ons) are never listed.
+[[cleaner.option]]
+id = "cache"
+name = "Game cache"
+description = "Item, quest and creature data the game downloads again"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '/Applications/World of Warcraft/_*_/Cache' }]
+
+[[cleaner.option]]
+id = "errors"
+name = "Error reports"
+description = "Crash reports the game wrote"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '/Applications/World of Warcraft/_*_/Errors' }]
+
+[[cleaner.option]]
+id = "logs"
+name = "Logs"
+description = "Game logs, including combat logs"
+warning = "Combat logs you meant to upload to a log site are deleted too."
+actions = [{ op = "delete", search = "walk.files", path = '/Applications/World of Warcraft/_*_/Logs' }]

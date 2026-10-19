@@ -26,20 +26,35 @@ pub fn list(system: &dyn PackageSystem) -> (Vec<Package>, Vec<String>) {
         }
     }
     // An app a cask installed is removed through Homebrew, so it is listed
-    // once, as the cask, which takes the app's bundle identifier.
+    // once, as the cask, which takes the app's bundle identifier, version
+    // and names.
     let mut apps = applications(system);
     let mut taken = HashSet::new();
     for cask in packages
         .iter_mut()
         .filter(|p| p.manager == Manager::HomebrewCask)
     {
-        let app_file = cask.bundle_id.take();
-        if let Some(app) = apps
+        let found = apps
             .iter()
-            .find(|app| Some(bundle_file(&app.id)) == app_file)
-        {
-            cask.bundle_id.clone_from(&app.bundle_id);
-            taken.insert(app.id.clone());
+            .find(|app| cask.app_files.contains(&bundle_file(&app.id)));
+        match found {
+            Some(app) => {
+                cask.bundle_id.clone_from(&app.bundle_id);
+                if app.version.is_some() {
+                    cask.version.clone_from(&app.version);
+                }
+                cask.size = app.size;
+                cask.known_as.push(app.name.clone());
+                if let Some(stem) = Path::new(&app.id).file_stem() {
+                    cask.known_as.push(stem.to_string_lossy().into_owned());
+                }
+                taken.insert(app.id.clone());
+            }
+            None if !cask.app_files.is_empty() => {
+                cask.summary =
+                    Some("App not found: only Homebrew's record of it remains".to_string());
+            }
+            None => {}
         }
     }
     apps.retain(|app| !taken.contains(&app.id));
@@ -108,12 +123,8 @@ pub fn homebrew(system: &dyn PackageSystem) -> Option<Vec<Package>> {
                 .map(|cellar| system.at(cellar).join(&package.id))
                 .find(|folder| folder.is_dir())
                 .map(|folder| tree_size(&folder)),
-            _ => package
-                .bundle_id
-                .as_ref()
-                .map(|app| system.at("/Applications").join(app))
-                .filter(|app| app.exists())
-                .map(|app| tree_size(&app)),
+            // A cask's size is its app's, set when the app is matched.
+            _ => None,
         };
     }
     Some(packages)
@@ -138,18 +149,78 @@ pub(crate) fn parse_brew(text: &str) -> Option<Vec<Package>> {
             .cloned()
             .unwrap_or_else(|| cask.token.clone());
         let mut package = Package::new(Manager::HomebrewCask, &cask.token, &name);
-        package.version = cask.installed;
+        // Homebrew writes `version,build`; the build is not a version.
+        package.version = cask
+            .installed
+            .map(|v| v.split(',').next().unwrap_or_default().to_string())
+            .filter(|v| !v.is_empty());
         package.summary = cask.desc;
-        package.app = true;
-        package.bundle_id = cask
+        // Fonts, plugins and command-line tools are not applications.
+        package.app = cask
             .artifacts
             .iter()
-            .filter_map(|artifact| artifact.get("app")?.as_array()?.first()?.as_str())
-            .map(str::to_lowercase)
-            .next();
+            .any(|a| LAUNCHABLE.iter().any(|kind| a.get(*kind).is_some()));
+        package.app_files = app_files(&cask.artifacts);
+        package.zap = zap_trash(&cask.artifacts);
         out.push(package);
     }
     Some(out)
+}
+
+/// Cask artifacts that put something people start on the Mac.
+const LAUNCHABLE: [&str; 4] = ["app", "suite", "pkg", "installer"];
+
+/// The app bundles a cask installs, by file name in lower case: each `app`
+/// artifact (its `target` when it renames the app), else the `.app` its
+/// uninstall step deletes (casks that run an installer).
+fn app_files(artifacts: &[serde_json::Value]) -> Vec<String> {
+    let file = |path: &str| {
+        let name = path.rsplit('/').next().unwrap_or(path).to_lowercase();
+        name.ends_with(".app").then_some(name)
+    };
+    let mut out: Vec<String> = artifacts
+        .iter()
+        .filter_map(|artifact| {
+            let target = artifact.get("target").and_then(serde_json::Value::as_str);
+            let app = artifact.get("app")?.as_array()?.first()?.as_str();
+            target.or(app).and_then(file)
+        })
+        .collect();
+    if out.is_empty() {
+        out = artifacts
+            .iter()
+            .filter_map(|artifact| artifact.get("uninstall")?.as_array())
+            .flatten()
+            .filter_map(|step| step.get("delete"))
+            .flat_map(strings)
+            .filter_map(|path| file(&path))
+            .collect();
+    }
+    out
+}
+
+/// What a cask's zap step trashes; its other steps (rmdir of shared vendor
+/// folders, scripts) are never taken.
+fn zap_trash(artifacts: &[serde_json::Value]) -> Vec<String> {
+    artifacts
+        .iter()
+        .filter_map(|artifact| artifact.get("zap")?.as_array())
+        .flatten()
+        .filter_map(|step| step.get("trash"))
+        .flat_map(strings)
+        .collect()
+}
+
+/// A JSON string or array of strings.
+fn strings(value: &serde_json::Value) -> Vec<String> {
+    match value {
+        serde_json::Value::String(text) => vec![text.clone()],
+        serde_json::Value::Array(items) => items
+            .iter()
+            .filter_map(|item| item.as_str().map(str::to_string))
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// `port -q installed requested`: `  name @1.2.3_0+variant (active)`.
@@ -239,12 +310,43 @@ mod tests {
         assert!(packages[0].app && !packages[1].app);
         assert_eq!(packages[0].version.as_deref(), Some("1.24.5"));
         let firefox = &packages[2];
+        assert_eq!(firefox.app_files, ["firefox.app"]);
         assert_eq!(
             (firefox.manager, firefox.name.as_str()),
             (Manager::HomebrewCask, "Mozilla Firefox")
         );
-        assert_eq!(firefox.bundle_id.as_deref(), Some("firefox.app"));
         assert!(parse_brew("not json").is_none());
+    }
+
+    #[test]
+    fn casks_know_their_apps_versions_and_zap_lists() {
+        let json = r#"{"casks":[
+          {"token":"battle-net","name":["Blizzard Battle.net"],"installed":"1.19.3.3219",
+           "artifacts":[{"installer":[{"manual":"Battle.net-Setup.app"}]},
+             {"uninstall":[{"delete":"/Applications/Battle.net.app"}]},
+             {"zap":[{"trash":["~/Library/Application Support/Battle.net","~/Library/Caches/com.blizzard.Battle.net"],"rmdir":"~/Blizzard"}]}]},
+          {"token":"claude","name":["Claude"],"installed":"2.42304.2,af65c0e3",
+           "artifacts":[{"app":["Claude.app"],"target":"/Applications/Claude.app"},{"zap":[{"trash":"~/Library/Caches/com.anthropic.claudefordesktop.ShipIt"}]}]},
+          {"token":"font-x","name":["X Font"],"installed":"3.5.1","artifacts":[{"font":["X.ttf"]}]},
+          {"token":"tool","name":["Tool"],"installed":"1","artifacts":[{"pkg":["Tool.pkg"]},{"uninstall":[{"delete":["/Applications/Tool.app","/usr/local/bin/tool"]}]}]}]}"#;
+        let casks = parse_brew(json).unwrap();
+        let battle = &casks[0];
+        assert!(battle.app);
+        assert_eq!(battle.app_files, ["battle.net.app"]);
+        assert_eq!(
+            battle.zap.len(),
+            2,
+            "rmdir is never taken: {:?}",
+            battle.zap
+        );
+        assert_eq!(casks[1].version.as_deref(), Some("2.42304.2"));
+        assert_eq!(casks[1].app_files, ["claude.app"]);
+        assert_eq!(
+            casks[1].zap,
+            ["~/Library/Caches/com.anthropic.claudefordesktop.ShipIt"]
+        );
+        assert!(!casks[2].app, "a font is not an application");
+        assert!(casks[3].app && casks[3].app_files == ["tool.app"]);
     }
 
     #[test]

@@ -156,7 +156,16 @@ impl Step<'_> {
             }
             let (ops, problems) = self.planner.plan(action, &mut self.seen);
             for problem in problems {
-                report.push_problem(problem.path.to_string_lossy(), problem.message, false);
+                // Every action under a folder macOS refuses meets the same
+                // refusal: it is said once per option.
+                let path = problem.path.to_string_lossy().into_owned();
+                let said = report
+                    .problems
+                    .iter()
+                    .any(|p| p.path == path && p.message == problem.message);
+                if !said {
+                    report.push_problem(path, problem.message, false);
+                }
             }
             for op in ops {
                 if self.sink.cancelled() {

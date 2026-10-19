@@ -44,7 +44,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/Library/Application Support/Google/Chrome', cache = '%HOME%/Library/Caches/Google/Chrome/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["google chrome"]
 
 [[cleaner]]
@@ -54,7 +54,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/Library/Application Support/Chromium', cache = '%HOME%/Library/Caches/Chromium/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["chromium"]
 
 [[cleaner]]
@@ -64,7 +64,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/Library/Application Support/Microsoft Edge', cache = '%HOME%/Library/Caches/Microsoft Edge/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["microsoft edge"]
 
 [[cleaner]]
@@ -74,7 +74,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/Library/Application Support/BraveSoftware/Brave-Browser', cache = '%HOME%/Library/Caches/BraveSoftware/Brave-Browser/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["brave browser"]
 
 [[cleaner]]
@@ -84,7 +84,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/Library/Application Support/Vivaldi', cache = '%HOME%/Library/Caches/Vivaldi/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["vivaldi"]
 
 [[cleaner]]
@@ -94,7 +94,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/Library/Application Support/com.operasoftware.Opera', profile = '{root}', cache = '%HOME%/Library/Caches/com.operasoftware.Opera' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["opera"]
 
 [[cleaner]]
@@ -104,7 +104,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/Library/Application Support/Arc/User Data', cache = '%HOME%/Library/Caches/Arc/User Data/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["arc"]
 
 [[cleaner]]
@@ -148,3 +148,17 @@ vars = { base = '%HOME%/Library/Thunderbird', cachebase = '%HOME%/Library/Caches
 skip = ["passwords", "session", "downloads", "backups", "telemetry"]
 detect = ['{root}']
 running = ["thunderbird"]
+
+[[cleaner]]
+id = "google_updater"
+name = "Google Updater"
+description = "Keeps Chrome and other Google apps up to date"
+category = "browsers"
+detect = ['%CONFIG%/Google/GoogleUpdater/crx_cache']
+
+[[cleaner.option]]
+id = "downloads"
+name = "Update downloads"
+description = "Installer and extension packages the updater downloaded; it downloads them again when needed"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%CONFIG%/Google/GoogleUpdater/crx_cache' }]

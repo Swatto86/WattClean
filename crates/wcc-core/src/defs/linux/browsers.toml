@@ -1,7 +1,9 @@
 # Web browsers on Linux, on the shared templates (templates.toml). Chromium
 # browsers keep the profile in the config folder and the disk cache in the
 # cache folder; Firefox keeps profiles straight in its folder. Snap and
-# Flatpak builds keep their own copies under ~/snap and ~/.var/app.
+# Flatpak builds keep their own copies under ~/snap and ~/.var/app. A
+# Chromium browser is present when it has a profile ("Local State"): other
+# apps put native-messaging files in the folders of browsers not installed.
 
 [[cleaner]]
 id = "chrome"
@@ -10,7 +12,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%XDG_CONFIG_HOME%/google-chrome', cache = '%XDG_CACHE_HOME%/google-chrome/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["chrome"]
 
 [[cleaner]]
@@ -20,7 +22,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%XDG_CONFIG_HOME%/chromium', cache = '%XDG_CACHE_HOME%/chromium/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["chromium", "chromium-browse"]
 
 [[cleaner]]
@@ -30,7 +32,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/snap/chromium/common/chromium', cache = '%HOME%/snap/chromium/common/.cache/chromium/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["chromium", "chrome"]
 
 [[cleaner]]
@@ -40,7 +42,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/.var/app/org.chromium.Chromium/config/chromium', cache = '%HOME%/.var/app/org.chromium.Chromium/cache/chromium/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["chromium", "chrome"]
 
 [[cleaner]]
@@ -50,7 +52,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%XDG_CONFIG_HOME%/microsoft-edge', cache = '%XDG_CACHE_HOME%/microsoft-edge/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["msedge"]
 
 [[cleaner]]
@@ -60,7 +62,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%XDG_CONFIG_HOME%/BraveSoftware/Brave-Browser', cache = '%XDG_CACHE_HOME%/BraveSoftware/Brave-Browser/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["brave"]
 
 [[cleaner]]
@@ -70,7 +72,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%HOME%/.var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser', cache = '%HOME%/.var/app/com.brave.Browser/cache/BraveSoftware/Brave-Browser/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["brave"]
 
 [[cleaner]]
@@ -80,7 +82,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%XDG_CONFIG_HOME%/vivaldi', cache = '%XDG_CACHE_HOME%/vivaldi/*' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["vivaldi-bin"]
 
 [[cleaner]]
@@ -90,7 +92,7 @@ description = "Web browser"
 category = "browsers"
 template = "chromium"
 vars = { root = '%XDG_CONFIG_HOME%/opera', profile = '{root}', cache = '%XDG_CACHE_HOME%/opera' }
-detect = ['{root}']
+detect = ['{root}/Local State']
 running = ["opera"]
 
 [[cleaner]]

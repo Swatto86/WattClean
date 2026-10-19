@@ -1,8 +1,9 @@
 # macOS itself. Format: see docs/disk-cleaner.md ("Cleaner definitions").
 # Paths take %VARIABLES% (vars::UNIX_VARIABLES) and * ? wildcards. Only
-# what this account owns is cleaned. Some folders (the Trash, Safari's,
-# Mail's) are protected by macOS: WattClean reports them as refused until
-# you give it Full Disk Access in System Settings › Privacy & Security.
+# what this account owns is cleaned. macOS protects some folders (the Trash,
+# Safari's, Mail's, and other apps' data folders such as Chrome's profile):
+# WattClean reports them as not allowed until you give it Full Disk Access
+# in System Settings › Privacy & Security.
 
 [[cleaner]]
 id = "system"
@@ -16,7 +17,7 @@ name = "Temporary files"
 description = "Your temporary folder's files unchanged for two days"
 default = true
 actions = [
-  { op = "delete", search = "walk.all", path = '%TEMP%', older_than_days = 2, exclude = ['%TEMP%/.*', '%TEMP%/wattclean-*'] },
+  { op = "delete", search = "walk.all", path = '%TEMP%', older_than_days = 2, exclude = ['%TEMP%/.*', '%TEMP%/wattclean-*', '%TEMP%/*/TemporaryItems'] },
 ]
 
 [[cleaner.option]]

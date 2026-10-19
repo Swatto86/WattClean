@@ -90,6 +90,12 @@ actions = [
   { op = "delete", search = "walk.all", path = '%HOME%/.npm/_logs' },
 ]
 
+[[cleaner.option]]
+id = "npx"
+name = "npx downloads"
+description = "Packages npx downloaded to run once; it downloads them again when needed"
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/.npm/_npx' }]
+
 [[cleaner]]
 id = "yarn"
 name = "Yarn"
@@ -186,12 +192,22 @@ name = "Package cache"
 description = "Downloaded packages, index caches and unused packages (conda clean --all)"
 actions = [{ op = "command", task = "conda-clean" }]
 
+# The system's own Ruby (macOS ships one) has no gems of yours to clean:
+# shown where the account's gems live (installed for the account, or
+# through rbenv, asdf, mise or rvm, whose `gem` is run first).
 [[cleaner]]
 id = "ruby"
 name = "RubyGems"
 description = "Ruby package manager"
 category = "developer"
-detect_program = ["gem"]
+detect = [
+  '%HOME%/.gem/ruby',
+  '%HOME%/.local/share/gem/ruby',
+  '%HOME%/.rbenv/versions',
+  '%HOME%/.asdf/installs/ruby',
+  '%HOME%/.local/share/mise/installs/ruby',
+  '%HOME%/.rvm/gems',
+]
 
 [[cleaner.option]]
 id = "old_gems"
@@ -199,6 +215,40 @@ name = "Old gem versions"
 description = "Every installed gem version but the newest (gem cleanup)"
 warning = "Projects pinned to an older version must install it again."
 actions = [{ op = "command", task = "gem-cleanup" }]
+
+[[cleaner]]
+id = "codex"
+name = "Codex"
+description = "OpenAI's coding agent"
+category = "developer"
+detect = ['%XDG_CACHE_HOME%/codex-runtimes']
+
+[[cleaner.option]]
+id = "installers"
+name = "Old runtime installers"
+description = "Runtime downloads Codex unpacked while updating, unchanged for a week (the runtime in use stays)"
+actions = [
+  { op = "delete", search = "walk.top", path = '%XDG_CACHE_HOME%/codex-runtimes/codex-runtime-install-*', older_than_days = 7 },
+]
+
+[[cleaner]]
+id = "opencode"
+name = "OpenCode"
+description = "Coding agent"
+category = "developer"
+detect = ['%XDG_CACHE_HOME%/opencode']
+running = ["opencode", "opencode.exe"]
+
+[[cleaner.option]]
+id = "cache"
+name = "Package cache"
+description = "Plugin packages and the models list OpenCode downloads again when it next starts"
+warning = "Quit OpenCode first: it downloads its plugins again at the next start."
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/opencode/packages' },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/opencode/npm' },
+  { op = "delete", path = '%XDG_CACHE_HOME%/opencode/models.json' },
+]
 
 [[cleaner]]
 id = "composer"
@@ -342,6 +392,7 @@ warning = "Each Rust project is compiled from scratch on its next build, which c
 actions = [
   { op = "delete", search = "find.dirs", path = '%HOME%', names = 'target', beside = 'Cargo.toml', exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
   ] },
 ]
 
@@ -353,6 +404,7 @@ warning = "Each .NET project is built from scratch on its next build. Searches y
 actions = [
   { op = "delete", search = "find.dirs", path = '%HOME%', names = 'bin;obj', beside = '*.csproj;*.fsproj;*.vbproj', exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
   ] },
 ]
 
@@ -363,5 +415,6 @@ description = "__pycache__ folders, which Python fills again as it runs"
 actions = [
   { op = "delete", search = "find.dirs", path = '%HOME%', names = '__pycache__', exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
   ] },
 ]

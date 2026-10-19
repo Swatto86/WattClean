@@ -40,6 +40,20 @@ const FOLDERS: &[&str] = &[
     "/Applications/Docker.app/Contents/Resources/bin",
 ];
 
+/// Programs a version manager puts in place of the system's, searched in
+/// `VERSION_MANAGERS` first as in the account's terminal: the account's own
+/// Ruby is the one whose gems are its own, not macOS's in `/usr/bin`. Only
+/// these: those folders belong to the account, so nothing that runs with
+/// administrator rights may be found there.
+const VERSIONED: &[&str] = &["gem"];
+
+const VERSION_MANAGERS: &[&str] = &[
+    "~/.rbenv/shims",
+    "~/.asdf/shims",
+    "~/.local/share/mise/shims",
+    "~/.rvm/wrappers/default",
+];
+
 /// The full path of an executable program called `name`; `None` when none
 /// is installed. `name` is a bare name: anything with a separator is
 /// refused.
@@ -50,8 +64,14 @@ pub fn find(name: &str, home: Option<&Path>) -> Option<PathBuf> {
     let from_path = std::env::var_os("PATH")
         .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
         .unwrap_or_default();
-    FOLDERS
+    let first = if VERSIONED.contains(&name) {
+        VERSION_MANAGERS
+    } else {
+        &[]
+    };
+    first
         .iter()
+        .chain(FOLDERS)
         .filter_map(|folder| match folder.strip_prefix("~/") {
             Some(rest) => home.map(|home| home.join(rest)),
             None => Some(PathBuf::from(folder)),
@@ -156,10 +176,11 @@ fn as_admin(program: &Path, args: &[String]) -> io::Result<Command> {
 }
 
 /// pkexec ends with 126 when the prompt was dismissed and 127 when the
-/// account may not; osascript says "User canceled".
+/// account may not; osascript reports error -128 (worded "User canceled" or
+/// "User cancelled", and translated in other languages).
 fn refused(status: &std::process::ExitStatus, stderr: &str) -> bool {
     if cfg!(target_os = "macos") {
-        !status.success() && stderr.contains("User canceled")
+        !status.success() && osascript_dismissed(stderr)
     } else {
         match status.code() {
             Some(126) => true,
@@ -167,6 +188,13 @@ fn refused(status: &std::process::ExitStatus, stderr: &str) -> bool {
             _ => false,
         }
     }
+}
+
+/// osascript's message ends with the error number, so a command that merely
+/// prints "(-128)" is not taken for a dismissed prompt.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn osascript_dismissed(stderr: &str) -> bool {
+    stderr.trim_end().ends_with("(-128)")
 }
 
 #[cfg(target_os = "macos")]
@@ -210,6 +238,26 @@ mod tests {
         assert!(find("no-such-program-wattclean", None).is_none());
     }
 
+    /// The account's own Ruby is the one whose gems it cleans, not the
+    /// system's in `/usr/bin`; nothing else is taken from a version
+    /// manager's folders, which the account (and any program it runs) can
+    /// write to.
+    #[test]
+    fn only_the_account_rubys_gem_comes_from_a_version_manager() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let shims = home.path().join(".rbenv/shims");
+        std::fs::create_dir_all(&shims).unwrap();
+        for name in ["gem", "sh"] {
+            let shim = shims.join(name);
+            std::fs::write(&shim, "#!/bin/sh\n").unwrap();
+            std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        assert_eq!(find("gem", Some(home.path())), Some(shims.join("gem")));
+        let sh = find("sh", Some(home.path()));
+        assert!(sh.is_some() && sh != Some(shims.join("sh")), "{sh:?}");
+    }
+
     #[test]
     fn a_program_runs_with_its_arguments_unparsed() {
         let sh = find("sh", None).unwrap();
@@ -239,6 +287,22 @@ mod tests {
             quick(&sh, &["-c", "echo hi"], Duration::from_secs(5)).as_deref(),
             Some("hi\n")
         );
+    }
+
+    #[test]
+    fn a_dismissed_password_prompt_is_recognised_in_either_spelling() {
+        assert!(osascript_dismissed(
+            "0:17: execution error: User cancelled. (-128)\n"
+        ));
+        assert!(osascript_dismissed(
+            "0:17: execution error: User canceled. (-128)"
+        ));
+        assert!(!osascript_dismissed(
+            "0:51: execution error: oops (-128) (3)"
+        ));
+        assert!(!osascript_dismissed(
+            "0:26: execution error: The command exited with a non-zero status. (128)"
+        ));
     }
 
     #[test]

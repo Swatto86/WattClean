@@ -142,21 +142,37 @@ pub fn drives() -> Vec<Drive> {
         .collect();
     others.sort();
     for (path, name) in others {
-        out.extend(drive(&path.to_string_lossy(), name, String::new(), true));
+        // Recovery, Preboot and the like are hidden; a network share is not
+        // this Mac's disk; a wipe writes at an external volume's root.
+        let Ok(mount) = sys::mount_info(&path) else {
+            continue;
+        };
+        if mount.hidden || !mount.local || !sys::can_write(&path) {
+            continue;
+        }
+        out.extend(drive(
+            &path.to_string_lossy(),
+            name,
+            mount.file_system.to_uppercase(),
+            true,
+        ));
     }
     out
 }
 
 /// Where a wipe writes on a drive: a folder this account may write to on
 /// that very file system (a memory-backed `/tmp` is a different one), else
-/// the drive's root.
+/// the drive's root. The device is what counts. On Linux the folder must
+/// also lie below the mount point; on macOS the data volume is mounted at
+/// `/System/Volumes/Data` while `/Users`, `/var` and `/tmp` reach it
+/// through firmlinks, so no path holds it.
 pub fn wipe_folder(drive: &Drive, candidates: &[PathBuf]) -> PathBuf {
     let root = Path::new(&drive.root);
     let device = |path: &Path| std::fs::metadata(path).ok().map(|meta| meta.dev());
     let wanted = device(root);
     candidates
         .iter()
-        .filter(|folder| folder.starts_with(root))
+        .filter(|folder| cfg!(target_os = "macos") || folder.starts_with(root))
         .find(|folder| wanted.is_some() && device(folder) == wanted && sys::can_write(folder))
         .cloned()
         .unwrap_or_else(|| root.to_path_buf())
@@ -203,6 +219,28 @@ tmpfs /tmp tmpfs rw 0 0
         let elsewhere = PathBuf::from("/");
         assert_eq!(wipe_folder(&drive, &[elsewhere, inside.clone()]), inside);
         assert_eq!(wipe_folder(&drive, &[]), dir.path());
+    }
+
+    /// macOS: the data volume's folders are not below its mount point.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_wipe_writes_on_the_same_volume_wherever_its_path_points() {
+        let root = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let space = sys::space(root.path()).unwrap();
+        let drive = Drive {
+            root: root.path().to_string_lossy().into_owned(),
+            label: String::new(),
+            file_system: String::new(),
+            free: space.free,
+            total: space.total,
+            removable: false,
+        };
+        let candidate = elsewhere.path().to_path_buf();
+        assert_eq!(
+            wipe_folder(&drive, std::slice::from_ref(&candidate)),
+            candidate
+        );
     }
 
     #[test]

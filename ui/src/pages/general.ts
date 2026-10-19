@@ -5,7 +5,7 @@
 import { api, TEXT_SIZES, THEMES, type ShellSettings } from "../api.ts";
 import type { Context } from "../context.ts";
 import { el, notice } from "../dom.ts";
-import { isWindows, osName } from "../platform.ts";
+import { isWindows, osName, trayName } from "../platform.ts";
 import { ACCENTS } from "../theme.ts";
 
 type Group = (
@@ -149,11 +149,11 @@ export const general = (
         el(
           "span",
           { class: "setting-text" },
-          el("span", { text: "Keep running in the notification area" }),
+          el("span", { text: `Keep running in the ${trayName()}` }),
           note(
             isWindows()
               ? "Closing the window hides it to the icon by the clock, so the Registry Watcher keeps watching. Quit from the icon's menu or below."
-              : "Closing the window hides it to the icon in the menu bar or panel. Quit from the icon's menu or below.",
+              : `Closing the window hides it to the icon in the ${trayName()}. Quit from the icon's menu or below.`,
           ),
         ),
       ),
