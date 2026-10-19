@@ -103,8 +103,8 @@ warning = "Sites forget data they keep locally, such as offline mail, game progr
 actions = [
   { op = "delete", search = "walk.all", path = '{profile}\Local Storage' },
   { op = "delete", search = "walk.all", path = '{profile}\Session Storage' },
-  { op = "delete", search = "walk.all", path = '{profile}\IndexedDB' },
-  { op = "delete", search = "walk.all", path = '{profile}\databases' },
+  { op = "delete", search = "walk.all", path = '{profile}\IndexedDB', exclude = ['{profile}\IndexedDB\chrome-extension_*'] },
+  { op = "delete", search = "walk.all", path = '{profile}\databases', exclude = ['{profile}\databases\chrome-extension_*'] },
   { op = "delete", search = "walk.all", path = '{profile}\File System' },
 ]
 
@@ -213,7 +213,7 @@ name = "Site storage"
 description = "Data sites keep on your PC: local storage and IndexedDB"
 warning = "Sites forget data they keep locally, such as offline mail, game progress and settings."
 actions = [
-  { op = "delete", search = "walk.all", path = '{root}\*\storage\default' },
+  { op = "delete", search = "walk.all", path = '{root}\*\storage\default', exclude = ['{root}\*\storage\default\moz-extension+++*'] },
   { op = "delete", search = "walk.all", path = '{root}\*\storage\temporary' },
   { op = "delete", search = "glob", path = '{root}\*\webappsstore.sqlite*', kind = "file" },
 ]

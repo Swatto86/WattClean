@@ -41,7 +41,9 @@ pub fn un_save_settings(state: App<'_>, settings: Settings) -> CommandResult<()>
 pub async fn un_list_installed(state: App<'_>) -> CommandResult<Vec<Program>> {
     let app = Arc::clone(&state);
     blocking(move || {
-        let settings = Settings::load(&app.data_dir)?;
+        // A damaged settings file was reported at start; the list still
+        // shows, with the defaults the page said it would use.
+        let settings = Settings::load(&app.data_dir).unwrap_or_default();
         Ok(list_programs(
             app.system.as_ref(),
             settings.show_system_components,
@@ -82,8 +84,8 @@ pub async fn un_begin_forced(
     let app = Arc::clone(&state);
     blocking(move || {
         let system = app.system.as_ref();
-        let folder = forced_folder(&folder)?;
         let folders = Folders::load(system)?;
+        let folder = forced_folder(&folder, &folders)?;
         let programs = list_programs(system, true);
         // A program still listed is the target itself: its entry and folder
         // are what is being removed, not another program's to protect.
@@ -162,7 +164,11 @@ pub async fn un_remove_leftovers(
     }
     let app = Arc::clone(&state);
     let session = state.session(session)?;
-    blocking(move || session.remove(&app, &ids)).await
+    blocking(move || {
+        let _removing = app.begin_removal();
+        session.remove(&app, &ids)
+    })
+    .await
 }
 
 /// Close an uninstall, recording it if its uninstaller ran.
@@ -190,6 +196,7 @@ pub struct RestoreView {
 pub async fn un_restore_backup(state: App<'_>, id: String) -> CommandResult<RestoreView> {
     let app = Arc::clone(&state);
     blocking(move || {
+        let _removing = app.begin_removal();
         let restored = backup::restore(app.system.as_ref(), &app.backups_dir(), &id, now());
         crate::uninstall::session::release_hives(app.system.as_ref());
         let RestoreReport { restored, failed } = restored?;

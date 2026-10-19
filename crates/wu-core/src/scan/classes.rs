@@ -202,35 +202,73 @@ fn shell_extensions(context: &Context<'_>, found: &mut Found, classes: &[String]
     }
 }
 
+/// Whose file a type library's registration names.
+#[derive(PartialEq)]
+enum Owner {
+    Ours,
+    Theirs,
+    /// Nothing registered, or a file that is already gone.
+    Nobody,
+}
+
 fn type_libraries(
     identity: &Identity,
     context: &Context<'_>,
     found: &mut Found,
     typelib: &RegPath,
 ) {
+    let reason = "Type library stored in its files";
     for name in subkeys_or_empty(context.system, typelib) {
         let library = typelib.child(&name);
-        let versions = subkeys_or_empty(context.system, &library);
-        let ours = versions.iter().any(|version| {
-            let version = library.child(version);
-            subkeys_or_empty(context.system, &version)
-                .iter()
-                .any(|locale| {
-                    ["win32", "win64"].into_iter().any(|arch| {
-                        identity
-                            .references(&default_text(context, &version.child(locale).child(arch)))
-                    })
-                })
-        });
-        if ours {
-            found.key(
-                context,
-                library,
-                "Type library stored in its files",
-                Confidence::High,
-            );
+        // Each version with its locales and who owns their files.
+        let mut versions = Vec::new();
+        for version in subkeys_or_empty(context.system, &library) {
+            let version = library.child(&version);
+            let mut locales = Vec::new();
+            for locale in subkeys_or_empty(context.system, &version) {
+                let locale = version.child(&locale);
+                locales.push((owner(identity, context, &locale), locale));
+            }
+            versions.push((version, locales));
+        }
+        let owners = || versions.iter().flat_map(|(_, locales)| locales.iter());
+        if !owners().any(|(owner, _)| *owner == Owner::Ours) {
+            continue;
+        }
+        // The whole GUID only when every version in it is ours (or empty);
+        // otherwise just the versions, or locales, that are, so another
+        // program's registration of the same library survives.
+        if owners().all(|(owner, _)| *owner != Owner::Theirs) {
+            found.key(context, library, reason, Confidence::High);
+            continue;
+        }
+        for (version, locales) in versions {
+            if locales.iter().all(|(owner, _)| *owner != Owner::Theirs) {
+                if locales.iter().any(|(owner, _)| *owner == Owner::Ours) {
+                    found.key(context, version, reason, Confidence::High);
+                }
+                continue;
+            }
+            for (owner, locale) in locales {
+                if owner == Owner::Ours {
+                    found.key(context, locale, reason, Confidence::High);
+                }
+            }
         }
     }
+}
+
+fn owner(identity: &Identity, context: &Context<'_>, locale: &RegPath) -> Owner {
+    let mut owner = Owner::Nobody;
+    for arch in ["win32", "win64"] {
+        let file = default_text(context, &locale.child(arch));
+        if identity.references(&file) {
+            owner = Owner::Ours;
+        } else if crate::paths::embedded_path(&file).is_some_and(|path| path.exists()) {
+            return Owner::Theirs;
+        }
+    }
+    owner
 }
 
 /// Document types (`AcmeWidget.Document`) whose open command or icon is one

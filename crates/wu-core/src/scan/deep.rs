@@ -3,6 +3,7 @@
 //! deeper in the data folders.
 
 use super::files::{file_name, list};
+use super::guard::deep_value_allowed;
 use super::registry::software_roots;
 use super::{Confidence, Context, Found, Mode};
 use crate::identity::{Identity, Match};
@@ -70,6 +71,11 @@ pub(super) fn scan(identity: &Identity, mode: Mode, context: &Context<'_>, found
 }
 
 fn inspect_values(identity: &Identity, context: &Context<'_>, found: &mut Found, key: &RegPath) {
+    // Anywhere in the registry is too wide to trust a path match: Windows'
+    // own settings and other programs' keys are left alone.
+    if !deep_value_allowed(context, key) {
+        return;
+    }
     let Ok(values) = context.system.values(key) else {
         return;
     };

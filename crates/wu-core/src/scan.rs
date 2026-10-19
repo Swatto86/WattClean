@@ -274,6 +274,10 @@ type Step = fn(&Identity, Mode, &Context<'_>, &mut Found);
 
 pub fn scan(identity: &Identity, mode: Mode, context: &Context<'_>) -> ScanReport {
     let mut found = Found::default();
+    // A program installed inside this one's folder (a plugin pack) keeps
+    // its registrations, whatever path they share with ours.
+    let scoped = identity.with_others(context.others);
+    let identity = &scoped;
     for other in context.others {
         if identity.install_dirs.iter().any(|dir| {
             other

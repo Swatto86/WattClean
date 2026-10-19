@@ -48,6 +48,22 @@ export function view(
     );
 }
 
+/**
+ * The ids from `anchor` to `id` inclusive, in list order (Shift+click):
+ * just `id` when the anchor is no longer in the list.
+ */
+export function range(
+  ids: readonly string[],
+  anchor: string | null,
+  id: string,
+): string[] {
+  const to = ids.indexOf(id);
+  if (to < 0) return [];
+  const from = anchor === null ? -1 : ids.indexOf(anchor);
+  if (from < 0) return [id];
+  return ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+}
+
 /** The index to select after an arrow key, clamped to the list. */
 export function step(index: number, length: number, key: string): number {
   if (length === 0) return -1;

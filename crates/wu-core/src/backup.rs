@@ -101,6 +101,8 @@ impl BackupSet {
         let kept = |item: &&Item| match item.state {
             ItemState::Removed => true,
             ItemState::AtRestart { copied } => copied,
+            // Left so by a crash; restore checks whether it was deleted.
+            ItemState::Pending => item.saved.is_some(),
             _ => false,
         };
         let held = |item: &&Item| kept(item) || item.state == ItemState::Restored;

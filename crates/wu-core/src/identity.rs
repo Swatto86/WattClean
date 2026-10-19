@@ -31,6 +31,14 @@ pub struct Identity {
     pub msi_product_code: Option<String>,
     /// Host of the program's website (`acme.example`), for `.url` shortcuts.
     pub website_host: Option<String>,
+    /// The program's website address (host and path, see `site_key`): a
+    /// `.url` shortcut must lie on it, a shared host alone says nothing.
+    #[serde(default)]
+    pub website_url: Option<String>,
+    /// Folders of other installed programs that sit inside this program's
+    /// folders (a plugin pack): what lies in them is theirs, not this one's.
+    #[serde(default)]
+    pub others_dirs: Vec<PathBuf>,
     /// For a bundle installer: its id, its Package Cache folder and its
     /// dependency provider key, read before its uninstaller runs.
     pub bundle: Option<Bundle>,
@@ -46,8 +54,10 @@ pub struct Bundle {
 
 mod hints;
 mod names;
+mod site;
 
 pub use names::{is_generic, name_key, product_name, publisher_key};
+pub use site::{on_site, site_key};
 
 impl Identity {
     /// Build the identity of an installed program, reading its install
@@ -95,6 +105,7 @@ impl Identity {
             identity.add_name(program.registry_key.name());
         }
         identity.website_host = program.website.as_deref().and_then(host_of);
+        identity.website_url = program.website.as_deref().and_then(site::site_key);
         if program.bundle_cache.is_some() || program.bundle_provider.is_some() {
             identity.bundle = Some(Bundle {
                 id: program.registry_key.name().to_owned(),
@@ -124,6 +135,8 @@ impl Identity {
             uninstall_key: None,
             msi_product_code: None,
             website_host: None,
+            website_url: None,
+            others_dirs: Vec::new(),
             bundle: None,
         };
         let product = product_name(display_name);
@@ -146,6 +159,13 @@ impl Identity {
         if let Some(dir) = push_dir(&mut self.install_dirs, dir, folders) {
             self.name_from_dir(&dir, folders);
         }
+    }
+
+    /// True when `dir` could be a program's own install folder: not a shared
+    /// place, a root, Windows' own tree or a folder above one of them.
+    pub fn is_own_folder(dir: &Path, folders: &Folders) -> bool {
+        push_dir(&mut Vec::new(), dir.to_path_buf(), folders).is_some()
+            && !crate::scan::guard::is_shared_folder(folders, dir)
     }
 
     /// `Program Files\Notepad++` names the program anywhere;
@@ -231,11 +251,29 @@ impl Identity {
         let Some(path) = embedded_path(text) else {
             return false;
         };
-        self.install_dirs.iter().any(|dir| is_within(&path, dir))
+        self.owns_path(&path)
     }
 
     pub fn owns_path(&self, path: &Path) -> bool {
         self.install_dirs.iter().any(|dir| is_within(path, dir))
+            && !self.others_dirs.iter().any(|dir| is_within(path, dir))
+    }
+
+    /// This identity for a scan: other installed programs living inside its
+    /// folders are set apart, so no registration of theirs counts as ours.
+    pub fn with_others(&self, others: &[crate::scan::OtherProgram]) -> Self {
+        let mut scoped = self.clone();
+        scoped.others_dirs = others
+            .iter()
+            .flat_map(|other| &other.dirs)
+            .filter(|theirs| {
+                self.install_dirs
+                    .iter()
+                    .any(|ours| is_within(theirs, ours) && !same(theirs, ours))
+            })
+            .cloned()
+            .collect();
+        scoped
     }
 }
 

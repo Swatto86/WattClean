@@ -54,10 +54,49 @@ pub fn expand(pattern: &str, vars: &dyn Vars) -> Vec<String> {
     }
     for r in &mut results {
         r.push_str(rest);
+        // `C:` alone means the current folder on C:, so name the root.
+        if r.len() == 2 && r.ends_with(':') {
+            r.push('\\');
+        }
     }
     results.sort();
     results.dedup();
     results
+}
+
+/// Every expansion of an exclusion, or `None` when it cannot be expanded:
+/// it would silently protect nothing, so the search must be refused.
+/// OneDrive is the exception: it is absent on many PCs, and then there is
+/// nothing to protect.
+pub fn expand_exclusion(pattern: &str, vars: &dyn Vars) -> Option<Vec<String>> {
+    let expansions = expand(pattern, vars);
+    let unknown = expansions.is_empty()
+        && unresolved(pattern, vars)
+            .iter()
+            .any(|name| name != "ONEDRIVE");
+    (!unknown).then_some(expansions)
+}
+
+/// The variables in `pattern` that have no value on this machine.
+fn unresolved(pattern: &str, vars: &dyn Vars) -> Vec<String> {
+    let mut missing = Vec::new();
+    let mut rest = pattern;
+    while let Some(start) = rest.find('%') {
+        let after = &rest[start + 1..];
+        let Some(len) = after.find('%') else {
+            break;
+        };
+        let name = &after[..len];
+        if !name.is_empty() && is_name(name) {
+            if vars.values(name).is_empty() {
+                missing.push(name.to_ascii_uppercase());
+            }
+            rest = &after[len + 1..];
+        } else {
+            rest = after;
+        }
+    }
+    missing
 }
 
 fn is_name(name: &str) -> bool {
@@ -117,6 +156,22 @@ mod tests {
     #[test]
     fn an_unknown_variable_drops_the_pattern() {
         assert!(expand(r"%NoSuchThing%\x", &machine).is_empty());
+    }
+
+    #[test]
+    fn a_bare_drive_becomes_its_root() {
+        let drive = |name: &str| -> Vec<String> {
+            if name.eq_ignore_ascii_case("SystemDrive") {
+                vec!["C:".into()]
+            } else {
+                Vec::new()
+            }
+        };
+        assert_eq!(expand("%SystemDrive%", &drive), vec![r"C:\".to_string()]);
+        assert_eq!(
+            expand(r"%SystemDrive%\Temp", &drive),
+            vec![r"C:\Temp".to_string()]
+        );
     }
 
     #[test]

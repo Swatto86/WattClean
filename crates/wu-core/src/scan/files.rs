@@ -265,8 +265,10 @@ fn shortcut(
         }
         return;
     }
-    if let Some(host) = url_of(file).as_deref().and_then(crate::identity::host_of)
-        && identity.website_host.as_deref() == Some(host.as_str())
+    // The address must lie on the program's own site, path included: a
+    // shared host (github.com) would otherwise offer the person's own links.
+    if let (Some(url), Some(site)) = (url_of(file), identity.website_url.as_deref())
+        && crate::identity::on_site(site, &url)
     {
         found.path(
             context,

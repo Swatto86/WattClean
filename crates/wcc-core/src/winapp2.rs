@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use crate::model::{
     Action, Category, Cleaner, CleanerOption, Detect, FileSpec, Kind, Search, Source, slug,
 };
+use crate::system::split_hive;
 
 /// Detection CCleaner does in code, mapped to the folders it looks for.
 fn special_detect(name: &str) -> Option<&'static str> {
@@ -121,6 +122,46 @@ fn excludes(list: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// `hive\path` in one comparable form: short hive, lower case, no trailing `\`.
+fn reg_key(key: &str) -> String {
+    let key = key.trim().trim_end_matches('\\');
+    match split_hive(key) {
+        Some((hive, "")) => hive.to_ascii_lowercase(),
+        Some((hive, rest)) => format!(r"{hive}\{rest}").to_ascii_lowercase(),
+        None => key.to_ascii_lowercase(),
+    }
+}
+
+/// Registry keys and values an entry says to leave alone: (key, value).
+fn reg_excludes(list: &[String]) -> Vec<(String, Option<String>)> {
+    list.iter()
+        .filter_map(|line| {
+            let mut parts = line.split('|');
+            if !parts.next()?.trim().eq_ignore_ascii_case("REG") {
+                return None;
+            }
+            let key = reg_key(parts.next()?);
+            let value = parts.next().map(|v| v.trim().to_ascii_lowercase());
+            Some((key, value.filter(|v| !v.is_empty())))
+        })
+        .collect()
+}
+
+/// Whether deleting `key` (or its `value`) would take something an
+/// ExcludeKey protects: the exclusion is that key or inside it.
+fn removes_excluded(key: &str, value: Option<&str>, excluded: &[(String, Option<String>)]) -> bool {
+    let key = reg_key(key);
+    excluded.iter().any(|(ex_key, ex_value)| match value {
+        None => ex_key == &key || ex_key.starts_with(&format!("{key}\\")),
+        Some(name) => {
+            ex_key == &key
+                && ex_value
+                    .as_deref()
+                    .is_none_or(|v| v == name.to_ascii_lowercase())
+        }
+    })
+}
+
 fn file_actions(line: &str, exclude: &[String]) -> Vec<Action> {
     let mut parts = line.split('|');
     let path = parts.next().unwrap_or("").trim().trim_end_matches('\\');
@@ -168,6 +209,7 @@ fn file_actions(line: &str, exclude: &[String]) -> Vec<Action> {
 
 fn build(entry: Entry, ids: &mut HashSet<String>) -> Option<Cleaner> {
     let exclude = excludes(&entry.exclude);
+    let reg_exclude = reg_excludes(&entry.exclude);
     let mut actions: Vec<Action> = entry
         .files
         .iter()
@@ -183,6 +225,11 @@ fn build(entry: Entry, ids: &mut HashSet<String>) -> Option<Cleaner> {
             .next()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());
+        // A REG exclusion cannot carve a hole in a key delete, so the whole
+        // action is dropped (the safe side).
+        if removes_excluded(&key, value.as_deref(), &reg_exclude) {
+            continue;
+        }
         actions.push(Action::Registry { key, value });
     }
     if actions.is_empty() || entry.name.is_empty() {
@@ -296,6 +343,24 @@ FileKey1=%Temp%\\example*.tmp
         );
         assert_eq!(cleaners[1].id, "w2-example_app-2");
         assert_eq!(cleaners[1].description, "winapp2.ini · Duplicates");
+    }
+
+    #[test]
+    fn a_registry_exclusion_inside_a_regkey_keeps_that_key() {
+        let text = "[App *]\nFileKey1=%AppData%\\App|*.log\n\
+            RegKey1=HKCU\\Software\\App\nRegKey2=HKEY_CURRENT_USER\\Software\\Other\n\
+            RegKey3=HKCU\\Software\\Clear|Value\n\
+            ExcludeKey1=REG|HKCU\\Software\\App\\Settings\n\
+            ExcludeKey2=REG|HKCU\\Software\\other\\\n\
+            ExcludeKey3=REG|HKCU\\Software\\Clear|Value\n";
+        let option = &parse(text)[0].options[0];
+        let keys: Vec<_> = option
+            .actions
+            .iter()
+            .filter(|a| matches!(a, Action::Registry { .. }))
+            .collect();
+        assert!(keys.is_empty(), "{keys:?}");
+        assert_eq!(option.actions.len(), 1, "the file action stays");
     }
 
     #[test]

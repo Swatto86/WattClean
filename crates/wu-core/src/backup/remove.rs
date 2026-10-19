@@ -167,28 +167,43 @@ fn execute(system: &dyn System, dir: &Path, item: &Item) -> ItemState {
 /// drive; across drives it is copied then deleted. What Windows will not let
 /// go of (a file in use) is copied if it can be read, then left for Windows
 /// to delete at the next restart.
-fn move_out(system: &dyn System, path: &Path, stored: &Path) -> io::Result<ItemState> {
+pub(super) fn move_out(system: &dyn System, path: &Path, stored: &Path) -> io::Result<ItemState> {
     let metadata = fs::symlink_metadata(path)?;
     match fs::rename(path, stored) {
         Ok(()) => return Ok(ItemState::Removed),
         Err(error) if !is_busy_or_cross_drive(&error) => return Err(error),
         Err(_) => {}
     }
+    // The original goes only after a complete copy exists; a failed copy
+    // (disk full, unreadable file) leaves it untouched and the item failed.
     let copied = if metadata.is_dir() {
-        copy_tree(path, stored).is_ok()
+        copy_tree(path, stored)
     } else {
-        fs::copy(path, stored).is_ok()
+        fs::copy(path, stored).map(drop)
     };
+    if let Err(error) = copied {
+        discard_partial(stored);
+        return Err(error);
+    }
     let gone = if metadata.is_dir() {
         fs::remove_dir_all(path).is_ok()
     } else {
         fs::remove_file(path).is_ok()
     };
-    if gone && copied {
+    if gone {
         return Ok(ItemState::Removed);
     }
     schedule_remaining(system, path)?;
-    Ok(ItemState::AtRestart { copied })
+    Ok(ItemState::AtRestart { copied: true })
+}
+
+/// Remove what a failed copy left behind, so it is not taken for a backup.
+fn discard_partial(stored: &Path) {
+    if stored.is_dir() {
+        let _ = fs::remove_dir_all(stored);
+    } else {
+        let _ = fs::remove_file(stored);
+    }
 }
 
 fn is_busy_or_cross_drive(error: &io::Error) -> bool {

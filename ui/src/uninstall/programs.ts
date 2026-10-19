@@ -1,8 +1,22 @@
-/** The installed-programs list: search, sort, keyboard selection, details. */
+/**
+ * The installed-programs list: search, sort, details, and selection as in
+ * Windows lists (Ctrl+click, Shift+click, Shift+arrows, Ctrl+A), so several
+ * programs can be uninstalled one after another.
+ */
 import { api, type Program } from "./api.ts";
 import { byId, clear, h } from "./dom.ts";
-import { avatarColour, initial, kilobytes } from "./format.ts";
-import { step, view, type Sort, type SortKey } from "./listing.ts";
+import { avatarColour, initial, kilobytes, plural } from "./format.ts";
+import { range, step, view, type Sort, type SortKey } from "./listing.ts";
+
+/** The keys that move through the list. */
+const MOVES = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
 
 const SCOPES: Record<Program["scope"], string> = {
   machine64: "64-bit",
@@ -13,7 +27,13 @@ const SCOPES: Record<Program["scope"], string> = {
 export class ProgramList {
   private programs: Program[] = [];
   private shown: Program[] = [];
-  private selected: string | null = null;
+  /** Ids of the selected programs. */
+  private selection = new Set<string>();
+  /** The row the keyboard is on, and where a Shift selection starts. */
+  private focused: string | null = null;
+  private anchor: string | null = null;
+  /** True while the list moves focus itself. */
+  private focusing = false;
   private sort: Sort = { key: "name", ascending: true };
   private loading = 0;
   private query = "";
@@ -26,7 +46,8 @@ export class ProgramList {
   private readonly details = byId("details", HTMLElement);
   private readonly uninstallButton = byId("uninstall", HTMLButtonElement);
 
-  constructor(private readonly onUninstall: (program: Program) => void) {
+  /** `onUninstall` gets the chosen programs in list order. */
+  constructor(private readonly onUninstall: (programs: Program[]) => void) {
     // `change` too: clearing the box programmatically fires no `input`.
     for (const kind of ["input", "change"]) {
       this.search.addEventListener(kind, () => {
@@ -76,10 +97,9 @@ export class ProgramList {
     }
   }
 
-  current(): Program | null {
-    return (
-      this.programs.find((program) => program.id === this.selected) ?? null
-    );
+  /** The selected programs, in list order. */
+  private chosen(): Program[] {
+    return this.shown.filter((program) => this.selection.has(program.id));
   }
 
   private sortBy(header: HTMLTableCellElement): void {
@@ -118,17 +138,21 @@ export class ProgramList {
         : `${this.shown.length} of ${total} programs`;
     // A refresh replaces the rows; keep keyboard focus in the list if it was there.
     const hadFocus = this.rows.contains(document.activeElement);
+    // Only programs on show stay selected: Uninstall never acts on hidden ones.
+    const ids = new Set(this.shown.map((program) => program.id));
+    this.selection = new Set([...this.selection].filter((id) => ids.has(id)));
+    if (this.focused !== null && !ids.has(this.focused)) this.focused = null;
+    if (this.anchor !== null && !ids.has(this.anchor)) this.anchor = null;
+    // The keyboard carries on from a selected row when its own was hidden.
+    this.focused ??= this.chosen()[0]?.id ?? null;
     clear(this.rows);
     for (const program of this.shown) this.rows.append(this.row(program));
-    if (!this.shown.some((program) => program.id === this.selected))
-      this.selected = null;
-    // Keep one row reachable with Tab even before anything is selected.
-    const first = this.rows.querySelector<HTMLTableRowElement>("tr");
-    if (first && this.selected === null) first.tabIndex = 0;
-    this.showDetails();
+    this.mark();
     if (hadFocus) {
-      const target = this.selected ?? this.shown[0]?.id;
-      if (target !== undefined) this.select(target, true);
+      const target = this.focused ?? this.shown[0]?.id;
+      if (target === undefined) return;
+      if (this.selection.size === 0) this.selectOnly(target);
+      this.focusRow(target, true);
     }
   }
 
@@ -157,66 +181,152 @@ export class ProgramList {
     );
     const row = h(
       "tr",
-      {
-        tabindex: "-1",
-        "aria-selected": String(program.id === this.selected),
-        "data-id": program.id,
-      },
+      { tabindex: "-1", "aria-selected": "false", "data-id": program.id },
       name,
       h("td", { title: program.publisher ?? "" }, program.publisher ?? ""),
       h("td", {}, program.version ?? ""),
       h("td", { class: "num" }, kilobytes(program.sizeKb)),
       h("td", {}, program.installDate ?? ""),
     );
-    row.addEventListener("click", () => this.select(program.id, false));
+    // A click moves focus itself, after the selection is set, so a
+    // Ctrl+click into an empty selection is not selected twice.
+    row.addEventListener("mousedown", (event) => event.preventDefault());
+    row.addEventListener("click", (event) => this.click(program.id, event));
+    // Tabbing into an empty selection selects the row. Focus moved by the
+    // list itself (after a click or a key) has set the selection already.
     row.addEventListener("focus", () => {
-      if (this.selected !== program.id) this.select(program.id, false);
+      if (this.focusing) return;
+      if (this.selection.size === 0) this.selectOnly(program.id);
+      this.focusRow(program.id, false);
     });
-    row.addEventListener("dblclick", () => this.onUninstall(program));
+    row.addEventListener("dblclick", (event) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+      this.onUninstall([program]);
+    });
     return row;
   }
 
-  private select(id: string, focus: boolean): void {
-    this.selected = id;
+  private click(id: string, event: MouseEvent): void {
+    if (event.shiftKey) {
+      const span = range(this.ids(), this.anchor, id);
+      this.selection = new Set(
+        event.ctrlKey || event.metaKey ? [...this.selection, ...span] : span,
+      );
+    } else if (event.ctrlKey || event.metaKey) {
+      if (!this.selection.delete(id)) this.selection.add(id);
+      this.anchor = id;
+    } else {
+      this.selectOnly(id);
+    }
+    this.focusRow(id, true);
+  }
+
+  private ids(): string[] {
+    return this.shown.map((program) => program.id);
+  }
+
+  private selectOnly(id: string): void {
+    this.selection = new Set([id]);
+    this.anchor = id;
+  }
+
+  /** Makes `id` the keyboard's row, then redraws the selection. */
+  private focusRow(id: string, focus: boolean): void {
+    this.focused = id;
+    this.mark();
+    if (!focus) return;
+    const row = this.rows.querySelector<HTMLTableRowElement>(
+      `tr[data-id="${CSS.escape(id)}"]`,
+    );
+    this.focusing = true;
+    row?.focus();
+    this.focusing = false;
+    row?.scrollIntoView({ block: "nearest" });
+  }
+
+  /** Shows the selection on the rows, the button and the details. */
+  private mark(): void {
+    const tabStop = this.focused ?? this.shown[0]?.id ?? null;
     for (const row of this.rows.querySelectorAll<HTMLTableRowElement>("tr")) {
-      const chosen = row.dataset["id"] === id;
-      row.setAttribute("aria-selected", String(chosen));
-      row.tabIndex = chosen ? 0 : -1;
-      if (chosen && focus) {
-        row.focus();
-        row.scrollIntoView({ block: "nearest" });
-      }
+      const id = row.dataset["id"] ?? "";
+      row.setAttribute("aria-selected", String(this.selection.has(id)));
+      row.tabIndex = id === tabStop ? 0 : -1;
     }
     this.showDetails();
   }
 
   private keydown(event: KeyboardEvent): void {
-    const index = this.shown.findIndex(
-      (program) => program.id === this.selected,
-    );
+    const ids = this.ids();
     if (event.key === "Enter" || event.key === "Delete") {
       event.preventDefault();
       this.uninstallSelected();
       return;
     }
-    const next = step(index, this.shown.length, event.key);
-    const program = this.shown[next];
-    if (next !== index && program) {
+    if (event.key === "a" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
-      this.select(program.id, true);
+      this.selection = new Set(ids);
+      this.mark();
+      return;
     }
+    if (event.key === " " && this.focused !== null) {
+      event.preventDefault();
+      if (!this.selection.delete(this.focused))
+        this.selection.add(this.focused);
+      this.anchor = this.focused;
+      this.mark();
+      return;
+    }
+    // Tab and every other key keep their usual meaning.
+    if (!MOVES.has(event.key)) return;
+    const index = this.focused === null ? -1 : ids.indexOf(this.focused);
+    const next = ids[step(index, ids.length, event.key)];
+    if (next === undefined || next === this.focused) return;
+    event.preventDefault();
+    if (event.shiftKey) {
+      this.selection = new Set(range(ids, this.anchor ?? next, next));
+      if (this.anchor === null) this.anchor = next;
+    } else if (!event.ctrlKey && !event.metaKey) {
+      this.selectOnly(next);
+    }
+    this.focusRow(next, true);
   }
 
   private uninstallSelected(): void {
-    const program = this.current();
-    if (program) this.onUninstall(program);
+    const programs = this.chosen();
+    if (programs.length > 0) this.onUninstall(programs);
   }
 
   private showDetails(): void {
-    const program = this.current();
-    this.uninstallButton.disabled = program === null;
+    const programs = this.chosen();
+    this.uninstallButton.disabled = programs.length === 0;
+    this.uninstallButton.textContent =
+      programs.length > 1
+        ? `Uninstall ${plural(programs.length, "program")}`
+        : "Uninstall";
     clear(this.details);
-    if (!program) return;
+    const [program] = programs;
+    if (!program) {
+      this.details.append(
+        h("dt", {}, "Tip"),
+        h(
+          "dd",
+          {},
+          "Ctrl+click or Shift+click selects several programs, which are then uninstalled one at a time.",
+        ),
+      );
+      return;
+    }
+    if (programs.length > 1) {
+      this.details.append(
+        h("dt", {}, "Selected"),
+        h(
+          "dd",
+          {},
+          `${plural(programs.length, "program")}, uninstalled one at a time: ${programs.map((p) => p.name).join(", ")}`,
+        ),
+      );
+      return;
+    }
     const facts: Array<[string, string | null]> = [
       ["Name", program.name],
       ["Publisher", program.publisher],

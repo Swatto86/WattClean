@@ -52,16 +52,22 @@ impl Executor<'_> {
                     .set_len(0)
                     .map(|()| true)
             }),
-            Op::Sqlite { path, op, .. } => sqlite::run(path, *op).map(|saved| {
-                item.size = saved;
-                true
+            Op::Sqlite { path, op, .. } => self.guarded(path).and_then(|()| {
+                sqlite::run(path, *op).map(|saved| {
+                    item.size = saved;
+                    true
+                })
             }),
-            Op::Json { path, address } => edit::json_remove(path, address),
+            Op::Json { path, address } => self
+                .guarded(path)
+                .and_then(|()| edit::json_remove(path, address)),
             Op::Ini {
                 path,
                 section,
                 parameter,
-            } => edit::ini_remove(path, section, parameter.as_deref()),
+            } => self
+                .guarded(path)
+                .and_then(|()| edit::ini_remove(path, section, parameter.as_deref())),
             Op::RegistryKey { key } => self.system.registry().delete_key(key).map(|()| true),
             Op::RegistryValue { key, name } => self
                 .system

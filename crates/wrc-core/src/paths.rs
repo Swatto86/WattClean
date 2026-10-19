@@ -75,54 +75,57 @@ const EXTENSIONS: [&str; 26] = [
 /// The file a command line or a piece of registry data names:
 /// `"C:\App\a.exe" -x`, `C:\Program Files\App\a.exe /x`, `C:\App\a.dll,-101`,
 /// `@C:\App\a.dll,-5`, and for `rundll32 C:\App\b.dll,Entry` the DLL it
-/// loads. Returned as written (variables unexpanded); `None` for empty text.
+/// loads. Returned as written (variables unexpanded); `None` for empty text,
+/// or when where the program ends cannot be told (an unquoted command with a
+/// space and no known file type), so that nothing is judged from a guess.
 pub fn command_target(command: &str) -> Option<String> {
     let text = command.trim().trim_start_matches('@').trim();
     if text.is_empty() {
         return None;
     }
-    let (program, rest) = split_program(text);
+    let (program, rest) = split_program(text)?;
     let file = program
         .rsplit(['\\', '/'])
         .next()
         .unwrap_or(&program)
         .to_ascii_lowercase();
     if file == "rundll32" || file == "rundll32.exe" {
-        let library = rest.trim().trim_matches('"');
-        let library = library.split(',').next().unwrap_or_default().trim();
+        let library = rest.trim();
         if library.is_empty() {
             return Some(program);
         }
-        return Some(split_program(library).0);
+        return split_program(library).map(|(library, _)| library);
     }
     Some(program)
 }
 
 /// The program at the start of `text` and what follows it.
-fn split_program(text: &str) -> (String, &str) {
+fn split_program(text: &str) -> Option<(String, &str)> {
     if let Some(quoted) = text.strip_prefix('"') {
-        return match quoted.split_once('"') {
+        return Some(match quoted.split_once('"') {
             Some((program, rest)) => (program.trim().to_owned(), rest),
             None => (quoted.trim().to_owned(), ""),
-        };
+        });
     }
     // A bare first word (`rundll32 …`, `notepad %1`) is the program itself.
     if let Some((first, rest)) = text.split_once(' ')
         && !first.contains(['\\', '/', '"'])
     {
-        return (first.to_owned(), rest);
+        return Some((first.to_owned(), rest));
     }
-    match extension_end(text) {
-        Some(end) => (text[..end].trim().to_owned(), &text[end..]),
-        None => {
-            let end = text.find(',').unwrap_or(text.len());
-            (text[..end].trim().to_owned(), &text[end..])
-        }
+    if let Some(end) = extension_end(text) {
+        return Some((text[..end].trim().to_owned(), &text[end..]));
     }
+    // No known file type ends it: a path up to the first comma, unless a
+    // space leaves unclear where the program stops and its arguments start.
+    let end = text.find(',').unwrap_or(text.len());
+    let program = text[..end].trim();
+    (!program.contains(char::is_whitespace)).then(|| (program.to_owned(), &text[end..]))
 }
 
 /// Where the first known extension ends that is followed by the end of the
-/// text, a space, a comma, a quote or a tab.
+/// text, a space (unless a folder's name goes on), a comma, a quote, a slash
+/// (`a.exe/S`) or a tab.
 fn extension_end(text: &str) -> Option<usize> {
     // ASCII folding keeps byte offsets identical to `text`.
     let lower = text.to_ascii_lowercase();
@@ -132,9 +135,11 @@ fn extension_end(text: &str) -> Option<usize> {
         let mut from = 0;
         while let Some(at) = lower[from..].find(ext) {
             let end = from + at + ext.len();
-            let boundary = bytes
-                .get(end)
-                .is_none_or(|next| matches!(next, b' ' | b',' | b'"' | b'\t'));
+            let boundary = match bytes.get(end) {
+                None | Some(b',' | b'"' | b'\t' | b'/') => true,
+                Some(b' ') => !folder_goes_on(&text[end..]),
+                Some(_) => false,
+            };
             if boundary {
                 best = Some(best.map_or(end, |known| known.min(end)));
                 break;
@@ -143,6 +148,25 @@ fn extension_end(text: &str) -> Option<usize> {
         }
     }
     best
+}
+
+/// After `C:\Program Files\Booking.com` comes ` Helper\helper.exe`: the
+/// folder's name went on rather than an argument starting. Arguments are
+/// words up to one that starts like a switch, a quote, a variable or a path
+/// of its own (`-x`, `/x`, `"…"`, `%1`, `C:\…`, `\\server`); a word with a
+/// backslash before any of those continues the path.
+fn folder_goes_on(rest: &str) -> bool {
+    for word in rest.split_whitespace() {
+        let bytes = word.as_bytes();
+        let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+        if drive || matches!(bytes[0], b'-' | b'/' | b'"' | b'%' | b'\\') {
+            return false;
+        }
+        if word.contains('\\') {
+            return true;
+        }
+    }
+    false
 }
 
 /// An absolute local path (`C:\…`), as opposed to a bare file name that
@@ -199,6 +223,34 @@ mod tests {
             assert_eq!(command_target(text).as_deref(), Some(want), "{text}");
         }
         assert_eq!(command_target("  "), None);
+    }
+
+    /// Where a program ends is sometimes unknowable; then nothing is judged,
+    /// so a live program is never called missing.
+    #[test]
+    fn programs_are_never_cut_inside_a_folder_or_run_on_into_arguments() {
+        let cases = [
+            (
+                r"C:\Program Files\Booking.com Helper\helper.exe --run",
+                Some(r"C:\Program Files\Booking.com Helper\helper.exe"),
+            ),
+            (
+                r"C:\Tools\Node.js Tools\node.exe x.js",
+                Some(r"C:\Tools\Node.js Tools\node.exe"),
+            ),
+            (r"C:\App\a.exe/S", Some(r"C:\App\a.exe")),
+            (r"C:\App\a.exe C:\Data\b.txt", Some(r"C:\App\a.exe")),
+            (
+                r#"rundll32.exe "C:\Program Files\Acme, Inc\a.dll",Run"#,
+                Some(r"C:\Program Files\Acme, Inc\a.dll"),
+            ),
+            (r"C:\Program Files\Foo\foo.jar -x", None),
+            (r"C:\Program Files\Foo\foosvc -run", None),
+            (r"C:\Data\folder", Some(r"C:\Data\folder")),
+        ];
+        for (text, want) in cases {
+            assert_eq!(command_target(text).as_deref(), want, "{text}");
+        }
     }
 
     #[test]

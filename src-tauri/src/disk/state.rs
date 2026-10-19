@@ -61,13 +61,21 @@ impl AppState {
         lock(&self.settings).clone()
     }
 
-    /// Saves first, then keeps: a failed save leaves the old settings.
-    pub fn replace_settings(&self, settings: Settings) -> CommandResult<()> {
-        settings.save(&self.settings_path()).map_err(|error| {
+    /// Changes the settings under one lock, so two changes at once cannot
+    /// undo each other; saves first, then keeps, so a failed save leaves
+    /// the old settings. Returns them as they were and as they are now.
+    pub fn update_settings(
+        &self,
+        change: impl FnOnce(&mut Settings) -> CommandResult<()>,
+    ) -> CommandResult<(Settings, Settings)> {
+        let mut current = lock(&self.settings);
+        let mut next = current.clone();
+        change(&mut next)?;
+        next.save(&self.settings_path()).map_err(|error| {
             CommandError::from(format!("The settings could not be saved: {error}"))
         })?;
-        *lock(&self.settings) = settings;
-        Ok(())
+        let before = std::mem::replace(&mut *current, next.clone());
+        Ok((before, next))
     }
 
     pub fn settings_path(&self) -> PathBuf {

@@ -134,6 +134,18 @@ Live runs on this PC with the WattUninstaller NSIS setup:
   kilobytes; a wrong deletion can break Windows. The only files allowed under
   Windows are a scheduled task's definition (never Microsoft's), and under
   other accounts only `AppData\{Roaming,Local,LocalLow}\<folder>`.
+- **Guard refinements.** Windows' own file types and URL protocols (txtfile,
+  htmlfile, http(s), mailto, batfile…) join the shell classes: never offered
+  whole. A deep search offers a value only outside Microsoft's trees (except
+  the lists the dedicated scanners clean) and outside another installed
+  program's key. A program installed inside the target's folder keeps its
+  services, Run entries and the like (`Identity::with_others`). A type
+  library shared with another program loses only the target's versions. A
+  `.url` shortcut is offered only when its address lies on the program's own
+  site, path included (never by a shared host such as github.com). Another
+  account's still-installed copy (uninstaller or install folder present) is
+  not offered. A forced uninstall refuses a folder that is Windows', a root
+  or shared (`Identity::is_own_folder`).
 - **A folder names the program only directly under a root or under its
   publisher's folder** (`wu-core/src/identity.rs`, `name_from_dir`). Windows
   Installer registers a component for every file, so Go's records named
@@ -144,8 +156,14 @@ Live runs on this PC with the WattUninstaller NSIS setup:
   before anything is deleted and after each item. Files are moved, not
   copied, into the backup (instant on one drive); registry keys are exported
   whole with raw value bytes. A file in use is copied, then left to Windows to
-  delete at restart. A backup restores once and never overwrites something
-  new at the original place.
+  delete at restart. An original is deleted only after its copy is complete;
+  a failed copy leaves it in place and the item failed. A restore never
+  overwrites something new at the original place (a file, a folder, a
+  registry value or a key that exists again with other contents; identical
+  data counts as restored). Items that could not be put back stay
+  restorable and are retried by the next restore; the backup is closed
+  only when none failed. An item still Pending after a crash is restored
+  when its original is gone and its data is in the backup.
 - **Uninstallers run inside a job object** so self-relaunching uninstallers
   (NSIS, Inno Setup) are waited for; the person can always continue by hand.
 - **Not elevated by default.** The app starts with the user's rights (per-user
@@ -183,7 +201,14 @@ Live runs on this PC with the WattUninstaller NSIS setup:
 - **Data folder:** `%LOCALAPPDATA%\WattClean\uninstall` (settings.json,
   history.json, backups/); `WATTCLEAN_DATA_DIR` overrides it.
 - **No network access at all.** No updater yet (see open questions).
-- **GitHub Actions is off** for this private repo (Swatto's request). The
+- **Several programs are uninstalled one at a time** (2026-10-19,
+  `ui/src/uninstall/batch.ts`): one confirmation and one set of options,
+  then each program's whole wizard (uninstaller, scan, leftovers) before
+  the next starts, so two uninstallers never run together. Every chosen
+  program's session (its identity and executables) is opened before the
+  first uninstaller runs, because one program's uninstaller may delete
+  files another is known by. One restore point covers the batch.
+- **GitHub Actions is off** for this repo (Swatto's request). The
   workflow in `.github/workflows/` is kept but never runs, so the local full
   gate is the only verdict; do not wait for CI or re-enable Actions unasked.
 

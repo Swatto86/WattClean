@@ -1,5 +1,5 @@
 use super::*;
-use crate::model::{Hive, RegPath};
+use crate::model::{Hive, RawValue, RegPath};
 use crate::scan::tests::{machine, uninstall_and_scan};
 use crate::scan::{Leftover, Mode, Target};
 
@@ -148,4 +148,146 @@ fn backup_ids_cannot_escape_the_backups_folder() {
         assert!(delete(dir.path(), bad).is_err());
     }
     assert!(backup_dir(dir.path(), "1800000000-acmewidget-2").is_ok());
+}
+
+fn file_item(path: &std::path::Path) -> Leftover {
+    Leftover {
+        id: 1,
+        target: Target::File { path: path.into() },
+        reason: String::new(),
+        confidence: crate::scan::Confidence::High,
+        selected: true,
+        bytes: 1,
+    }
+}
+
+fn value_item(key: &RegPath, name: &str) -> Leftover {
+    Leftover {
+        id: 1,
+        target: Target::Value {
+            key: key.clone(),
+            name: name.into(),
+        },
+        reason: String::new(),
+        confidence: crate::scan::Confidence::High,
+        selected: true,
+        bytes: 0,
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn an_original_is_never_deleted_when_its_copy_failed() {
+    let machine = machine();
+    let file = machine.folders.desktop.join("Precious.lnk");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, b"precious").unwrap();
+    // A folder where the backup copy belongs: the rename is refused as
+    // access denied and the copy cannot be written either.
+    let stored = machine.dir.path().join("stored");
+    std::fs::create_dir_all(&stored).unwrap();
+    let outcome = remove::move_out(&machine.system, &file, &stored);
+    assert!(outcome.is_err(), "{outcome:?}");
+    assert_eq!(std::fs::read(&file).unwrap(), b"precious");
+    assert!(machine.system.reboot_deletes().is_empty());
+}
+
+#[test]
+fn restore_leaves_registry_data_that_exists_again() {
+    let machine = machine();
+    let key = hklm(r"SOFTWARE\Acme\Widget");
+    let backups = machine.dir.path().join("backups");
+    let removal = remove(
+        &machine.system,
+        &backups,
+        "Acme",
+        &[Leftover {
+            target: Target::Key { key: key.clone() },
+            ..file_item(std::path::Path::new("x"))
+        }],
+        1,
+    )
+    .unwrap();
+    // The program came back with its own data.
+    machine
+        .system
+        .put(&key, vec![RawValue::string("Version", "9.9")]);
+    let report = restore(&machine.system, &backups, &removal.backup.id, 2).unwrap();
+    assert_eq!(report.restored, 0);
+    assert_eq!(report.failed.len(), 1, "{:?}", report.failed);
+    assert_eq!(
+        machine.system.values_of(&key),
+        vec![RawValue::string("Version", "9.9")]
+    );
+
+    let shared = hklm(r"SOFTWARE\Acme\Widget\Shared");
+    machine
+        .system
+        .put(&shared, vec![RawValue::string("A", "1")]);
+    let removal = remove(
+        &machine.system,
+        &backups,
+        "Acme",
+        &[value_item(&shared, "A")],
+        3,
+    )
+    .unwrap();
+    machine
+        .system
+        .put(&shared, vec![RawValue::string("A", "new")]);
+    let report = restore(&machine.system, &backups, &removal.backup.id, 4).unwrap();
+    assert_eq!(report.failed.len(), 1, "{:?}", report.failed);
+    assert_eq!(
+        machine.system.values_of(&shared),
+        vec![RawValue::string("A", "new")]
+    );
+}
+
+#[test]
+fn items_that_failed_to_restore_can_be_retried() {
+    let machine = machine();
+    let report = uninstall_and_scan(&machine, "Contoso Notes", Mode::Safe);
+    let backups = machine.dir.path().join("backups");
+    let removal = remove(&machine.system, &backups, "Contoso Notes", &report.items, 7).unwrap();
+    let data = machine.folders.app_data.join("Contoso Notes");
+    std::fs::create_dir_all(&data).unwrap();
+    let first = restore(&machine.system, &backups, &removal.backup.id, 8).unwrap();
+    assert_eq!(first.failed.len(), 1);
+    assert!(
+        list(&backups)[0].restorable,
+        "an item is still waiting to be restored"
+    );
+    std::fs::remove_dir_all(&data).unwrap();
+    let second = restore(&machine.system, &backups, &removal.backup.id, 9).unwrap();
+    assert!(second.failed.is_empty(), "{:?}", second.failed);
+    assert_eq!(second.restored, 1, "only the item that failed is retried");
+    assert!(data.is_dir());
+    assert!(!list(&backups)[0].restorable);
+}
+
+#[test]
+fn an_item_left_pending_by_a_crash_is_restored_when_its_original_is_gone() {
+    let machine = machine();
+    let key = hklm(r"SOFTWARE\Acme\Widget\Shared");
+    machine.system.put(&key, vec![RawValue::string("A", "1")]);
+    let backups = machine.dir.path().join("backups");
+    let removal = remove(
+        &machine.system,
+        &backups,
+        "Acme",
+        &[value_item(&key, "A")],
+        1,
+    )
+    .unwrap();
+    // The app died after the delete but before the manifest said so.
+    let mut set = load(&backups, &removal.backup.id).unwrap();
+    set.items[0].state = ItemState::Pending;
+    set.save(&backups.join(&removal.backup.id)).unwrap();
+    assert!(list(&backups)[0].restorable);
+    let report = restore(&machine.system, &backups, &removal.backup.id, 2).unwrap();
+    assert_eq!(report.restored, 1, "{:?}", report.failed);
+    assert_eq!(
+        machine.system.values_of(&key),
+        vec![RawValue::string("A", "1")]
+    );
 }

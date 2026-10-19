@@ -3,7 +3,7 @@
 
 use super::programs::all_commands_missing;
 use super::{Category, Context, Found};
-use crate::check::Verdict;
+use crate::check::{PathCheck, Verdict};
 use crate::model::RegPath;
 use crate::paths::command_target;
 use crate::system::{key_exists, subkeys_or_empty, text_value, values_or_empty};
@@ -62,7 +62,7 @@ pub fn com_objects(context: &Context, out: &mut Vec<Found>) {
                         text_value(&values, "").and_then(|text| command_target(&text))
                     })
                     .collect();
-                if let Some(first) = all_missing(context, &servers, view32) {
+                if let Some(first) = all_missing(context.check_for(&key), &servers, view32) {
                     let name = text_value(&values_or_empty(context.system, &key), "")
                         .unwrap_or_else(|| id.clone());
                     out.push(Found::key(
@@ -92,9 +92,11 @@ fn type_libraries(context: &Context, typelib: &RegPath, out: &mut Vec<Found>) {
                 let locale_key = version_key.child(&locale);
                 for platform in subkeys_or_empty(context.system, &locale_key) {
                     let values = values_or_empty(context.system, &locale_key.child(&platform));
-                    if let Some(path) =
-                        text_value(&values, "").and_then(|text| command_target(&text))
-                    {
+                    // A file's path, never a command line: no arguments to cut.
+                    let path = text_value(&values, "")
+                        .map(|text| text.trim().trim_matches('"').to_owned())
+                        .filter(|text| !text.is_empty());
+                    if let Some(path) = path {
                         files.push((path, platform.eq_ignore_ascii_case("win32")));
                     }
                 }
@@ -103,7 +105,7 @@ fn type_libraries(context: &Context, typelib: &RegPath, out: &mut Vec<Found>) {
         let judged = !files.is_empty()
             && files
                 .iter()
-                .all(|(path, view32)| context.check.path(path, *view32) == Verdict::Missing);
+                .all(|(path, view32)| library_missing(context.check_for(&key), path, *view32));
         if judged {
             out.push(Found::key(
                 Category::ComObjects,
@@ -114,12 +116,26 @@ fn type_libraries(context: &Context, typelib: &RegPath, out: &mut Vec<Found>) {
     }
 }
 
+/// Type library data may name a resource inside a file (`updater.exe\4`),
+/// so the library is missing only when the file holding it is missing too.
+fn library_missing(check: &PathCheck, path: &str, view32: bool) -> bool {
+    if check.path(path, view32) != Verdict::Missing {
+        return false;
+    }
+    match path.rsplit_once('\\') {
+        Some((file, index)) if !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()) => {
+            check.path(file, view32) == Verdict::Missing
+        }
+        _ => true,
+    }
+}
+
 /// The first of `paths` when there is at least one and every one is missing.
-fn all_missing(context: &Context, paths: &[String], view32: bool) -> Option<String> {
+fn all_missing(check: &PathCheck, paths: &[String], view32: bool) -> Option<String> {
     let first = paths.first()?;
     paths
         .iter()
-        .all(|path| context.check.path(path, view32) == Verdict::Missing)
+        .all(|path| check.path(path, view32) == Verdict::Missing)
         .then(|| first.clone())
 }
 
@@ -144,7 +160,7 @@ pub fn class_keys(context: &Context, out: &mut Vec<Found>) {
             let icon = values_or_empty(context.system, &key.child("DefaultIcon"));
             let icon_present = text_value(&icon, "")
                 .and_then(|text| command_target(&text))
-                .is_some_and(|path| context.check.path(&path, false) != Verdict::Missing);
+                .is_some_and(|path| context.check_for(&key).path(&path, false) != Verdict::Missing);
             if !icon_present {
                 out.push(Found::key(
                     Category::ClassKeys,
@@ -183,7 +199,7 @@ pub fn context_menus(context: &Context, out: &mut Vec<Found>) {
                 else {
                     continue;
                 };
-                if context.check.missing(&target, false) {
+                if context.check_for(&key).missing(&target, false) {
                     let label = text_value(&values_or_empty(context.system, &key), "")
                         .unwrap_or_else(|| verb.clone());
                     out.push(Found::key(
@@ -200,8 +216,10 @@ pub fn context_menus(context: &Context, out: &mut Vec<Found>) {
 /// Extension keys that hold nothing but a file type no longer registered,
 /// or nothing at all.
 pub fn extensions(context: &Context, out: &mut Vec<Found>) {
-    let machine = context.classes_roots().first().cloned();
-    for classes in context.classes_roots() {
+    // Windows merges the machine's classes with each account's, so a file
+    // type defined in any of them may be the one an extension names.
+    let roots = context.classes_roots();
+    for classes in roots.clone() {
         for name in subkeys_or_empty(context.system, &classes) {
             if !name.starts_with('.') || name.len() < 2 {
                 continue;
@@ -217,9 +235,8 @@ pub fn extensions(context: &Context, out: &mut Vec<Found>) {
             let detail = match text_value(&values, "") {
                 None => format!("Extension {name} holds nothing."),
                 Some(kind) => {
-                    let registered = [Some(&classes), machine.as_ref()]
-                        .into_iter()
-                        .flatten()
+                    let registered = roots
+                        .iter()
                         .any(|root| key_exists(context.system, &root.child(&kind)));
                     if registered {
                         continue;

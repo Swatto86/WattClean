@@ -2,7 +2,10 @@
 //! protected folders (drive roots, Windows, the profile and its known
 //! folders) and the keep list (BleachBit's whitelist) are never removed.
 
+use std::fs;
 use std::path::{Component, Path, PathBuf};
+
+use crate::model::Kind;
 
 /// A path as Windows compares it: case-insensitive, either separator,
 /// `.` and `..` resolved, no trailing separator, no `\\?\` prefix.
@@ -45,6 +48,28 @@ pub fn is_within(path: &str, root: &str) -> bool {
         || (path.len() > root.len()
             && path.starts_with(root)
             && (root.ends_with('\\') || path.as_bytes().get(root.len()) == Some(&b'\\')))
+}
+
+/// Whether an entry is a folder to delete: a real folder, or a link to one
+/// (a junction or directory symlink, which only `remove_dir` can remove).
+pub fn kind_of(meta: &fs::Metadata) -> Kind {
+    if meta.is_dir() || is_dir_link(meta) {
+        Kind::Dir
+    } else {
+        Kind::File
+    }
+}
+
+#[cfg(windows)]
+fn is_dir_link(meta: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+    meta.file_type().is_symlink() && meta.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
+}
+
+#[cfg(not(windows))]
+fn is_dir_link(_: &fs::Metadata) -> bool {
+    false
 }
 
 /// Named folders below the root, ignoring the drive and root markers.

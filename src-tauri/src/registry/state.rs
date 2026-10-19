@@ -2,7 +2,7 @@
 //! files live, the last scan and search, the watcher, and an open menu.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -25,6 +25,17 @@ pub struct AppState {
     /// The context menu open now, and where to send the item chosen.
     menu: Mutex<Option<(u64, Sender<String>)>>,
     next_menu: AtomicU64,
+    /// A clean is removing entries: a second one waits, and quitting too.
+    cleaning: AtomicBool,
+}
+
+/// Holds the clean's place until it finishes, however it ends.
+pub struct Cleaning<'a>(&'a AtomicBool);
+
+impl Drop for Cleaning<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 /// Which results a command means.
@@ -52,7 +63,20 @@ impl AppState {
             search: Mutex::new(None),
             menu: Mutex::new(None),
             next_menu: AtomicU64::new(1),
+            cleaning: AtomicBool::new(false),
         }
+    }
+
+    /// Start a clean; refused while another one runs.
+    pub fn begin_clean(&self) -> Result<Cleaning<'_>, CommandError> {
+        if self.cleaning.swap(true, Ordering::SeqCst) {
+            return Err("A clean is already running.".into());
+        }
+        Ok(Cleaning(&self.cleaning))
+    }
+
+    pub fn is_cleaning(&self) -> bool {
+        self.cleaning.load(Ordering::SeqCst)
     }
 
     pub fn backups_dir(&self) -> PathBuf {

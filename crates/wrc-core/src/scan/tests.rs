@@ -182,6 +182,96 @@ fn other_accounts_are_scanned_on_request_and_closed_after() {
     assert_eq!(system.hive_releases(), before + 1);
 }
 
+/// Bob's `%LOCALAPPDATA%` is not this account's: his entries that use it
+/// cannot be judged from here, so they are never offered.
+#[test]
+fn other_accounts_per_user_variables_are_not_judged_with_this_accounts() {
+    let (dir, system) = machine();
+    system.set_env(
+        "LOCALAPPDATA",
+        &dir.path().join(r"Users\me\AppData\Local").to_string_lossy(),
+    );
+    let run = RegPath::account_root("Bob").child(r"Software\Microsoft\Windows\CurrentVersion\Run");
+    system.put(
+        &run,
+        vec![crate::RawValue::string(
+            "BobSync",
+            r"%LOCALAPPDATA%\Sync\sync.exe",
+        )],
+    );
+    let found = shown(&dir, &run_scan(&system));
+    assert!(
+        found.iter().all(|text| !text.ends_with("| BobSync")),
+        "{found:#?}"
+    );
+    // The same entry in this account's own Run key is judged as before.
+    system.put(
+        &RegPath::new(
+            Hive::CurrentUser,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+        ),
+        vec![crate::RawValue::string(
+            "MySync",
+            r"%LOCALAPPDATA%\Sync\sync.exe",
+        )],
+    );
+    let found = shown(&dir, &run_scan(&system));
+    assert!(
+        found.iter().any(|text| text.ends_with("| MySync")),
+        "{found:#?}"
+    );
+}
+
+/// An uninstaller can go while the program stays: a bundle's cached setup
+/// is cleaned away, or an entry names no folder but its icon is still
+/// there. Only an entry with nothing left to show for it is offered, and
+/// one that names no folder is offered unticked.
+#[test]
+fn uninstall_entries_are_offered_only_when_the_program_is_gone() {
+    let (dir, system) = machine();
+    let list = RegPath::new(
+        Hive::LocalMachine,
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    );
+    let gone = dir.path().join(r"ProgramData\Package Cache\{B0}\setup.exe");
+    let gone = gone.to_string_lossy();
+    let notes = dir.path().join(paths::NOTES_EXE);
+    let entry = |name: &str, extra: Vec<crate::RawValue>| {
+        let mut values = vec![
+            crate::RawValue::string("DisplayName", name),
+            crate::RawValue::string("UninstallString", &format!("\"{gone}\" /uninstall")),
+        ];
+        values.extend(extra);
+        system.put(&list.child(name), values);
+    };
+    entry(
+        "Bundle",
+        vec![crate::RawValue::string("BundleProviderKey", "Bundle")],
+    );
+    entry(
+        "Iconed",
+        vec![crate::RawValue::string(
+            "DisplayIcon",
+            &format!("{},0", notes.display()),
+        )],
+    );
+    entry("Bare", Vec::new());
+    let report = run(&system, Mode::Safe, false, &defaults());
+    let offered = |name: &str| {
+        report
+            .findings
+            .iter()
+            .find(|finding| finding.key.display().ends_with(&format!(r"\{name}")))
+    };
+    assert!(offered("Bundle").is_none());
+    assert!(offered("Iconed").is_none());
+    assert!(offered("Bare").is_some_and(|finding| !finding.ticked));
+}
+
+fn run_scan(system: &FakeSystem) -> Report {
+    run(system, Mode::Safe, true, &defaults())
+}
+
 #[test]
 fn excluded_keys_are_dropped() {
     let (dir, system) = machine();
@@ -250,6 +340,37 @@ fn the_include_list_offers_a_keys_contents() {
             r"HKCU\Software\Junk | a".to_owned(),
             r"HKCU\Software\Junk\Sub".to_owned()
         ]
+    );
+}
+
+/// Type library data may name a resource inside a file (`updater.exe\4`):
+/// the library is there while the file is.
+#[test]
+fn type_libraries_inside_a_file_are_judged_by_the_file() {
+    let (dir, system) = machine();
+    let typelib = RegPath::new(Hive::LocalMachine, r"SOFTWARE\Classes\TypeLib");
+    let notes = dir.path().join(paths::NOTES_EXE);
+    let gone = dir.path().join(r"Program Files\Gone\gone.exe");
+    for (id, file) in [
+        ("{F00DFACE-0000-4000-8000-0000000000A1}", &notes),
+        ("{F00DFACE-0000-4000-8000-0000000000A2}", &gone),
+    ] {
+        system.put(
+            &typelib.child(id).child(r"1.0\0\win64"),
+            vec![crate::RawValue::string(
+                "",
+                &format!(r"{}\4", file.display()),
+            )],
+        );
+    }
+    let found = shown(&dir, &run(&system, Mode::Moderate, false, &defaults()));
+    assert!(
+        found.iter().all(|text| !text.contains("0000000000A1")),
+        "a library inside an existing file was offered: {found:#?}"
+    );
+    assert!(
+        found.iter().any(|text| text.contains("0000000000A2")),
+        "a library inside a missing file was not offered: {found:#?}"
     );
 }
 

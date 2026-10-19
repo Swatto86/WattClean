@@ -131,6 +131,7 @@ category = "system"
 id = "recent"
 name = "Recent documents"
 description = "Recent files and folders in Quick access, the Start menu and taskbar jump lists"
+warning = "Items you pinned to jump lists and folders pinned to Quick access are removed too."
 actions = [
   { op = "delete", search = "glob", path = '%APPDATA%\Microsoft\Windows\Recent\*.lnk', kind = "file" },
   { op = "delete", search = "walk.files", path = '%APPDATA%\Microsoft\Windows\Recent\AutomaticDestinations' },

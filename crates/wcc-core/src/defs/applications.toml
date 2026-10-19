@@ -191,6 +191,7 @@ running = ["winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "onenote.e
 id = "cache"
 name = "Cache"
 description = "Office's document cache and add-in cache"
+warning = "The document cache can hold changes that have not uploaded yet. Let Office finish syncing first, or they are lost."
 default = true
 actions = [
   { op = "delete", search = "walk.all", path = '%LOCALAPPDATA%\Microsoft\Office\16.0\OfficeFileCache' },

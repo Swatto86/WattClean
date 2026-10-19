@@ -193,7 +193,13 @@ export const cleanerPage = (ctx: Context): Page => {
       checkbox: "Don't ask again",
     });
     if (!answer) return false;
-    if (answer.checked) await ctx.update({ confirm: false });
+    // The clean goes ahead either way: the person did confirm it.
+    if (answer.checked)
+      await ctx
+        .update({ confirm: false })
+        .catch((e: unknown) =>
+          notice(`"Don't ask again" could not be saved: ${String(e)}`, true),
+        );
     return true;
   };
 

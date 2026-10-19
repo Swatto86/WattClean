@@ -89,25 +89,29 @@ impl System for FakeSystem {
             if !state.keys.contains_key(&folded) {
                 return Err(not_found(key));
             }
-            let prefix = format!("{folded}\\");
-            let inside = |name: &String| *name == folded || name.starts_with(&prefix);
-            if state
-                .keys
-                .iter()
-                .any(|(name, entry)| inside(name) && entry.protected())
-            {
+            if state.keys.get(&folded).is_some_and(FakeKey::protected) {
                 return Err(denied(key));
             }
-            let gone: Vec<RegPath> = state
+            // As RegDeleteTree does, subkeys go one by one, deepest first,
+            // until a protected one stops it: what went before stays gone.
+            let prefix = format!("{folded}\\");
+            let inside: Vec<String> = state
                 .keys
-                .iter()
+                .keys()
                 .rev()
-                .filter(|(name, _)| inside(name))
-                .map(|(_, entry)| entry.path.clone())
+                .filter(|name| **name == folded || name.starts_with(&prefix))
+                .cloned()
                 .collect();
-            state.keys.retain(|name, _| !inside(name));
-            for key in &gone {
-                state.traced(WriteOp::KeyDeleted, key, None);
+            for name in inside {
+                let Some(entry) = state.keys.get(&name) else {
+                    continue;
+                };
+                if entry.protected() {
+                    return Err(denied(key));
+                }
+                let path = entry.path.clone();
+                state.keys.remove(&name);
+                state.traced(WriteOp::KeyDeleted, &path, None);
             }
             Ok(())
         })

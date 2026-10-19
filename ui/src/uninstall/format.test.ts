@@ -10,7 +10,7 @@ import {
   plural,
   target,
 } from "./format.ts";
-import { matches, step, view } from "./listing.ts";
+import { matches, range, step, view } from "./listing.ts";
 
 test("bytes scale to readable units", () => {
   assert.equal(bytes(512), "512 B");
@@ -106,4 +106,14 @@ test("keyboard steps stay inside the list", () => {
   assert.equal(step(2, 5, "End"), 4);
   assert.equal(step(2, 30, "PageDown"), 12);
   assert.equal(step(-1, 0, "ArrowDown"), -1);
+});
+
+test("Shift+click selects from the anchor to the row, either way", () => {
+  const ids = ["a", "b", "c", "d"];
+  assert.deepEqual(range(ids, "b", "d"), ["b", "c", "d"]);
+  assert.deepEqual(range(ids, "d", "b"), ["b", "c", "d"]);
+  assert.deepEqual(range(ids, "c", "c"), ["c"]);
+  assert.deepEqual(range(ids, null, "c"), ["c"]);
+  assert.deepEqual(range(ids, "gone", "a"), ["a"]);
+  assert.deepEqual(range(ids, "a", "gone"), []);
 });

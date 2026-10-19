@@ -46,33 +46,7 @@ export function confirmForm(
   settings: Settings,
   adminButton: HTMLButtonElement,
 ): ConfirmForm {
-  const modes = h("div", {
-    class: "modes",
-    role: "radiogroup",
-    "aria-label": "Leftover scan",
-  });
-  for (const [value, title, text] of MODE_TEXT) {
-    const input = h("input", {
-      type: "radio",
-      name: "mode",
-      value,
-      id: `mode-${value}`,
-    });
-    input.checked = value === settings.mode;
-    modes.append(
-      h(
-        "label",
-        { class: "mode" },
-        input,
-        h("b", {}, title),
-        h("small", {}, text),
-      ),
-    );
-  }
-  const restore = h("input", { type: "checkbox", id: "wizard-restore" });
-  restore.checked = settings.restorePoint;
-  const quiet = h("input", { type: "checkbox", id: "wizard-quiet" });
-  quiet.checked = settings.quiet;
+  const options = optionsForm(settings, "Create a System Restore point first");
   const facts = [session.publisher, session.version].filter(Boolean);
   const nodes = [
     h("p", {}, facts.join(" · ") || "Unknown publisher"),
@@ -101,21 +75,97 @@ export function confirmForm(
           `Installed with tracing: the ${session.loggedItems} items its install log recorded are checked first, whichever mode you choose.`,
         )
       : null,
+    ...options.nodes,
+  ].filter((node) => node !== null);
+  return { ...options, nodes };
+}
+
+/**
+ * The first step of a batch: the programs in the order they will be
+ * uninstalled, any that cannot be, and one set of options for them all.
+ */
+export function batchForm(
+  sessions: readonly SessionView[],
+  refused: ReadonlyArray<[name: string, reason: string]>,
+  settings: Settings,
+  adminButton: HTMLButtonElement,
+): ConfirmForm {
+  const options = optionsForm(
+    settings,
+    "Create one System Restore point before the first",
+  );
+  const elevate = sessions
+    .filter((session) => session.needsAdmin)
+    .map((session) => session.name);
+  const nodes = [
+    h(
+      "p",
+      {},
+      "They are uninstalled one at a time, in this order: each program's uninstaller runs and its leftovers are shown before the next one starts.",
+    ),
+    stepList(
+      sessions.map((session): Row => {
+        const facts = [session.publisher, session.version].filter(Boolean);
+        return [session.name, "todo", facts.join(" · ")];
+      }),
+      "batch-programs",
+    ),
+    ...refused.map(([name, reason]) =>
+      h("p", { class: "notice bad" }, `${name} is left out: ${reason}`),
+    ),
+    elevate.length > 0
+      ? h(
+          "div",
+          { class: "notice" },
+          `${elevate.join(", ")} ${elevate.length > 1 ? "are" : "is"} installed for all users, so removing ${elevate.length > 1 ? "them" : "it"} needs administrator rights. `,
+          adminButton,
+        )
+      : null,
+    ...options.nodes,
+  ].filter((node) => node !== null);
+  return { ...options, nodes };
+}
+
+/** The scan mode and the options asked before an uninstall starts. */
+function optionsForm(settings: Settings, restoreText: string): ConfirmForm {
+  const modes = h("div", {
+    class: "modes",
+    role: "radiogroup",
+    "aria-label": "Leftover scan",
+  });
+  for (const [value, title, text] of MODE_TEXT) {
+    const input = h("input", {
+      type: "radio",
+      name: "mode",
+      value,
+      id: `mode-${value}`,
+    });
+    input.checked = value === settings.mode;
+    modes.append(
+      h(
+        "label",
+        { class: "mode" },
+        input,
+        h("b", {}, title),
+        h("small", {}, text),
+      ),
+    );
+  }
+  const restore = h("input", { type: "checkbox", id: "wizard-restore" });
+  restore.checked = settings.restorePoint;
+  const quiet = h("input", { type: "checkbox", id: "wizard-quiet" });
+  quiet.checked = settings.quiet;
+  const nodes = [
     h("h3", {}, "After the uninstaller"),
     modes,
-    h(
-      "label",
-      { class: "check" },
-      restore,
-      "Create a System Restore point first",
-    ),
+    h("label", { class: "check" }, restore, restoreText),
     h(
       "label",
       { class: "check" },
       quiet,
       "Run the uninstaller silently if it allows it",
     ),
-  ].filter((node) => node !== null);
+  ];
   return {
     nodes,
     choice: () => {
@@ -128,8 +178,19 @@ export function confirmForm(
   };
 }
 
+/** Offered where removing needs administrator rights. */
+export function adminButton(restartAsAdmin: () => void): HTMLButtonElement {
+  const button = h(
+    "button",
+    { class: "ghost", type: "button", id: "wizard-admin" },
+    "Restart as administrator",
+  );
+  button.addEventListener("click", () => restartAsAdmin());
+  return button;
+}
+
 /** A checklist of steps with a mark for each one's state. */
-export function stepList(rows: Row[]): HTMLElement {
+export function stepList(rows: Row[], id = "wizard-steps"): HTMLElement {
   const marks: Record<State, string> = {
     busy: "",
     done: "✓",
@@ -138,7 +199,7 @@ export function stepList(rows: Row[]): HTMLElement {
   };
   return h(
     "ol",
-    { class: "steps", id: "wizard-steps" },
+    { class: "steps", id },
     ...rows.map(([title, state, note]) =>
       h(
         "li",

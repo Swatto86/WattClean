@@ -87,7 +87,13 @@ mozilla-history, mozilla-downloads), `json` (`address` a/b/c), `ini`
 `search` (file, glob, walk.files, walk.all, walk.top, find.dirs), and filters
 `regex`, `nregex`, `wholeregex`, `nwholeregex`, `names` (wildcards),
 `kind` (file/dir), `older_than_days`, `exclude` (paths; a `*` in an
-exclusion spans folders). `find.dirs` looks through every folder below
+exclusion spans folders). An exclusion that uses a variable the PC does not
+have (other than `%ONEDRIVE%`) makes the action find nothing and report why,
+rather than run without it. `walk.all` with a name filter removes matching
+files only, never folders. A link to a folder is removed as a folder (the
+link only, never its target). Keep-list entries are exact paths: wildcards
+are refused. A winapp2 `REG` exclusion inside a `RegKey` drops that
+registry action. `find.dirs` looks through every folder below
 `path` for folders named by `names`, beside a file matching `beside`
 (wildcards, `;` between) when given, and takes each found folder whole
 (as walk.top) without looking further inside it. Variables: see `KNOWN_VARIABLES` in

@@ -30,7 +30,7 @@ pub fn startup(context: &Context, out: &mut Vec<Found>) {
                 let Some(target) = value.as_text().and_then(|text| command_target(&text)) else {
                     continue;
                 };
-                if context.check.missing(&target, view32) {
+                if context.check_for(&key).missing(&target, view32) {
                     out.push(Found::value(
                         Category::Startup,
                         key.clone(),
@@ -127,7 +127,7 @@ pub fn app_paths(context: &Context, out: &mut Vec<Found>) {
             else {
                 continue;
             };
-            if context.check.missing(&target, view32) {
+            if context.check_for(&key).missing(&target, view32) {
                 out.push(Found::key(
                     Category::AppPaths,
                     key,
@@ -171,7 +171,7 @@ pub(super) fn all_commands_missing(context: &Context, key: &RegPath) -> Option<S
             return None;
         }
         let target = text_value(&values, "").and_then(|text| command_target(&text))?;
-        if context.check.path(&target, false) != Verdict::Missing {
+        if context.check_for(key).path(&target, false) != Verdict::Missing {
             return None;
         }
         first.get_or_insert(target);
@@ -179,9 +179,11 @@ pub(super) fn all_commands_missing(context: &Context, key: &RegPath) -> Option<S
     first
 }
 
-/// Uninstall entries whose uninstaller is missing and whose install folder,
-/// when it names one, is gone too. Windows Installer's own entries are left
-/// to Windows Installer.
+/// Uninstall entries whose uninstaller is missing and whose install folder
+/// and icon, when it names them, are gone too. Windows Installer's own
+/// entries are left to Windows Installer, and setup bundles' to their
+/// packages: a bundle's cached setup can be cleaned away while what it
+/// installed stays. An entry naming no install folder is offered unticked.
 pub fn uninstall(context: &Context, out: &mut Vec<Found>) {
     for (software, view32) in context.software_roots() {
         let list = software.child(r"Microsoft\Windows\CurrentVersion\Uninstall");
@@ -191,7 +193,11 @@ pub fn uninstall(context: &Context, out: &mut Vec<Found>) {
             let msi = values.iter().any(|value| {
                 value.name.eq_ignore_ascii_case("WindowsInstaller") && value.as_u32() == Some(1)
             });
-            if msi {
+            let bundle = values.iter().any(|value| {
+                value.name.eq_ignore_ascii_case("BundleProviderKey")
+                    || value.name.eq_ignore_ascii_case("BundleCachePath")
+            });
+            if msi || bundle {
                 continue;
             }
             let Some(target) =
@@ -199,20 +205,32 @@ pub fn uninstall(context: &Context, out: &mut Vec<Found>) {
             else {
                 continue;
             };
-            if !context.check.missing(&target, view32) {
+            let check = context.check_for(&key);
+            if !check.missing(&target, view32) {
                 continue;
             }
-            let folder_present = text_value(&values, "InstallLocation")
-                .is_some_and(|folder| context.check.path(&folder, view32) != Verdict::Missing);
-            if folder_present {
+            let folder =
+                text_value(&values, "InstallLocation").filter(|text| !text.trim().is_empty());
+            let folder_present = folder
+                .as_ref()
+                .is_some_and(|folder| check.path(folder, view32) != Verdict::Missing);
+            let icon_present = text_value(&values, "DisplayIcon")
+                .and_then(|text| command_target(&text))
+                .is_some_and(|icon| check.path(&icon, view32) != Verdict::Missing);
+            if folder_present || icon_present {
                 continue;
             }
             let name = text_value(&values, "DisplayName").unwrap_or_else(|| id.clone());
-            out.push(Found::key(
+            let found = Found::key(
                 Category::Uninstall,
                 key,
                 format!("\"{name}\": its uninstaller {target} no longer exists."),
-            ));
+            );
+            out.push(if folder.is_some() {
+                found
+            } else {
+                found.unticked()
+            });
         }
     }
 }

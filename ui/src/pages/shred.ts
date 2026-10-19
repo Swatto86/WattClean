@@ -130,7 +130,18 @@ export const shredPage = (_ctx: Context): Page => {
       const report = await api.shred([...queue], (p) => {
         status.textContent = `${count(p.files)} files · ${bytes(p.bytes)} — ${p.current}`;
       });
-      queue.length = 0;
+      // What was not shredded stays queued to try again: everything after
+      // a stop, else what a problem was reported in.
+      const inside = (path: string, item: string) => {
+        const [p, i] = [path.toLowerCase(), item.toLowerCase()];
+        return p === i || p.startsWith(`${i.replace(/\\$/, "")}\\`);
+      };
+      const left = report.cancelled
+        ? [...queue]
+        : queue.filter((item) =>
+            report.problems.some((problem) => inside(problem.path, item)),
+          );
+      queue.splice(0, queue.length, ...left);
       show(report);
     } catch (error) {
       notice(String(error), true);

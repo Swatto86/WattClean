@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use wu_core::{System, Tracing};
@@ -19,6 +19,17 @@ pub struct AppState {
     sessions: Mutex<HashMap<u32, Arc<Session>>>,
     traces: Mutex<HashMap<u32, TraceRun>>,
     next_id: AtomicU32,
+    /// Removals and restores under way: quitting waits for them.
+    removing: AtomicUsize,
+}
+
+/// Counts one removal or restore until it finishes, however it ends.
+pub struct Removing<'a>(&'a AtomicUsize);
+
+impl Drop for Removing<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 /// An installer running under an install trace.
@@ -51,7 +62,17 @@ impl AppState {
             sessions: Mutex::new(HashMap::new()),
             traces: Mutex::new(HashMap::new()),
             next_id: AtomicU32::new(1),
+            removing: AtomicUsize::new(0),
         }
+    }
+
+    pub fn begin_removal(&self) -> Removing<'_> {
+        self.removing.fetch_add(1, Ordering::SeqCst);
+        Removing(&self.removing)
+    }
+
+    pub fn is_removing(&self) -> bool {
+        self.removing.load(Ordering::SeqCst) > 0
     }
 
     pub fn backups_dir(&self) -> PathBuf {

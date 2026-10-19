@@ -131,7 +131,11 @@ pub async fn reg_clean(
         force,
         full_backup,
     };
-    blocking(move || clean_now(&app, list, &ids, choices)).await
+    blocking(move || {
+        let _cleaning = app.begin_clean()?;
+        clean_now(&app, list, &ids, choices)
+    })
+    .await
 }
 
 /// What the person chose in the clean dialog.

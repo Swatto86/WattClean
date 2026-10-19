@@ -10,15 +10,15 @@ mod keys;
 use std::path::{Path, PathBuf};
 
 use super::{Confidence, Context, Found, Target};
+use crate::folders::Folders;
 use crate::identity::Identity;
 use crate::model::RegPath;
 use crate::paths::is_within;
 
-pub use keys::{key_allowed, value_allowed};
+pub use keys::{deep_value_allowed, key_allowed, value_allowed};
 
 /// Folders that are never deleted, nor any folder above them.
-fn protected_folders(context: &Context<'_>) -> Vec<PathBuf> {
-    let folders = context.folders;
+fn protected_folders(folders: &Folders) -> Vec<PathBuf> {
     let mut list = vec![
         folders.windows.clone(),
         folders.program_files.clone(),
@@ -45,6 +45,15 @@ fn protected_folders(context: &Context<'_>) -> Vec<PathBuf> {
     list.extend(folders.common_files.iter().cloned());
     list.extend(folders.downloads.clone());
     list
+}
+
+/// True for a folder Windows or every program shares: inside Windows, or one
+/// of (or above) the protected roots. Never a program's own folder.
+pub fn is_shared_folder(folders: &Folders, dir: &Path) -> bool {
+    is_within(dir, &folders.windows)
+        || protected_folders(folders)
+            .iter()
+            .any(|protected| is_within(protected, dir))
 }
 
 pub fn path_allowed(context: &Context<'_>, identity: &Identity, path: &Path) -> bool {
@@ -78,7 +87,7 @@ pub fn path_allowed(context: &Context<'_>, identity: &Identity, path: &Path) -> 
     if let Some(allowed) = other_user_data(folders, path) {
         return allowed && !others_use(context, path);
     }
-    if protected_folders(context)
+    if protected_folders(folders)
         .iter()
         .any(|protected| is_within(protected, path))
     {

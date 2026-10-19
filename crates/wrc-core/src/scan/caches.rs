@@ -16,7 +16,7 @@ pub fn cache(context: &Context, out: &mut Vec<Found>) {
         let key = user.classes.child(MUI_CACHE);
         for value in values_or_empty(context.system, &key) {
             let path = mui_path(&value.name);
-            if context.check.missing(&path, false) {
+            if context.check_for(&key).missing(&path, false) {
                 out.push(Found::value(
                     Category::Cache,
                     key.clone(),
@@ -38,7 +38,7 @@ pub fn cache(context: &Context, out: &mut Vec<Found>) {
     }
     for key in compat {
         for value in values_or_empty(context.system, &key) {
-            if context.check.missing(&value.name, false) {
+            if context.check_for(&key).missing(&value.name, false) {
                 out.push(Found::value(
                     Category::Cache,
                     key.clone(),
@@ -145,7 +145,7 @@ pub fn system_settings(context: &Context, out: &mut Vec<Found>) {
             let Some(path) = value.as_text() else {
                 continue;
             };
-            if context.check.missing(&path, false) {
+            if context.check_for(&cursors).missing(&path, false) {
                 out.push(Found::value(
                     Category::SystemSettings,
                     cursors.clone(),
@@ -186,7 +186,7 @@ fn sounds(context: &Context, apps: &RegPath, out: &mut Vec<Found>) {
                 let Some(path) = text_value(&values, "") else {
                     continue;
                 };
-                if context.check.missing(&path, false) {
+                if context.check_for(&key).missing(&path, false) {
                     out.push(Found::value(
                         Category::SystemSettings,
                         key,
@@ -212,7 +212,7 @@ fn fonts(context: &Context, key: &RegPath, out: &mut Vec<Found>) {
         } else {
             continue;
         };
-        if context.check.missing(&path, false) {
+        if context.check_for(key).missing(&path, false) {
             out.push(Found::value(
                 Category::SystemSettings,
                 key.clone(),

@@ -7,14 +7,14 @@ use crate::model::{Hive, REG_BINARY};
 use crate::scan::Category;
 use crate::system::System;
 
-fn machine() -> (tempfile::TempDir, FakeSystem, PathBuf) {
+pub(super) fn machine() -> (tempfile::TempDir, FakeSystem, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let system = FakeSystem::empty(&dir.path().join("machine"));
     let backups = dir.path().join("backups");
     (dir, system, backups)
 }
 
-fn target(key: &RegPath, value: Option<&str>) -> Target {
+pub(super) fn target(key: &RegPath, value: Option<&str>) -> Target {
     Target {
         key: key.clone(),
         value: value.map(str::to_owned),
@@ -97,6 +97,40 @@ fn restore_never_overwrites_what_came_back() {
     assert_eq!(outcome.restored, 0);
     assert_eq!(outcome.skipped.len(), 1);
     assert_eq!(system.values_of(&key), vec![RawValue::string("App", "new")]);
+}
+
+/// A protected subkey stops a key's delete part-way, after Windows has
+/// already deleted the subkeys before it: the backup is kept and puts back
+/// what went, leaving what stayed.
+#[test]
+fn a_key_delete_stopped_part_way_can_be_put_back() {
+    let (_dir, system, backups) = machine();
+    let app = RegPath::new(Hive::CurrentUser, r"Software\Fabrikam");
+    system.put(&app, vec![RawValue::string("", "app")]);
+    system.put(&app.child("Locked"), vec![RawValue::string("a", "1")]);
+    system.put(&app.child("Plugins"), vec![RawValue::string("b", "2")]);
+    system.protect(&app.child("Locked"));
+
+    let removal = remove(
+        &system,
+        &backups,
+        BackupKind::Clean,
+        "Safe scan",
+        vec![target(&app, None)],
+        false,
+    )
+    .unwrap();
+    assert_eq!(removal.failed.len(), 1);
+    assert!(!system.has_key(&app.child("Plugins")), "Windows deleted it");
+    let id = removal.backup.expect("the backup holds what was deleted");
+
+    let outcome = restore(&system, &backups, &id, None).unwrap();
+    assert_eq!(outcome.restored, 1, "{outcome:?}");
+    assert_eq!(
+        system.values_of(&app.child("Plugins")),
+        vec![RawValue::string("b", "2")]
+    );
+    assert!(system.has_key(&app.child("Locked")));
 }
 
 #[test]
@@ -200,118 +234,6 @@ fn a_damaged_backup_is_listed_not_hidden() {
     assert_eq!(listed.len(), 1);
     assert!(listed[0].damaged.is_some());
     assert_eq!(listed[0].created, 1_700_000_000);
-}
-
-#[test]
-fn protected_keys_need_force_and_restore_their_protection() {
-    use crate::fake::{OWNED, PROTECTED};
-    let (_dir, system, backups) = machine();
-    let key = RegPath::new(Hive::LocalMachine, r"SOFTWARE\Classes\CLSID\{1}");
-    system.put(
-        &key.child("InprocServer32"),
-        vec![RawValue::string("", "x.dll")],
-    );
-    system.protect(&key);
-    let plain = remove(
-        &system,
-        &backups,
-        BackupKind::Clean,
-        "x",
-        vec![target(&key, None)],
-        false,
-    )
-    .unwrap();
-    assert_eq!(plain.removed, 0);
-    assert!(
-        plain.failed[0].1.contains("Take ownership"),
-        "{:?}",
-        plain.failed
-    );
-    assert!(system.has_key(&key));
-
-    let forced = remove(
-        &system,
-        &backups,
-        BackupKind::Clean,
-        "x",
-        vec![target(&key, None)],
-        true,
-    )
-    .unwrap();
-    assert_eq!(
-        (forced.removed, forced.forced),
-        (1, 1),
-        "{:?}",
-        forced.failed
-    );
-    assert!(!system.has_key(&key));
-    let id = forced.backup.unwrap();
-    let outcome = restore(&system, &backups, &id, None).unwrap();
-    assert_eq!(outcome.restored, 1);
-    assert!(outcome.skipped.is_empty(), "{:?}", outcome.skipped);
-    assert_eq!(system.security_of(&key).as_deref(), Some(PROTECTED));
-    assert_eq!(
-        system.security_of(&key.child("InprocServer32")).as_deref(),
-        Some(PROTECTED)
-    );
-    assert_ne!(PROTECTED, OWNED);
-}
-
-#[test]
-fn a_protected_keys_value_goes_and_the_key_stays_protected() {
-    use crate::fake::PROTECTED;
-    let (_dir, system, backups) = machine();
-    let key = RegPath::new(Hive::LocalMachine, r"SOFTWARE\Protected");
-    system.put(
-        &key,
-        vec![RawValue::string("Gone", "1"), RawValue::string("Keep", "2")],
-    );
-    system.protect(&key);
-    let removal = remove(
-        &system,
-        &backups,
-        BackupKind::Clean,
-        "x",
-        vec![target(&key, Some("Gone"))],
-        true,
-    )
-    .unwrap();
-    assert_eq!((removal.removed, removal.forced), (1, 1));
-    assert!(removal.warnings.is_empty(), "{:?}", removal.warnings);
-    assert_eq!(system.values_of(&key), vec![RawValue::string("Keep", "2")]);
-    assert_eq!(system.security_of(&key).as_deref(), Some(PROTECTED));
-    let outcome = restore(&system, &backups, &removal.backup.unwrap(), None).unwrap();
-    assert_eq!(outcome.restored, 1);
-    assert!(
-        system
-            .values_of(&key)
-            .contains(&RawValue::string("Gone", "1"))
-    );
-    assert_eq!(system.security_of(&key).as_deref(), Some(PROTECTED));
-}
-
-#[test]
-fn without_administrator_rights_force_changes_nothing() {
-    let (_dir, system, backups) = machine();
-    let key = RegPath::new(Hive::LocalMachine, r"SOFTWARE\Protected");
-    system.put(&key, vec![RawValue::string("a", "1")]);
-    system.protect(&key);
-    system.set_elevated(false);
-    let removal = remove(
-        &system,
-        &backups,
-        BackupKind::Clean,
-        "x",
-        vec![target(&key, None)],
-        true,
-    )
-    .unwrap();
-    assert_eq!(removal.removed, 0);
-    assert!(system.has_key(&key));
-    assert_eq!(
-        system.security_of(&key).as_deref(),
-        Some(crate::fake::PROTECTED)
-    );
 }
 
 #[test]

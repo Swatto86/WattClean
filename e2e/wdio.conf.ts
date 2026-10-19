@@ -147,6 +147,7 @@ export const config: WebdriverIO.Config = {
       "uninstall/forced",
       "uninstall/persist",
       "uninstall/traced",
+      "uninstall/batch",
       // Restarts, the tray and quitting, last.
       "persist",
       "registry/persist",

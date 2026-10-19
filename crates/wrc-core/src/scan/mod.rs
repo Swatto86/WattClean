@@ -149,12 +149,23 @@ impl Found {
 pub(crate) struct Context<'a> {
     pub system: &'a dyn System,
     pub check: PathCheck<'a>,
+    /// The check for other accounts' data.
+    pub others: PathCheck<'a>,
     pub users: Vec<UserRoot>,
     pub options: &'a Options,
     pub progress: &'a Progress,
 }
 
-impl Context<'_> {
+impl<'a> Context<'a> {
+    /// The check for data read from `key`.
+    pub fn check_for(&self, key: &RegPath) -> &PathCheck<'a> {
+        if key.hive == Hive::Users {
+            &self.others
+        } else {
+            &self.check
+        }
+    }
+
     /// `HKLM\SOFTWARE` and its 32-bit twin, then each account's `Software`,
     /// with whether the root is the 32-bit view.
     pub fn software_roots(&self) -> Vec<(RegPath, bool)> {
@@ -190,6 +201,8 @@ pub fn scan(
     let context = Context {
         system,
         check: PathCheck::new(system, options.exclude_removable, options.exclude_windows),
+        others: PathCheck::new(system, options.exclude_removable, options.exclude_windows)
+            .for_other_accounts(),
         users,
         options,
         progress,

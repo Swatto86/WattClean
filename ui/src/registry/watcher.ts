@@ -23,6 +23,8 @@ const OP_TEXT: Record<WatchEvent["op"], string> = {
 };
 /** The table shows at most this many changes; Export saves them all. */
 const SHOWN = 2000;
+/** The page holds at most this many, for the filter to search; Export saves them all. */
+const KEPT = 20_000;
 
 export interface WatcherView {
   load: () => Promise<void>;
@@ -150,7 +152,10 @@ export function wireWatcher(context: AppContext): WatcherView {
 
   const select = async (key: string | null) => {
     selected = key;
-    log = key ? await api.watchEvents(key, 0) : [];
+    const events = key ? await api.watchEvents(key, 0) : [];
+    // Another key was chosen while this one's log was read.
+    if (selected !== key) return;
+    log = events.slice(-KEPT);
     renderList();
     renderLog();
   };
@@ -163,19 +168,30 @@ export function wireWatcher(context: AppContext): WatcherView {
     await select(keep ?? keys[0] ?? null);
   };
 
-  /** New changes for the selected key, and fresh counts, every second. */
+  /**
+   * New changes for the selected key, and fresh counts, every second while
+   * the page is on show (not while another page is, or the window is in
+   * the notification area).
+   */
   const poll = async () => {
-    if (byId("view-watcher", HTMLElement).hidden) return;
-    if (selected) {
+    if (document.hidden || !byId("view-watcher", HTMLElement).checkVisibility())
+      return;
+    const key = selected;
+    if (key) {
       const last = log[log.length - 1]?.seq ?? 0;
-      const fresh = await api.watchEvents(selected, last);
-      if (fresh.length > 0) {
-        log = [...log, ...fresh];
+      const fresh = await api.watchEvents(key, last);
+      // Only into the log of the key they were read for.
+      if (fresh.length > 0 && selected === key) {
+        log = [...log, ...fresh].slice(-KEPT);
         renderLog();
       }
     }
-    watches = await api.listWatches();
-    renderList();
+    const listed = await api.listWatches();
+    // Redrawn only when something changed, so focus in the list stays put.
+    if (JSON.stringify(listed) !== JSON.stringify(watches)) {
+      watches = listed;
+      renderList();
+    }
     renderTracing(await api.watchTracing());
   };
   setInterval(() => void poll().catch(() => undefined), 1000);

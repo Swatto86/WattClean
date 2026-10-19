@@ -109,8 +109,13 @@ export function wireCleaner(context: AppContext): void {
     toolbar.hidden = true;
   };
 
+  /** A scan is running: a second submit (double-click, held Enter) waits. */
+  let scanning = false;
+
   /** Scan as the form says; false when it failed (the form says why). */
   const scan = async (mode: Mode, categories: Category[]): Promise<boolean> => {
+    if (scanning) return false;
+    scanning = true;
     try {
       await context.update((current) => ({
         ...current,
@@ -133,6 +138,7 @@ export function wireCleaner(context: AppContext): void {
       showStart();
       return false;
     } finally {
+      scanning = false;
       busy.hidden = true;
     }
   };

@@ -43,6 +43,8 @@ pub struct Findings {
 pub enum SpecError {
     #[error("invalid regular expression {0:?}: {1}")]
     Regex(String, String),
+    #[error("skipped: the exclusion {0:?} uses a variable this PC does not know")]
+    Exclusion(String),
 }
 
 /// A spec's filters, compiled once per run.
@@ -56,6 +58,9 @@ pub struct Filter {
     dir_names: Option<WildcardSet>,
     beside: Option<WildcardSet>,
     kind: Option<Kind>,
+    /// walk.all with a file-name filter: only matching files go, never the
+    /// folders (some were already empty and are Windows' to keep).
+    files_by_name: bool,
     older_than: Option<SystemTime>,
     exclude_roots: Vec<String>,
     exclude_patterns: Vec<Wildcard>,
@@ -77,7 +82,10 @@ impl Filter {
         let mut exclude_roots = Vec::new();
         let mut exclude_patterns = Vec::new();
         for pattern in &spec.exclude {
-            for expanded in vars::expand(pattern, vars) {
+            let Some(expansions) = vars::expand_exclusion(pattern, vars) else {
+                return Err(SpecError::Exclusion(pattern.clone()));
+            };
+            for expanded in expansions {
                 if Wildcard::has_wildcards(&expanded) {
                     let key = paths::key(Path::new(&expanded));
                     // `\*\` spans any number of folders, none included.
@@ -97,6 +105,8 @@ impl Filter {
         } else {
             (names, None)
         };
+        let files_by_name = spec.search == Search::WalkAll
+            && (spec.names.is_some() || spec.regex.is_some() || spec.nregex.is_some());
         Ok(Self {
             regex: compile(spec.regex.as_ref())?,
             nregex: compile(spec.nregex.as_ref())?,
@@ -106,6 +116,7 @@ impl Filter {
             dir_names,
             beside: spec.beside.as_deref().map(WildcardSet::new),
             kind: spec.kind,
+            files_by_name,
             older_than: spec
                 .older_than_days
                 .and_then(|days| now.checked_sub(Duration::from_secs(u64::from(days) * 86_400))),
@@ -198,7 +209,7 @@ impl Searcher<'_> {
         let is_dir = meta.is_dir() && !meta.file_type().is_symlink();
         match search {
             Search::File | Search::Glob => {
-                let kind = if meta.is_dir() { Kind::Dir } else { Kind::File };
+                let kind = paths::kind_of(&meta);
                 if filter.kind.is_some_and(|k| k != kind)
                     || !filter.path_ok(root)
                     || !filter.name_ok(root, &meta)
@@ -282,6 +293,7 @@ impl Searcher<'_> {
             if meta.is_dir() && !link {
                 let inner = self.walk(&path, depth + 1, files_only, filter, out);
                 if files_only
+                    || filter.files_by_name
                     || !inner
                     || filter.kind == Some(Kind::File)
                     || !filter.path_ok(&path)
@@ -295,7 +307,7 @@ impl Searcher<'_> {
                 }
             } else {
                 // A link to a folder is removed like a folder (the link only).
-                let kind = if meta.is_dir() { Kind::Dir } else { Kind::File };
+                let kind = paths::kind_of(&meta);
                 let wanted = match kind {
                     Kind::File => filter.kind != Some(Kind::Dir),
                     Kind::Dir => !files_only && filter.kind != Some(Kind::File),

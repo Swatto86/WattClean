@@ -12,6 +12,9 @@ interface Choices {
   fullBackup: boolean;
 }
 
+/** A clean is being asked for or running: a second click or a held Enter waits. */
+let cleaning = false;
+
 /** Ask, then remove; returns once the person has read the outcome. */
 export async function cleanTicked(
   context: AppContext,
@@ -19,7 +22,21 @@ export async function cleanTicked(
   tree: FindingsTree,
 ): Promise<void> {
   const ids = tree.tickedIds();
-  if (ids.length === 0) return;
+  if (ids.length === 0 || cleaning) return;
+  cleaning = true;
+  try {
+    await confirmAndClean(context, list, tree, ids);
+  } finally {
+    cleaning = false;
+  }
+}
+
+async function confirmAndClean(
+  context: AppContext,
+  list: ResultList,
+  tree: FindingsTree,
+  ids: number[],
+): Promise<void> {
   const choices = await confirmClean(context, ids.length);
   if (choices === null) return;
   try {

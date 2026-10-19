@@ -82,6 +82,8 @@ pub fn remove(
     let mut done = 0;
     let mut forced = 0;
     let mut warnings = Vec::new();
+    // A key delete stopped part-way still deleted something: keep the backup.
+    let mut partial = false;
     for index in 0..backup.items.len() {
         if backup.items[index].saved.is_none() {
             continue;
@@ -111,6 +113,8 @@ pub fn remove(
                 reason: reason(&error),
             },
         };
+        let (state, stopped) = noted(system, &backup.items[index], state);
+        partial |= stopped;
         backup.items[index].state = state;
         done += 1;
         if done % SAVE_EVERY == 0 {
@@ -130,7 +134,7 @@ pub fn remove(
         .iter()
         .filter(|item| item.state == ItemState::Removed)
         .count();
-    let kept = if removed == 0 {
+    let kept = if removed == 0 && !partial {
         super::delete(dir, &backup.id)?;
         None
     } else {
@@ -146,6 +150,31 @@ pub fn remove(
         warnings,
         failed,
     })
+}
+
+/// A failed delete that Windows stopped part-way says so, and whether it was.
+fn noted(system: &dyn System, item: &Item, state: ItemState) -> (ItemState, bool) {
+    match state {
+        ItemState::Failed { reason } if partly_removed(system, item) => (
+            ItemState::Failed {
+                reason: format!("{reason}; part of it was removed and can be restored"),
+            },
+            true,
+        ),
+        state => (state, false),
+    }
+}
+
+/// Whether a key whose delete failed lost some of what was saved: Windows
+/// deletes subkeys one by one until a protected one stops it.
+pub(crate) fn partly_removed(system: &dyn System, item: &Item) -> bool {
+    let (None, Some(Saved::Key(saved))) = (&item.value, &item.saved) else {
+        return false;
+    };
+    match capture_key(system, &item.key) {
+        Ok(now) => now.values != saved.values || now.keys != saved.keys,
+        Err(_) => true,
+    }
 }
 
 fn delete(system: &dyn System, item: &Item) -> io::Result<()> {

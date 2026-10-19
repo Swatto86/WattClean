@@ -22,7 +22,7 @@ decisions; each engine's own structure and decisions are in
   release feature guard (all three engines' `fake`), frontend build, types,
   format and tests, version agreement, 400-line cap (a `size-exception:`
   line in the first 30 lines allows more), test-machine debug build, then
-  the WebDriver suite (`e2e/`, 99 tests, about 3 minutes). It drives real
+  the WebDriver suite (`e2e/`, 102 tests, about 3 minutes). It drives real
   Windows right-click menus on the desktop: leave the mouse and keyboard
   alone while it runs.
 - WebDriver setup once per WebView2 update: `pwsh scripts/setup-e2e.ps1`

@@ -73,7 +73,7 @@ async function loadSettings(host: Host): Promise<Settings> {
     await host.reveal();
     await inform(
       "The registry cleaner's settings could not be read",
-      `${message(error)}\n\nThe defaults are used until the file is fixed or removed.`,
+      `${message(error)}\n\nThe defaults are shown until the file is fixed or removed. Scans and searches wait for it, so your exclusions are never ignored.`,
     );
     return DEFAULTS;
   }

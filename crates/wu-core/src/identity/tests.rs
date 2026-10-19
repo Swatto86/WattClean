@@ -202,3 +202,28 @@ fn references_need_a_path_inside_the_install_dir() {
     assert!(!identity.references(r"C:\Program Files\Acme\WidgetPro\widget.exe"));
     assert!(!identity.references("widget.exe"));
 }
+
+#[test]
+fn shared_places_are_not_a_programs_own_folder() {
+    let machine = crate::scan::tests::machine();
+    let folders = &machine.folders;
+    let root = folders.windows.ancestors().last().unwrap().to_path_buf();
+    for dir in [
+        folders.windows.clone(),
+        folders.windows.join("System32"),
+        root,
+        folders.program_files.clone(),
+        folders.users.clone(),
+        folders.local_app_data.join("Programs"),
+        folders.desktop.clone(),
+    ] {
+        assert!(!Identity::is_own_folder(&dir, folders), "{dir:?}");
+    }
+    for dir in [
+        folders.program_files.join(r"Acme\Widget"),
+        folders.local_app_data.join("Acme"),
+        folders.program_files.join("Acme").join(""),
+    ] {
+        assert!(Identity::is_own_folder(&dir, folders), "{dir:?}");
+    }
+}

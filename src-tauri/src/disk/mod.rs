@@ -30,12 +30,9 @@ pub fn disk_get_settings(state: App<'_>) -> Settings {
 pub async fn disk_update_settings(state: App<'_>, patch: SettingsPatch) -> CommandResult<Settings> {
     let app = Arc::clone(&state);
     blocking(move || {
-        let mut settings = app.settings();
-        let community = settings.community;
-        settings.apply(patch).map_err(CommandError::from)?;
-        let changed_community = settings.community != community;
-        app.replace_settings(settings.clone())?;
-        if changed_community {
+        let (before, settings) =
+            app.update_settings(|settings| settings.apply(patch).map_err(CommandError::from))?;
+        if settings.community != before.community {
             app.reload_catalog();
         }
         Ok(settings)

@@ -167,14 +167,64 @@ fn links_are_listed_but_never_followed() {
     let dir = tree();
     let target = dir.path().join("Other");
     let link = dir.path().join(r"App\Cache\link");
-    if std::os::windows::fs::symlink_dir(&target, &link).is_err() {
-        // Creating links needs Developer Mode or administrator rights.
-        return;
-    }
+    junction(&link, &target);
     let spec = FileSpec::new(path(dir.path(), r"App\Cache"), Search::WalkAll);
     let found = rel(dir.path(), run(&spec, &Guard::default()));
     assert!(found.contains(&("App/Cache/link".to_string(), Kind::Dir)));
     assert!(!found.iter().any(|(p, _)| p.contains("Profile1")));
+    // A clean removes folders with remove_dir: only the link goes.
+    crate::exec::remove_dir(&link).unwrap();
+    assert!(!link.exists());
+    assert!(target.join(r"Profile1\Cache\c.bin").exists());
+}
+
+/// A junction, which Windows lets any user create (a symlink needs rights).
+#[cfg(windows)]
+fn junction(link: &Path, target: &Path) {
+    let status = std::process::Command::new("cmd")
+        .arg("/C")
+        .arg("mklink")
+        .arg("/J")
+        .arg(link)
+        .arg(target)
+        .stdout(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success(), "mklink /J failed");
+}
+
+#[test]
+fn walk_all_with_a_name_filter_leaves_folders_alone() {
+    let dir = tree();
+    fs::create_dir_all(dir.path().join(r"App\Reports\WATCHDOG")).unwrap();
+    fs::create_dir_all(dir.path().join(r"App\Reports\Full")).unwrap();
+    fs::write(dir.path().join(r"App\Reports\Full\x.dmp"), b"1").unwrap();
+    fs::write(dir.path().join(r"App\Reports\top.dmp"), b"1").unwrap();
+    let mut spec = FileSpec::new(path(dir.path(), r"App\Reports"), Search::WalkAll);
+    spec.names = Some("*.dmp".into());
+    let mut found = rel(dir.path(), run(&spec, &Guard::default()));
+    found.sort();
+    assert_eq!(
+        found,
+        vec![
+            ("App/Reports/Full/x.dmp".to_string(), Kind::File),
+            ("App/Reports/top.dmp".to_string(), Kind::File),
+        ]
+    );
+    // Without a name filter the emptied folders still go.
+    let spec = FileSpec::new(path(dir.path(), r"App\Reports"), Search::WalkAll);
+    let found = rel(dir.path(), run(&spec, &Guard::default()));
+    assert!(found.contains(&("App/Reports/WATCHDOG".to_string(), Kind::Dir)));
+}
+
+#[test]
+fn an_exclusion_that_cannot_be_expanded_refuses_the_search() {
+    let mut spec = FileSpec::new("x", Search::WalkFiles);
+    spec.exclude = vec![r"%NoSuchVariable%\Keep".into()];
+    assert!(Filter::new(&spec, &no_vars, SystemTime::now()).is_err());
+    // OneDrive is simply absent on many PCs: nothing to exclude there.
+    spec.exclude = vec![r"%ONEDRIVE%".into()];
+    assert!(Filter::new(&spec, &no_vars, SystemTime::now()).is_ok());
 }
 
 #[test]

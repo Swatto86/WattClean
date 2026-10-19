@@ -130,11 +130,37 @@ impl SettingsPatch {
         }
         if let Some(keep) = &self.keep {
             check_list(keep, "keep list")?;
+            // The guard compares keep entries literally, so a pattern would
+            // protect nothing while looking as if it did.
+            if let Some(entry) = keep.iter().find(|e| e.path.contains(['*', '?'])) {
+                return Err(format!(
+                    "{:?} has a wildcard (* or ?): the keep list takes exact files and folders",
+                    entry.path
+                ));
+            }
         }
         if let Some(custom) = &self.custom_paths {
             check_list(custom, "custom path list")?;
         }
         Ok(())
+    }
+}
+
+/// A stored keep list minus entries with wildcards (an older version took
+/// them, but never honoured them); the other entries stay.
+fn without_wildcards(value: Value) -> Value {
+    match value {
+        Value::Array(entries) => Value::Array(
+            entries
+                .into_iter()
+                .filter(|e| {
+                    !e.get("path")
+                        .and_then(Value::as_str)
+                        .is_some_and(|p| p.contains(['*', '?']))
+                })
+                .collect(),
+        ),
+        other => other,
     }
 }
 
@@ -200,6 +226,11 @@ impl Settings {
             return settings;
         };
         for (name, value) in fields {
+            let value = if name == "keep" {
+                without_wildcards(value)
+            } else {
+                value
+            };
             let single = Value::Object([(name, value)].into_iter().collect());
             if let Ok(patch) = serde_json::from_value::<SettingsPatch>(single) {
                 // A bad field is dropped; the rest still apply.
@@ -267,6 +298,31 @@ mod tests {
         };
         assert!(settings.apply(selection).is_err());
         assert!(serde_json::from_str::<SettingsPatch>(r#"{"unknown":true}"#).is_err());
+    }
+
+    #[test]
+    fn keep_entries_cannot_hold_wildcards() {
+        let wildcard = SettingsPatch {
+            keep: Some(vec![CustomPath {
+                path: r"C:\Docs\*.docx".into(),
+                folder: false,
+            }]),
+            ..SettingsPatch::default()
+        };
+        let error = Settings::default().apply(wildcard).unwrap_err();
+        assert!(error.contains("wildcard"), "{error}");
+
+        // An old file with one such entry keeps the others.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(
+            &path,
+            r#"{"keep":[{"path":"C:\\A","folder":true},{"path":"C:\\B\\?.txt","folder":false}]}"#,
+        )
+        .unwrap();
+        let loaded = Settings::load(&path);
+        assert_eq!(loaded.keep.len(), 1);
+        assert_eq!(loaded.keep[0].path, r"C:\A");
     }
 
     #[test]

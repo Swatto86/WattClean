@@ -6,6 +6,8 @@
 
 mod capture;
 mod force;
+#[cfg(test)]
+mod force_tests;
 mod full;
 #[cfg(test)]
 mod full_tests;

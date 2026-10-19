@@ -227,6 +227,55 @@ fn custom_paths_and_shredding() {
 }
 
 #[test]
+fn edits_are_checked_against_the_guard_just_before_they_run() {
+    use crate::exec::{Executor, Outcome};
+    use crate::model::SqliteOp;
+    use crate::ops::Op;
+    use crate::paths::Guard;
+
+    let m = machine();
+    let dir = m.path(&format!(r"{PROFILE}\Documents\Kept"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let json = dir.join("a.json");
+    let ini = dir.join("a.ini");
+    std::fs::write(&json, r#"{"x":1}"#).unwrap();
+    std::fs::write(&ini, "[s]\nk=1\n").unwrap();
+    let guard = Guard::new(&[], std::slice::from_ref(&dir));
+    let never = || false;
+    let executor = Executor {
+        system: &m.system,
+        guard: &guard,
+        shred: false,
+        delete_on_reboot: false,
+        cancelled: &never,
+    };
+    let ops = [
+        Op::Json {
+            path: json.clone(),
+            address: "x".into(),
+        },
+        Op::Ini {
+            path: ini.clone(),
+            section: "s".into(),
+            parameter: Some("k".into()),
+        },
+        Op::Sqlite {
+            path: json.clone(),
+            op: SqliteOp::Vacuum,
+            size: 0,
+        },
+    ];
+    for op in &ops {
+        assert!(
+            matches!(executor.execute(op), Outcome::Failed { .. }),
+            "{op:?} ran on a kept file"
+        );
+    }
+    assert_eq!(std::fs::read_to_string(&json).unwrap(), r#"{"x":1}"#);
+    assert_eq!(std::fs::read_to_string(&ini).unwrap(), "[s]\nk=1\n");
+}
+
+#[test]
 fn a_repeated_option_runs_once() {
     let m = machine();
     let report = m.run(

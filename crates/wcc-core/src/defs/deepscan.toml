@@ -33,7 +33,7 @@ actions = [
   { op = "delete", search = "walk.files", path = '%USERPROFILE%', regex = '^Thumbs\.db$', exclude = [
     '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\*\target',
     '%USERPROFILE%\.cargo', '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle',
-    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode',
+    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode', '%ONEDRIVE%',
   ] },
 ]
 
@@ -45,7 +45,7 @@ actions = [
   { op = "delete", search = "walk.files", path = '%USERPROFILE%', regex = '^(\.DS_Store|\._.+)$', exclude = [
     '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\*\target',
     '%USERPROFILE%\.cargo', '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle',
-    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode',
+    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode', '%ONEDRIVE%',
   ] },
 ]
 
@@ -70,6 +70,6 @@ actions = [
   { op = "delete", search = "walk.files", path = '%USERPROFILE%', regex = '^~\$', older_than_days = 1, exclude = [
     '%USERPROFILE%\AppData', '%USERPROFILE%\*\node_modules', '%USERPROFILE%\*\.git', '%USERPROFILE%\*\target',
     '%USERPROFILE%\.cargo', '%USERPROFILE%\.rustup', '%USERPROFILE%\go', '%USERPROFILE%\.nuget', '%USERPROFILE%\.gradle',
-    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode',
+    '%USERPROFILE%\.m2', '%USERPROFILE%\.npm', '%USERPROFILE%\.cache', '%USERPROFILE%\.vscode', '%ONEDRIVE%',
   ] },
 ]

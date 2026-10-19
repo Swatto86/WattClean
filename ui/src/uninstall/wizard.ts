@@ -10,11 +10,12 @@ import {
   type SessionView,
   type Settings,
 } from "./api.ts";
-import { type Action, confirm, Modal } from "./dialog.ts";
+import { type Action, confirm, inform, Modal } from "./dialog.ts";
 import { h } from "./dom.ts";
 import { plural } from "./format.ts";
 import { LeftoverList } from "./leftovers.ts";
 import {
+  adminButton,
   type Choice,
   confirmForm,
   message,
@@ -30,35 +31,86 @@ export interface WizardContext {
   onDone: () => void;
 }
 
+/** A program's place in a batch, whose dialog it shares. */
+export interface Place {
+  modal: Modal;
+  index: number;
+  total: number;
+}
+
+/** How one program's uninstall ended, for a batch's summary. */
+export interface Outcome {
+  summary: string;
+  ok: boolean;
+  /** The person chose to stop the batch here. */
+  stop: boolean;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-class Wizard {
+export class Wizard {
   private readonly modal: Modal;
   private closed = false;
+  /** Set once the uninstaller is asked for, so a second click is ignored. */
+  private started = false;
+  private outcome: Outcome = {
+    summary: "Closed before it finished.",
+    ok: false,
+    stop: false,
+  };
+  private settle: (outcome: Outcome) => void = () => undefined;
+  /** Settles once this uninstall is closed. */
+  readonly ended = new Promise<Outcome>((resolve) => {
+    this.settle = resolve;
+  });
 
   constructor(
     private readonly session: SessionView,
     private readonly context: WizardContext,
+    private readonly place: Place | null = null,
   ) {
-    this.modal = new Modal(`Uninstall ${session.name}`, true);
+    this.modal = place?.modal ?? new Modal(`Uninstall ${session.name}`, true);
   }
 
+  /** A step's title, with the program's place when it is part of a batch. */
+  private title(text: string): string {
+    return this.place
+      ? `${text} (${this.place.index + 1} of ${this.place.total})`
+      : text;
+  }
+
+  /** A batch keeps its dialog and refreshes the list once, at its end. */
   private async end(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    this.modal.close();
+    if (!this.place) this.modal.close();
     try {
       await api.endUninstall(this.session.id);
+    } catch (error: unknown) {
+      // The uninstall is done; only its history entry was not written.
+      const note = `Its history entry could not be saved: ${message(error)}`;
+      this.outcome = {
+        ...this.outcome,
+        summary: `${this.outcome.summary} ${note}`,
+      };
+      if (!this.place) void inform("Uninstall history", note);
     } finally {
-      this.context.onDone();
+      if (!this.place) this.context.onDone();
+      this.settle(this.outcome);
     }
+  }
+
+  /** Ends this program's steps with an error nothing else caught. */
+  fail(error: unknown): void {
+    if (!this.closed)
+      this.finishStep(`Something went wrong: ${message(error)}`, false);
   }
 
   confirmStep(): void {
     const form = confirmForm(
       this.session,
       this.context.settings,
-      this.adminButton(),
+      adminButton(this.context.restartAsAdmin),
     );
     this.modal.dismissWith(() => void this.end());
     this.modal.show(
@@ -76,26 +128,21 @@ class Wizard {
       (value) => {
         if (value === "cancel") void this.end();
         else
-          void this.runStep(form.choice(), form.restorePoint(), form.quiet());
+          this.run(form.choice(), form.restorePoint(), form.quiet()).catch(
+            (error: unknown) => this.fail(error),
+          );
       },
     );
   }
 
-  private adminButton(): HTMLButtonElement {
-    const button = h(
-      "button",
-      { class: "ghost", type: "button", id: "wizard-admin" },
-      "Restart as administrator",
-    );
-    button.addEventListener("click", () => this.context.restartAsAdmin());
-    return button;
-  }
-
-  private async runStep(
+  /** Runs the program's uninstaller, then the chosen leftover scan. */
+  async run(
     choice: Choice,
     restorePoint: boolean,
     quiet: boolean,
   ): Promise<void> {
+    if (this.started) return;
+    this.started = true;
     this.modal.dismissWith(null);
     let restoreRow: Row | null = null;
     let carryOn = false;
@@ -103,7 +150,7 @@ class Wizard {
       const rows: Row[] = restoreRow ? [restoreRow] : [];
       rows.push(["Program's own uninstaller", state, note]);
       this.modal.show(
-        `Uninstalling ${this.session.name}`,
+        this.title(`Uninstalling ${this.session.name}`),
         [stepList(rows)],
         actions,
         (value) => {
@@ -128,6 +175,7 @@ class Wizard {
     }
     let started = true;
     try {
+      render("busy", "Starting the uninstaller…", []);
       const command = await api.runUninstaller(this.session.id, quiet);
       render(
         "busy",
@@ -142,7 +190,10 @@ class Wizard {
       );
     } catch (error: unknown) {
       started = false;
-      const actions: Action[] = [{ label: "Close", value: "close" }];
+      this.outcome = { summary: message(error), ok: false, stop: false };
+      const actions: Action[] = [
+        { label: this.place ? "Skip this program" : "Close", value: "close" },
+      ];
       if (choice !== "builtin") {
         actions.push({
           label: "Scan for leftovers anyway",
@@ -182,7 +233,7 @@ class Wizard {
       "Starting…",
     );
     this.modal.show(
-      `Scanning for leftovers of ${this.session.name}`,
+      this.title(`Scanning for leftovers of ${this.session.name}`),
       [
         stepList([
           [
@@ -210,7 +261,7 @@ class Wizard {
       this.leftoverStep(report);
     } catch (error: unknown) {
       scanning = false;
-      this.finishStep(`The scan did not finish: ${message(error)}`);
+      this.finishStep(`The scan did not finish: ${message(error)}`, false);
     }
   }
 
@@ -227,7 +278,9 @@ class Wizard {
         remove.disabled = list.selectedIds().length === 0;
     });
     this.modal.show(
-      `Found ${plural(report.items.length, "leftover")} of ${this.session.name}`,
+      this.title(
+        `Found ${plural(report.items.length, "leftover")} of ${this.session.name}`,
+      ),
       [
         h(
           "p",
@@ -264,30 +317,66 @@ class Wizard {
     );
     if (!sure || this.closed) return;
     this.modal.show(
-      `Removing leftovers of ${this.session.name}`,
+      this.title(`Removing leftovers of ${this.session.name}`),
       [stepList([["Backing up and removing", "busy", ""]])],
       [],
       () => undefined,
     );
     try {
       const removal = await api.removeLeftovers(this.session.id, ids);
-      this.finishNodes(removalSummary(removal));
+      const nodes = removalSummary(removal);
+      this.finishNodes(nodes, nodes[0]?.textContent ?? "", true);
     } catch (error: unknown) {
-      this.finishStep(`Nothing more was removed: ${message(error)}`);
+      this.finishStep(`Nothing more was removed: ${message(error)}`, false);
     }
   }
 
-  private finishStep(message: string): void {
-    this.finishNodes([h("p", { id: "wizard-result" }, message)]);
+  private finishStep(text: string, ok = true): void {
+    this.finishNodes([h("p", { id: "wizard-result" }, text)], text, ok);
   }
 
-  private finishNodes(nodes: HTMLElement[]): void {
-    this.modal.dismissWith(() => void this.end());
+  /**
+   * The last step. In a batch it leads on to the next program or stops the
+   * batch; Esc carries on, as Close does alone.
+   */
+  private finishNodes(
+    nodes: HTMLElement[],
+    summary: string,
+    ok: boolean,
+  ): void {
+    this.outcome = { summary, ok, stop: false };
+    const last = !this.place || this.place.index + 1 === this.place.total;
+    const actions: Action[] = last
+      ? [
+          {
+            label: "Close",
+            value: "close",
+            kind: "primary",
+            id: "wizard-close",
+          },
+        ]
+      : [
+          { label: "Stop here", value: "stop", id: "wizard-stop" },
+          {
+            label: "Next program",
+            value: "next",
+            kind: "primary",
+            id: "wizard-next",
+          },
+        ];
+    // Esc closes; in a batch it stops before the next program.
+    this.modal.dismissWith(() => {
+      if (!last) this.outcome.stop = true;
+      void this.end();
+    });
     this.modal.show(
-      `${this.session.name}: done`,
+      this.title(`${this.session.name}: done`),
       nodes,
-      [{ label: "Close", value: "close", kind: "primary", id: "wizard-close" }],
-      () => void this.end(),
+      actions,
+      (value) => {
+        if (value === "stop") this.outcome.stop = true;
+        void this.end();
+      },
     );
   }
 }

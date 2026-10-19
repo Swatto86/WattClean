@@ -60,7 +60,8 @@ const MICROSOFT_REGISTRATIONS: &[&str] = &[
     "software\\microsoft\\windows nt\\currentversion\\schedule\\taskcache\\maintenance",
 ];
 
-/// Class names Windows itself relies on.
+/// Class names Windows itself relies on: the shell's own, and the file types
+/// and URL protocols a program may take over but never owns.
 const SHELL_CLASSES: &[&str] = &[
     "*",
     "allfilesystemobjects",
@@ -69,6 +70,54 @@ const SHELL_CLASSES: &[&str] = &[
     "folder",
     "exefile",
     "dllfile",
+    "txtfile",
+    "htmlfile",
+    "mhtmlfile",
+    "xmlfile",
+    "http",
+    "https",
+    "ftp",
+    "file",
+    "mailto",
+    "batfile",
+    "cmdfile",
+    "regfile",
+    "inffile",
+    "inifile",
+    "jsfile",
+    "jsefile",
+    "vbsfile",
+    "vbefile",
+    "wsffile",
+    "wshfile",
+    "lnkfile",
+    "piffile",
+    "cplfile",
+    "scrfile",
+    "comfile",
+    "sysfile",
+    "drvfile",
+    "cabfile",
+    "chm.file",
+    "microsoft-edge",
+    "ms-settings",
+    "msi.package",
+];
+
+/// Inside Microsoft's trees, the only value lists a deep search may clean:
+/// those the dedicated scanners read (Wow6432Node folded away).
+const MICROSOFT_VALUE_LISTS: &[&str] = &[
+    "software\\microsoft\\windows\\currentversion\\run",
+    "software\\microsoft\\windows\\currentversion\\runonce",
+    "software\\microsoft\\windows\\currentversion\\sharedlls",
+    "software\\microsoft\\windows\\currentversion\\installer\\folders",
+    "software\\microsoft\\windows\\currentversion\\explorer\\startupapproved\\run",
+    "software\\microsoft\\windows\\currentversion\\explorer\\startupapproved\\run32",
+    "software\\microsoft\\windows\\currentversion\\shell extensions\\approved",
+    "software\\microsoft\\windows nt\\currentversion\\fonts",
+    "software\\microsoft\\windows nt\\currentversion\\appcompatflags\\layers",
+    "software\\microsoft\\windows nt\\currentversion\\appcompatflags\\compatibility assistant\\store",
+    "software\\classes\\local settings\\software\\microsoft\\windows\\shell\\muicache",
 ];
 
 fn strictly_under(path: &str, base: &str) -> bool {
@@ -191,4 +240,32 @@ pub fn value_allowed(context: &Context<'_>, key: &RegPath) -> bool {
     !environment
         && !path.contains("\\policies\\")
         && !context.others.iter().any(|other| key.is_within(&other.key))
+}
+
+/// Values a deep search may offer: those `value_allowed` accepts, outside
+/// Microsoft's trees (Winlogon's Shell, Userinit and the like) except the
+/// lists the scanners clean, and not inside another installed program's own
+/// key under a Software root.
+pub fn deep_value_allowed(context: &Context<'_>, key: &RegPath) -> bool {
+    if !value_allowed(context, key) {
+        return false;
+    }
+    let Some((path, _)) = effective(key) else {
+        return false;
+    };
+    let path = path.replacen("software\\wow6432node\\", "software\\", 1);
+    let microsoft = path.starts_with("software\\microsoft")
+        || path.starts_with("software\\classes\\local settings");
+    let listed = MICROSOFT_VALUE_LISTS.contains(&path.as_str())
+        || strictly_under(
+            &path,
+            "software\\microsoft\\windows\\currentversion\\app paths",
+        );
+    if microsoft && !listed {
+        return false;
+    }
+    !path
+        .split('\\')
+        .skip(1)
+        .any(|part| context.belongs_to_other(part))
 }

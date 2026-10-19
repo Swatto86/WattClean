@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::capture::write_tree;
-use super::remove::describe;
+use super::remove::{describe, partly_removed};
 use super::{BackupKind, FULL_RESTORE, Item, ItemState, Saved, force, load};
 use crate::model::find_value;
 use crate::system::{System, key_exists};
@@ -66,6 +66,15 @@ fn restore_item(system: &dyn System, item: &mut Item, outcome: &mut RestoreOutco
     match (&item.state, saved) {
         (ItemState::Restored, _) => skip("it was already restored"),
         (_, Saved::Hive(_)) => skip(FULL_RESTORE),
+        // A key delete stopped part-way: put back what went, keep the rest.
+        (ItemState::Failed { .. }, Saved::Key(tree)) if partly_removed(system, item) => {
+            let left = write_tree(system, &item.key, tree, true)?;
+            if left > 0 {
+                skip(&format!("{left} values still there were left as they are"));
+            }
+            item.state = ItemState::Restored;
+            outcome.restored += 1;
+        }
         (ItemState::Failed { .. }, _) => skip("it was never removed"),
         (ItemState::Kept, Saved::Key(tree)) => {
             let left = write_tree(system, &item.key, tree, true)?;

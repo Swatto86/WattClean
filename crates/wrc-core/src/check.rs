@@ -18,11 +18,29 @@ pub enum Verdict {
     Unknown,
 }
 
+/// Variables whose value is different for each account.
+const PER_USER: [&str; 11] = [
+    "%appdata%",
+    "%localappdata%",
+    "%userprofile%",
+    "%homepath%",
+    "%homedrive%",
+    "%temp%",
+    "%tmp%",
+    "%username%",
+    "%onedrive%",
+    "%onedriveconsumer%",
+    "%onedrivecommercial%",
+];
+
 pub struct PathCheck<'a> {
     system: &'a dyn System,
     windows: Option<PathBuf>,
     exclude_removable: bool,
     exclude_windows: bool,
+    /// False for another account's data: its per-user variables are not
+    /// this account's, so a path using one cannot be judged from here.
+    own_account: bool,
     drives: Mutex<HashMap<char, DriveKind>>,
 }
 
@@ -37,14 +55,27 @@ impl<'a> PathCheck<'a> {
             windows,
             exclude_removable,
             exclude_windows,
+            own_account: true,
             drives: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// The same check for other accounts' data.
+    pub fn for_other_accounts(mut self) -> Self {
+        self.own_account = false;
+        self
     }
 
     /// Check a path as written in registry data (quotes and variables
     /// allowed). `view32` is true for data in the 32-bit registry, where
     /// `System32` means `SysWOW64`.
     pub fn path(&self, raw: &str, view32: bool) -> Verdict {
+        if !self.own_account {
+            let lower = raw.to_lowercase();
+            if PER_USER.iter().any(|variable| lower.contains(variable)) {
+                return Verdict::Unknown;
+            }
+        }
         let expanded = expand(self.system, raw.trim().trim_matches('"'));
         let text = expanded.trim();
         if !is_absolute_local(text) || text.contains(['*', '?', '<', '>', '|']) {

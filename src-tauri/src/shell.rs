@@ -139,6 +139,9 @@ pub fn quit_app(app: AppHandle, disk: Disk<'_>) -> CommandResult<()> {
     if disk.is_busy() {
         return Err("Wait for the running clean, shred or wipe to finish first.".into());
     }
+    if removing(&app) {
+        return Err(REMOVING.into());
+    }
     app.exit(0);
     Ok(())
 }
@@ -155,6 +158,9 @@ pub fn restart_as_admin(
     }
     if disk.is_busy() {
         return Err("Wait for the running clean, shred or wipe to finish first.".into());
+    }
+    if removing(&app) {
+        return Err(REMOVING.into());
     }
     let exe = std::env::current_exe()
         .map_err(|error| CommandError::from(format!("Could not find this program: {error}")))?;
@@ -173,23 +179,37 @@ fn relaunch(_exe: &std::path::Path) -> CommandResult<()> {
     Err("Restarting as administrator needs Windows.".into())
 }
 
+const REMOVING: &str = "Wait for the registry clean or the uninstall's removal to finish first.";
+
+/// A registry clean, or an uninstall's removal or restore, is under way:
+/// cut short, its backup would hold entries that were never removed.
+fn removing(app: &AppHandle) -> bool {
+    app.try_state::<Arc<registry::state::AppState>>()
+        .is_some_and(|state| state.is_cleaning())
+        || app
+            .try_state::<Arc<crate::uninstall::state::AppState>>()
+            .is_some_and(|state| state.is_removing())
+}
+
 /// Quits once the running disk job (a wipe gives its space back when
-/// stopped) has stopped, waiting at most a minute.
+/// stopped) has stopped, waiting at most a minute, and once any registry
+/// clean or uninstall removal has finished.
 pub fn quit_when_idle(app: &AppHandle) {
-    let Some(disk) = app.try_state::<Arc<disk::state::AppState>>() else {
-        app.exit(0);
-        return;
-    };
-    if !disk.is_busy() {
+    let disk = app
+        .try_state::<Arc<disk::state::AppState>>()
+        .map(|disk| Arc::clone(&disk));
+    let disk_busy = move || disk.as_ref().is_some_and(|disk| disk.is_busy());
+    if !disk_busy() && !removing(app) {
         app.exit(0);
         return;
     }
-    disk.cancel();
-    let disk = Arc::clone(&disk);
+    if let Some(disk) = app.try_state::<Arc<disk::state::AppState>>() {
+        disk.cancel();
+    }
     let app = app.clone();
     std::thread::spawn(move || {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
-        while disk.is_busy() && std::time::Instant::now() < deadline {
+        while (disk_busy() && std::time::Instant::now() < deadline) || removing(&app) {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         app.exit(0);

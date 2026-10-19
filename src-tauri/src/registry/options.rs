@@ -108,7 +108,18 @@ fn relocate(data_dir: &std::path::Path, folder: Option<PathBuf>) -> CommandResul
     let to = folder.clone().unwrap_or_else(|| data_dir.join("backups"));
     move_backups(&from, &to)?;
     settings.backups_folder = folder.map(|folder| folder.display().to_string());
-    settings.save(data_dir)?;
+    if let Err(error) = settings.save(data_dir) {
+        // The setting still names the old folder: the backups go back there,
+        // or the Backup Center would no longer find them.
+        return Err(match move_backups(&to, &from) {
+            Ok(_) => format!("The setting could not be saved, so the backups stayed where they were: {error}"),
+            Err(again) => format!(
+                "The setting could not be saved ({error}), and the backups could not be moved back from {}: {again}",
+                to.display()
+            ),
+        }
+        .into());
+    }
     Ok(to.display().to_string())
 }
 

@@ -3,6 +3,7 @@ use crate::fake::FakeSystem;
 use crate::programs::{find_program, list_programs};
 
 mod guard;
+mod hardening;
 mod registrations;
 
 pub struct Quiet;

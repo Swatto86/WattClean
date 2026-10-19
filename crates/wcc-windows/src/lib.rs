@@ -58,6 +58,18 @@ mod windows_impl {
         names.iter().find_map(|n| env(n)).into_iter().collect()
     }
 
+    /// Every distinct value among `names`, so a PC with a personal and a
+    /// business OneDrive has both (not just the first that is set).
+    pub(crate) fn every(names: &[&str], lookup: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for value in names.iter().filter_map(|n| lookup(n)) {
+            if !out.iter().any(|o| o.eq_ignore_ascii_case(&value)) {
+                out.push(value);
+            }
+        }
+        out
+    }
+
     impl System for WindowsSystem {
         fn var(&self, name: &str) -> Vec<String> {
             let upper = name.to_ascii_uppercase();
@@ -73,7 +85,10 @@ mod windows_impl {
                 "STARTMENU" => folder(&FOLDERID_StartMenu),
                 "LOCALLOWAPPDATA" => folder(&FOLDERID_LocalAppDataLow),
                 "COMMONAPPDATA" => first(&["PROGRAMDATA", "ALLUSERSPROFILE"]),
-                "ONEDRIVE" => first(&["OneDrive", "OneDriveConsumer", "OneDriveCommercial"]),
+                "ONEDRIVE" => every(
+                    &["OneDrive", "OneDriveConsumer", "OneDriveCommercial"],
+                    &env,
+                ),
                 // Both Program Files folders, as winapp2.ini expects.
                 "PROGRAMFILES" => {
                     let mut both = first(&["ProgramW6432", "ProgramFiles"]);
@@ -140,7 +155,28 @@ mod windows_impl {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    use crate::windows_impl::every;
     use wcc_core::system::System;
+
+    #[test]
+    fn every_onedrive_is_returned_once() {
+        let set = |name: &str| match name {
+            "OneDrive" | "OneDriveCommercial" => Some(r"C:\Users\T\OneDrive - Work".to_string()),
+            "OneDriveConsumer" => Some(r"C:\Users\T\OneDrive".to_string()),
+            _ => None,
+        };
+        assert_eq!(
+            every(
+                &["OneDrive", "OneDriveConsumer", "OneDriveCommercial"],
+                &set
+            ),
+            vec![
+                r"C:\Users\T\OneDrive - Work".to_string(),
+                r"C:\Users\T\OneDrive".to_string()
+            ]
+        );
+        assert!(every(&["OneDrive"], &|_| None).is_empty());
+    }
 
     #[test]
     fn variables_resolve_on_this_pc() {

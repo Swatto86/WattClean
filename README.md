@@ -36,7 +36,8 @@ WattRegClean and WattUninstaller) and replaces them.
 
 - **Uninstall programs**: runs a program's own uninstaller, waits for it,
   then finds what it left behind (Safe, Moderate or Advanced) and removes
-  what you tick, with a backup that restores byte for byte.
+  what you tick, with a backup that restores byte for byte. Select several
+  programs (Ctrl+click, Shift+click) to uninstall them one after another.
 - **Traced installs**: install a program while WattClean records what it
   creates, so its uninstall later removes exactly that.
 - **Forced uninstall** for programs whose uninstaller is broken or gone,

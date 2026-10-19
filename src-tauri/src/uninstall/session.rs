@@ -329,7 +329,7 @@ impl Session {
 }
 
 /// Validate a forced uninstall's folder: absolute, existing, a folder.
-pub fn forced_folder(text: &str) -> CommandResult<Option<PathBuf>> {
+pub fn forced_folder(text: &str, folders: &Folders) -> CommandResult<Option<PathBuf>> {
     let text = text.trim().trim_matches('"');
     if text.is_empty() {
         return Ok(None);
@@ -338,6 +338,14 @@ pub fn forced_folder(text: &str) -> CommandResult<Option<PathBuf>> {
     if !path.is_absolute() || !path.is_dir() {
         return Err(
             "Choose an existing folder, written as a full path such as C:\\Program Files\\App."
+                .into(),
+        );
+    }
+    // Everything registered under the folder would be ticked for removal, so
+    // Windows' folders, the drive root and the shared roots are refused.
+    if !Identity::is_own_folder(&path, folders) {
+        return Err(
+            "That folder is shared by Windows or other programs. Choose the program's own folder, such as C:\\Program Files\\App, or leave it empty."
                 .into(),
         );
     }

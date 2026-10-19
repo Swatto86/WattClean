@@ -171,7 +171,19 @@ WebDriver suite on the fake machine. **Out**: left out, reason in
   a file missing only for an absolute local path whose lookup says "not
   found"; bare names, network shares, access-denied folders, unplugged or
   removable drives (setting) and the Windows folder (setting) count as
-  present. Services inside the Windows folder are never offered.
+  present. Services inside the Windows folder are never offered. Type
+  library data may name a resource inside a file (`updater.exe\4`): it is
+  missing only when the file is (2026-10-19, after 0.1.0 removed live
+  Google Updater, OneDrive and Office type libraries this way). An unquoted
+  command whose program end cannot be told (a space and no known file
+  type), or another account's data using a per-user variable
+  (`%APPDATA%`, `%LOCALAPPDATA%`…), is not judged at all
+  (`wrc-core/src/paths.rs`, `check.rs`). Setup bundles' uninstall entries
+  are never offered (their cached setup can go while the program stays),
+  and an entry naming no install folder starts unticked.
+- **A key delete stopped part-way keeps its backup.** Windows deletes
+  subkeys one by one until a protected one stops it; the item is reported
+  failed, the backup is kept, and restoring puts back only what went.
 - **Questionable categories start unticked**: unused shared DLLs, services,
   empty keys (some programs use an empty key as a marker), and every search
   match. Machine-wide and other accounts' entries start unticked without

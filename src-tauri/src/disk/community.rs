@@ -42,9 +42,10 @@ fn install(
     if remove_candidate {
         let _removed = fs::remove_file(candidate);
     }
-    let mut settings = state.settings();
-    settings.community = true;
-    state.replace_settings(settings)?;
+    state.update_settings(|settings| {
+        settings.community = true;
+        Ok(())
+    })?;
     state.reload_catalog();
     Ok(community_status(state))
 }
