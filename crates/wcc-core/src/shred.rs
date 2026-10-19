@@ -9,7 +9,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
@@ -38,12 +38,22 @@ fn random_name() -> String {
     format!("{x:016x}")
 }
 
+/// How many names a file's data has (hard links); `System::link_count`.
+pub type LinkCount<'a> = &'a dyn Fn(&Path) -> io::Result<u32>;
+
 /// Overwrites a file with zeros, empties it, renames it and deletes it.
-/// A link is only unlinked: its target is not this file to destroy.
-pub fn shred_file(path: &Path) -> io::Result<()> {
+/// A link is only unlinked: its target is not this file to destroy. A file
+/// whose data has other names (hard links, as Windows' own files have) is
+/// refused: overwriting it would destroy the data under every name.
+pub fn shred_file(path: &Path, links: LinkCount<'_>) -> io::Result<()> {
     let meta = fs::symlink_metadata(path)?;
     if meta.file_type().is_symlink() {
         return ops::remove_file(path);
+    }
+    if links(path)? > 1 {
+        return Err(io::Error::other(
+            "not shredded: other hard links share this file's data",
+        ));
     }
     if meta.permissions().readonly() {
         let mut permissions = meta.permissions();
@@ -66,10 +76,26 @@ pub fn shred_file(path: &Path) -> io::Result<()> {
         file.set_len(0)?;
         file.sync_all()?;
     }
+    unlink_renamed(path, &|path| fs::remove_file(path))
+}
+
+/// Renames the emptied file to a random name, so its name does not stay
+/// on the disk either, and removes it. When the removal fails the file
+/// gets its own name back, so the problem names a file the person knows.
+fn unlink_renamed(path: &Path, remove: &dyn Fn(&Path) -> io::Result<()>) -> io::Result<()> {
     let renamed = path.with_file_name(random_name());
-    match fs::rename(path, &renamed) {
-        Ok(()) => fs::remove_file(&renamed),
-        Err(_) => fs::remove_file(path),
+    if fs::rename(path, &renamed).is_err() {
+        return remove(path);
+    }
+    let Err(error) = remove(&renamed) else {
+        return Ok(());
+    };
+    match fs::rename(&renamed, path) {
+        Ok(()) => Err(error),
+        Err(_) => Err(io::Error::new(
+            error.kind(),
+            format!("{error}; the emptied file is left as {}", renamed.display()),
+        )),
     }
 }
 
@@ -87,6 +113,7 @@ pub struct ShredReport {
 pub fn shred_paths(
     paths: &[PathBuf],
     guard: &Guard,
+    links: LinkCount<'_>,
     cancelled: &dyn Fn() -> bool,
     progress: &dyn Fn(&ShredReport, &Path),
 ) -> ShredReport {
@@ -115,7 +142,7 @@ pub fn shred_paths(
                 return report;
             }
             let result = match found.kind {
-                Kind::File => shred_file(&found.path),
+                Kind::File => shred_file(&found.path, links),
                 Kind::Dir => ops::remove_dir(&found.path),
             };
             match result {
@@ -165,11 +192,11 @@ pub fn wipe_free_space(
     progress: &dyn Fn(u64),
 ) -> io::Result<WipeReport> {
     let started = std::time::Instant::now();
-    let work = folder.join(format!("WattClean-wipe-{}", random_name()));
+    let work = folder.join(format!("{FILLER_PREFIX}{}", random_name()));
     fs::create_dir(&work)?;
     let result = fill(&work, limit, cancelled, progress);
     // Whatever happened, give the space back.
-    let cleanup = fs::remove_dir_all(&work);
+    let cleanup = remove_filler(&work);
     let (written, stopped) = result?;
     cleanup?;
     Ok(WipeReport {
@@ -177,6 +204,51 @@ pub fn wipe_free_space(
         cancelled: stopped,
         elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
     })
+}
+
+/// What every wipe names its filler folder.
+const FILLER_PREFIX: &str = "WattClean-wipe-";
+
+/// Removes a filler folder. A virus scanner reading the files just written
+/// can hold them for a moment, so a refusal is tried again for a few
+/// seconds before giving up: until it goes, the drive stays full.
+fn remove_filler(work: &Path) -> io::Result<()> {
+    let mut wait = Duration::from_millis(100);
+    let mut tries = 1;
+    loop {
+        match fs::remove_dir_all(work) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(_) if tries < 8 => {
+                std::thread::sleep(wait);
+                wait = (wait * 2).min(Duration::from_secs(2));
+                tries += 1;
+            }
+            other => return other,
+        }
+    }
+}
+
+/// A wipe cut short (power loss, a killed process) leaves its filler
+/// folder in `folder`; removes any found so the space comes back. Returns
+/// what could not be removed.
+pub fn remove_wipe_leftovers(folder: &Path) -> Vec<(PathBuf, io::Error)> {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(FILLER_PREFIX)
+                && entry.file_type().is_ok_and(|kind| kind.is_dir())
+        })
+        .filter_map(|entry| {
+            let path = entry.path();
+            remove_filler(&path).err().map(|error| (path, error))
+        })
+        .collect()
 }
 
 /// Returns the bytes written and whether it was cancelled.
@@ -226,75 +298,5 @@ fn fill(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shredding_overwrites_and_removes() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("secret.txt");
-        fs::write(&file, b"top secret").unwrap();
-        shred_file(&file).unwrap();
-        assert!(!file.exists());
-        assert_eq!(
-            fs::read_dir(dir.path()).unwrap().count(),
-            0,
-            "no renamed copy left"
-        );
-    }
-
-    #[test]
-    fn shredding_folders_takes_their_contents() {
-        let dir = tempfile::tempdir().unwrap();
-        let folder = dir.path().join("Private");
-        fs::create_dir_all(folder.join("deeper")).unwrap();
-        fs::write(folder.join("a.txt"), b"aaaa").unwrap();
-        fs::write(folder.join("deeper").join("b.txt"), b"bb").unwrap();
-        let loose = dir.path().join("loose.txt");
-        fs::write(&loose, b"c").unwrap();
-        let report = shred_paths(
-            &[folder.clone(), loose.clone()],
-            &Guard::default(),
-            &|| false,
-            &|_, _| {},
-        );
-        assert_eq!((report.files, report.folders, report.bytes), (3, 2, 7));
-        assert!(report.problems.is_empty(), "{:?}", report.problems);
-        assert!(!folder.exists() && !loose.exists());
-    }
-
-    #[test]
-    fn kept_paths_are_not_shredded() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("keep.txt");
-        fs::write(&file, b"x").unwrap();
-        let guard = Guard::new(&[], std::slice::from_ref(&file));
-        let report = shred_paths(std::slice::from_ref(&file), &guard, &|| false, &|_, _| {});
-        assert_eq!(report.files, 0);
-        assert_eq!(report.problems.len(), 1);
-        assert!(file.exists());
-    }
-
-    #[test]
-    fn wiping_writes_up_to_the_limit_and_cleans_up() {
-        let dir = tempfile::tempdir().unwrap();
-        let seen = AtomicU64::new(0);
-        let report = wipe_free_space(dir.path(), Some(3 * CHUNK as u64 + 10), &|| false, &|n| {
-            seen.store(n, Ordering::Relaxed);
-        })
-        .unwrap();
-        assert_eq!(report.written, 3 * CHUNK as u64 + 10);
-        assert_eq!(seen.load(Ordering::Relaxed), report.written);
-        assert!(!report.cancelled);
-        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
-    }
-
-    #[test]
-    fn a_cancelled_wipe_still_cleans_up() {
-        let dir = tempfile::tempdir().unwrap();
-        let report = wipe_free_space(dir.path(), Some(1 << 30), &|| true, &|_| {}).unwrap();
-        assert!(report.cancelled);
-        assert_eq!(report.written, 0);
-        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
-    }
-}
+#[path = "shred_tests.rs"]
+mod tests;

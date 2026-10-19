@@ -197,6 +197,13 @@ impl System for FakeSystem {
         self.with_state(|s| s.reboot_deletions.push(path.to_string_lossy().to_string()))
     }
 
+    /// The test machine's files have one name each: hard links cannot be
+    /// counted without Win32 calls (the real count is tested in
+    /// `wcc-windows`).
+    fn link_count(&self, path: &Path) -> io::Result<u32> {
+        std::fs::symlink_metadata(path).map(|_| 1)
+    }
+
     fn shell_changed(&self) {
         let _saved = self.with_state(|s| s.shell_notifications += 1);
     }
@@ -225,6 +232,26 @@ impl Registry for FakeSystem {
                 .is_some_and(|values| values.iter().any(|v| v.eq_ignore_ascii_case(name)))
         })
         .unwrap_or(false)
+    }
+
+    fn subkeys(&self, key: &str) -> Vec<String> {
+        let Some(key) = fold(key) else {
+            return Vec::new();
+        };
+        let prefix = format!(r"{key}\");
+        self.read(|s| {
+            let mut names: Vec<String> = s
+                .registry
+                .keys()
+                .filter_map(|k| k.strip_prefix(&prefix))
+                .filter_map(|rest| rest.split('\\').next())
+                .map(str::to_string)
+                .collect();
+            names.sort();
+            names.dedup();
+            names
+        })
+        .unwrap_or_default()
     }
 
     fn delete_key(&self, key: &str) -> io::Result<()> {

@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 use wcc_core::history::{self, Entry};
 use wcc_core::settings::{Settings, SettingsPatch};
+use wcc_core::shred;
 
 use crate::disk::platform::Pick;
 use crate::disk::state::AppState;
@@ -93,17 +94,11 @@ pub fn disk_open_cleaners_folder(state: App<'_>) -> CommandResult<()> {
 pub fn remove_wipe_leftovers(state: &AppState) {
     for drive in state.system.drives() {
         let folder = state.system.wipe_folder(&drive);
-        let Ok(entries) = std::fs::read_dir(&folder) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("WattClean-wipe-")
-                && entry.path().is_dir()
-                && let Err(error) = std::fs::remove_dir_all(entry.path())
-            {
-                eprintln!("A leftover wipe folder could not be removed: {error}");
-            }
+        for (path, error) in shred::remove_wipe_leftovers(&folder) {
+            eprintln!(
+                "A leftover wipe folder could not be removed: {}: {error}",
+                path.display()
+            );
         }
     }
 }

@@ -1,6 +1,8 @@
 //! The real Windows machine for WattClean's engine.
 
 #[cfg(windows)]
+mod ctrl_c;
+#[cfg(windows)]
 mod drives;
 #[cfg(windows)]
 mod registry;
@@ -26,6 +28,7 @@ mod windows_impl {
     use crate::registry::WindowsRegistry;
     use crate::win;
 
+    pub use crate::ctrl_c::stop_on_ctrl_c;
     pub use crate::win::{is_elevated, run_elevated};
 
     /// This PC, as the signed-in user sees it.
@@ -146,6 +149,10 @@ mod windows_impl {
             win::delete_on_reboot(path)
         }
 
+        fn link_count(&self, path: &Path) -> io::Result<u32> {
+            win::link_count(path)
+        }
+
         fn shell_changed(&self) {
             win::shell_changed();
         }
@@ -210,6 +217,10 @@ mod tests {
         assert!(registry.value_exists(r"HKCU\Environment", "TEMP"));
         assert!(!registry.value_exists(r"HKCU\Environment", "NoSuchValue-WattClean"));
         assert!(!registry.key_exists(r"HKCU\Software\NoSuchKey-WattClean"));
+        let names = registry.subkeys(r"HKCU\Software");
+        assert!(names.iter().any(|n| n.eq_ignore_ascii_case("Microsoft")));
+        assert!(registry.subkeys("HKCU").iter().any(|n| n == "Software"));
+        assert!(registry.subkeys(r"HKCU\NoSuchKey-WattClean").is_empty());
     }
 
     #[test]
@@ -225,6 +236,24 @@ mod tests {
             "{drives:?}"
         );
         let _ = system.is_elevated();
+    }
+
+    #[test]
+    fn a_hard_linked_file_is_counted_and_not_shredded() {
+        let system = WindowsSystem::new();
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("cache.bin");
+        let other = dir.path().join("elsewhere.bin");
+        std::fs::write(&file, b"shared data").unwrap();
+        assert_eq!(system.link_count(&file).unwrap(), 1);
+        std::fs::hard_link(&file, &other).unwrap();
+        assert_eq!(system.link_count(&file).unwrap(), 2);
+        let refused = wcc_core::shred::shred_file(&file, &|path| system.link_count(path));
+        assert!(refused.is_err());
+        assert_eq!(std::fs::read(&other).unwrap(), b"shared data");
+        std::fs::remove_file(&other).unwrap();
+        wcc_core::shred::shred_file(&file, &|path| system.link_count(path)).unwrap();
+        assert!(!file.exists());
     }
 
     /// Writes (then removes) its own scratch key in the real registry, so it

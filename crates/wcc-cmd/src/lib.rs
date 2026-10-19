@@ -4,6 +4,7 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use wcc_core::catalog::Catalog;
 use wcc_core::model::OptionKey;
@@ -137,6 +138,8 @@ pub fn selection(
 /// Prints each item as it is found or done.
 struct Printer<'a> {
     out: std::sync::Mutex<&'a mut (dyn Write + Send)>,
+    /// Set by Ctrl+C: the run stops between items.
+    stop: &'a AtomicBool,
 }
 
 impl Sink for Printer<'_> {
@@ -154,6 +157,10 @@ impl Sink for Printer<'_> {
                 .unwrap_or_default();
             let _ = writeln!(out, "{}{size}{note}", item.path);
         }
+    }
+
+    fn cancelled(&self) -> bool {
+        self.stop.load(Ordering::SeqCst)
     }
 }
 
@@ -226,6 +233,7 @@ pub fn execute(
     command: &Command,
     system: &dyn System,
     data_dir: &Path,
+    stop: &AtomicBool,
     out: &mut (dyn Write + Send),
 ) -> std::io::Result<i32> {
     let settings = Settings::load(&data_dir.join("settings.json"));
@@ -273,55 +281,100 @@ pub fn execute(
             let report = {
                 let printer = Printer {
                     out: std::sync::Mutex::new(&mut *out),
+                    stop,
                 };
                 run::run(&catalog, &chosen, *mode, system, &run_settings, &printer)
             };
             summary(&report, out)?;
             Ok(if report.totals.problems > 0 { 1 } else { 0 })
         }
-        Command::Shred(paths) => {
-            for path in paths {
-                if let Err(message) = check_path(&path.to_string_lossy()) {
-                    writeln!(out, "{message}")?;
-                    return Ok(2);
-                }
-            }
-            let guard = Guard::new(&system.protected_folders(), &keep);
-            let report = shred::shred_paths(paths, &guard, &|| false, &|_, path| {
-                let _ = path;
-            });
-            writeln!(
-                out,
-                "Shredded {} files and {} folders ({}).",
-                report.files,
-                report.folders,
-                human(report.bytes)
-            )?;
-            for problem in &report.problems {
-                writeln!(out, "Problem: {}: {}", problem.path, problem.message)?;
-            }
-            Ok(if report.problems.is_empty() { 0 } else { 1 })
+        Command::Shred(paths) => shred(paths, system, &keep, stop, out),
+        Command::Wipe(folder) => wipe(folder, system, stop, out),
+    }
+}
+
+fn shred(
+    paths: &[PathBuf],
+    system: &dyn System,
+    keep: &[PathBuf],
+    stop: &AtomicBool,
+    out: &mut dyn Write,
+) -> std::io::Result<i32> {
+    for path in paths {
+        if let Err(message) = check_path(&path.to_string_lossy()) {
+            writeln!(out, "{message}")?;
+            return Ok(2);
         }
-        Command::Wipe(folder) => {
-            if !folder.is_dir() {
-                writeln!(out, "{} is not a folder or drive.", folder.display())?;
-                return Ok(2);
-            }
+    }
+    let guard = Guard::new(&system.protected_folders(), keep);
+    let report = shred::shred_paths(
+        paths,
+        &guard,
+        &|path| system.link_count(path),
+        &|| stop.load(Ordering::SeqCst),
+        &|_, _| {},
+    );
+    writeln!(
+        out,
+        "Shredded {} files and {} folders ({}).",
+        report.files,
+        report.folders,
+        human(report.bytes)
+    )?;
+    if report.cancelled {
+        writeln!(out, "Stopped before the end.")?;
+    }
+    for problem in &report.problems {
+        writeln!(out, "Problem: {}: {}", problem.path, problem.message)?;
+    }
+    Ok(if report.problems.is_empty() && !report.cancelled {
+        0
+    } else {
+        1
+    })
+}
+
+/// Fills the drive's free space and gives it back. A wipe this program or
+/// the app left behind (a killed process, a power cut) is removed first.
+fn wipe(
+    folder: &Path,
+    system: &dyn System,
+    stop: &AtomicBool,
+    out: &mut dyn Write,
+) -> std::io::Result<i32> {
+    if !folder.is_dir() {
+        writeln!(out, "{} is not a folder or drive.", folder.display())?;
+        return Ok(2);
+    }
+    for (path, error) in shred::remove_wipe_leftovers(folder) {
+        writeln!(
+            out,
+            "An earlier wipe's folder could not be removed: {}: {error}",
+            path.display()
+        )?;
+    }
+    writeln!(
+        out,
+        "Wiping the free space on the drive holding {} (Ctrl+C stops it) ...",
+        folder.display()
+    )?;
+    let stopped = || stop.load(Ordering::SeqCst);
+    match shred::wipe_free_space(folder, system.wipe_limit(), &stopped, &|_| {}) {
+        Ok(report) if report.cancelled => {
             writeln!(
                 out,
-                "Wiping the free space on the drive holding {} ...",
-                folder.display()
+                "Stopped after writing {}; it was removed.",
+                human(report.written)
             )?;
-            match shred::wipe_free_space(folder, system.wipe_limit(), &|| false, &|_| {}) {
-                Ok(report) => {
-                    writeln!(out, "Wrote and removed {}.", human(report.written))?;
-                    Ok(0)
-                }
-                Err(error) => {
-                    writeln!(out, "The wipe stopped: {error}")?;
-                    Ok(1)
-                }
-            }
+            Ok(1)
+        }
+        Ok(report) => {
+            writeln!(out, "Wrote and removed {}.", human(report.written))?;
+            Ok(0)
+        }
+        Err(error) => {
+            writeln!(out, "The wipe stopped: {error}")?;
+            Ok(1)
         }
     }
 }

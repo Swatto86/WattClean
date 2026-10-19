@@ -170,6 +170,20 @@ Left out on purpose, with reasons:
 - Folders are removed only when everything in them went; whatever was
   kept, in use or new keeps its folder.
 - A clean always plans again; it never trusts an earlier preview.
+- Shredding refuses a file whose data has other names (hard links, as
+  Windows' own files have): overwriting it would destroy the data under
+  every name. A shredded file that cannot be removed gets its own name
+  back, so nothing is left under a random one.
+- A wipe's filler folder is removed with retries for a few seconds (a
+  virus scanner may hold the files just written); one left behind is
+  removed when the app starts and before the next console wipe. In the
+  console, Ctrl+C (or closing the window) stops a wipe, shred or clean
+  between items instead of ending the program; a second Ctrl+C ends it.
+- From the first wildcard of a path on, no link is entered, whether the
+  wildcard or a plain name after it matched it.
+- winapp2.ini: an entry whose `DetectOS` range leaves out Windows 10/11
+  (both 10.0), or cannot be read, is left out; `Detect=` keys may hold
+  wildcards.
 - The only network use is the winapp2.ini download the person clicks.
 - Built-in definitions are TOML (readable without Rust); CleanerML and
   winapp2.ini are import formats only.

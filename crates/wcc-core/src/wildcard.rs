@@ -76,8 +76,9 @@ impl WildcardSet {
     }
 }
 
-/// Paths matching a pattern with `*` and `?` in any component. Folders
-/// reached through a link are not searched.
+/// Paths matching a pattern with `*` and `?` in any component. From the
+/// first wildcard on, no link is entered: a link can only be the last part
+/// (the part before the first wildcard is taken as written).
 pub fn glob(pattern: &str) -> Vec<PathBuf> {
     let normalized = pattern.replace('/', "\\");
     let path = Path::new(&normalized);
@@ -130,8 +131,12 @@ pub fn glob(pattern: &str) -> Vec<PathBuf> {
                     }
                 }
             } else {
+                // A plain name after a wildcard is no safer than one the
+                // wildcard matched: a link there is named, never entered.
                 let candidate = dir.join(part);
-                if fs::symlink_metadata(&candidate).is_ok() {
+                if fs::symlink_metadata(&candidate)
+                    .is_ok_and(|meta| last || (meta.is_dir() && !meta.file_type().is_symlink()))
+                {
                     next.push(candidate);
                 }
             }
@@ -178,5 +183,26 @@ mod tests {
         assert!(set.matches("a.TMP"));
         assert!(set.matches("b.bak"));
         assert!(!set.matches("c.txt"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_link_after_a_wildcard_is_not_walked_into() {
+        let dir = tempfile::tempdir().unwrap();
+        let elsewhere = dir.path().join("Documents");
+        fs::create_dir_all(&elsewhere).unwrap();
+        fs::write(elsewhere.join("thesis.tmp"), b"x").unwrap();
+        let real = dir.path().join(r"Profiles\Default\Service Worker");
+        fs::create_dir_all(&real).unwrap();
+        fs::write(real.join("cache.tmp"), b"x").unwrap();
+        let other = dir.path().join(r"Profiles\Other");
+        fs::create_dir_all(&other).unwrap();
+        crate::search::tests::junction(&other.join("Service Worker"), &elsewhere);
+        let pattern = format!(r"{}\Profiles\*\Service Worker\*.tmp", dir.path().display());
+        assert_eq!(glob(&pattern), vec![real.join("cache.tmp")]);
+        // The link itself, as the last part, is still named (and only
+        // ever unlinked).
+        let last = format!(r"{}\Profiles\*\Service Worker", dir.path().display());
+        assert_eq!(glob(&last).len(), 2);
     }
 }

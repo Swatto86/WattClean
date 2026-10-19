@@ -69,8 +69,12 @@ pub async fn disk_shred(
         let guard = Guard::new(&app.system.protected_folders(), &settings.keep);
         let sink = ChannelSink::new(&on_progress, &app);
         let targets: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-        let report =
-            shred::shred_paths(&targets, &guard, &|| app.cancelled(), &|report, current| {
+        let report = shred::shred_paths(
+            &targets,
+            &guard,
+            &|path| app.system.link_count(path),
+            &|| app.cancelled(),
+            &|report, current| {
                 sink.send(
                     &ShredProgress {
                         files: report.files,
@@ -80,7 +84,8 @@ pub async fn disk_shred(
                     },
                     false,
                 );
-            });
+            },
+        );
         record(
             &app,
             Entry {

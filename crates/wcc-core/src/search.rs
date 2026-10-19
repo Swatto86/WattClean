@@ -397,4 +397,4 @@ pub fn describe(error: &std::io::Error) -> String {
 
 #[cfg(test)]
 #[path = "search_tests.rs"]
-mod tests;
+pub(crate) mod tests;

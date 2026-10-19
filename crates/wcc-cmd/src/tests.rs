@@ -42,7 +42,7 @@ fn machine() -> (tempfile::TempDir, FakeSystem) {
 
 fn output(command: &Command, system: &FakeSystem, data_dir: &Path) -> (i32, String) {
     let mut out = Vec::new();
-    let code = execute(command, system, data_dir, &mut out).unwrap();
+    let code = execute(command, system, data_dir, &AtomicBool::new(false), &mut out).unwrap();
     (code, String::from_utf8(out).unwrap())
 }
 
@@ -96,6 +96,47 @@ fn shredding_from_the_command_line() {
     assert_eq!(code, 0, "{text}");
     assert!(text.starts_with("Shredded 1 files and 1 folders"), "{text}");
     assert!(!secret.exists());
+}
+
+fn wipe_folders(folder: &Path) -> Vec<String> {
+    std::fs::read_dir(folder)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().to_string())
+        .filter(|name| name.starts_with("WattClean-wipe-"))
+        .collect()
+}
+
+#[test]
+fn a_wipe_removes_an_earlier_one_left_behind_and_its_own() {
+    let (dir, system) = machine();
+    let folder = system.drive_c();
+    let leftover = folder.join("WattClean-wipe-0123456789abcdef");
+    std::fs::create_dir(&leftover).unwrap();
+    std::fs::write(leftover.join("fill00000.bin"), [0u8; 4096]).unwrap();
+    let (code, text) = output(&Command::Wipe(folder.clone()), &system, dir.path());
+    assert_eq!(code, 0, "{text}");
+    assert!(text.contains("Wrote and removed 3.0 MB"), "{text}");
+    assert!(wipe_folders(&folder).is_empty());
+}
+
+#[test]
+fn ctrl_c_stops_a_wipe_and_gives_the_space_back() {
+    let (dir, system) = machine();
+    let folder = system.drive_c();
+    let mut out = Vec::new();
+    let stop = AtomicBool::new(true);
+    let code = execute(
+        &Command::Wipe(folder.clone()),
+        &system,
+        dir.path(),
+        &stop,
+        &mut out,
+    )
+    .unwrap();
+    let text = String::from_utf8(out).unwrap();
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("Stopped after writing 0 bytes"), "{text}");
+    assert!(wipe_folders(&folder).is_empty());
 }
 
 #[test]

@@ -107,7 +107,7 @@ impl Executor<'_> {
     fn delete_file(&self, path: &Path, item: &mut Item) -> io::Result<bool> {
         self.guarded(path)?;
         let result = if self.shred {
-            shred::shred_file(path)
+            shred::shred_file(path, &|path| self.system.link_count(path))
         } else {
             remove_file(path)
         };

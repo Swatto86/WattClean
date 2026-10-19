@@ -1,7 +1,9 @@
 //! winapp2.ini, the community list of extra cleaners that BleachBit and
 //! CCleaner both read. Each `[Entry *]` becomes one cleaner with one option.
 //!
-//! Supported keys: `Detect*`, `DetectFile*`, `SpecialDetect`, `FileKey*`
+//! Supported keys: `Detect*` (wildcards allowed), `DetectFile*`,
+//! `DetectOS` (an entry for other Windows versions is left out),
+//! `SpecialDetect`, `FileKey*`
 //! (with `RECURSE` and `REMOVESELF`), `RegKey*`, `ExcludeKey*` (`FILE` and
 //! `PATH`), `Warning`, `LangSecRef` and `Section`. Anything else is ignored.
 
@@ -54,6 +56,39 @@ struct Entry {
     files: Vec<String>,
     registry: Vec<String>,
     exclude: Vec<String>,
+    /// `DetectOS` names other Windows versions (or cannot be read).
+    other_windows: bool,
+}
+
+/// What every Windows WattClean runs on reports: Windows 10 and 11 are both
+/// 10.0, and Rust's own programs need Windows 10.
+const WINDOWS: [u32; 2] = [10, 0];
+
+/// `DetectOS=min|max`, either side empty for no bound: whether this
+/// Windows is in the range. A range that cannot be read does not fit.
+fn fits_this_windows(range: &str) -> bool {
+    let version = |text: &str| -> Option<Option<Vec<u32>>> {
+        let text = text.trim();
+        if text.is_empty() {
+            return Some(None);
+        }
+        let mut parts: Vec<u32> = text
+            .split('.')
+            .map(|part| part.trim().parse().ok())
+            .collect::<Option<_>>()?;
+        while parts.len() < WINDOWS.len() {
+            parts.push(0);
+        }
+        Some(Some(parts))
+    };
+    let Some((min, max)) = range.split_once('|') else {
+        return false;
+    };
+    let (Some(min), Some(max)) = (version(min), version(max)) else {
+        return false;
+    };
+    min.is_none_or(|min| WINDOWS.as_slice() >= min.as_slice())
+        && max.is_none_or(|max| WINDOWS.as_slice() <= max.as_slice())
 }
 
 /// Every entry in the file; entries with nothing to clean are left out.
@@ -83,6 +118,7 @@ pub fn parse(text: &str) -> Vec<Cleaner> {
         match base {
             "detect" => entry.detect.push(Detect::Registry(value)),
             "detectfile" => entry.detect.push(Detect::Path(value)),
+            "detectos" => entry.other_windows |= !fits_this_windows(&value),
             "specialdetect" => {
                 if let Some(path) = special_detect(&value) {
                     entry.detect.push(Detect::Path(path.to_string()));
@@ -232,7 +268,7 @@ fn build(entry: Entry, ids: &mut HashSet<String>) -> Option<Cleaner> {
         }
         actions.push(Action::Registry { key, value });
     }
-    if actions.is_empty() || entry.name.is_empty() {
+    if actions.is_empty() || entry.name.is_empty() || entry.other_windows {
         return None;
     }
     let base = format!("w2-{}", slug(&entry.name));
@@ -262,109 +298,5 @@ fn build(entry: Entry, ids: &mut HashSet<String>) -> Option<Cleaner> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SAMPLE: &str = "\u{feff}; Version: 251001
-[Example App *]
-LangSecRef=3021
-DetectFile=%AppData%\\Example
-Detect1=HKCU\\Software\\Example
-Default=False
-Warning=This removes your recent projects.
-FileKey1=%AppData%\\Example\\Cache|*.*|RECURSE
-FileKey2=%AppData%\\Example\\Logs\\|*.log;*.txt
-FileKey3=%LocalAppData%\\Example\\Temp|*.*|REMOVESELF
-RegKey1=HKCU\\Software\\Example\\Recent
-RegKey2=HKCU\\Software\\Example|LastFile
-ExcludeKey1=PATH|%AppData%\\Example\\Cache\\Keep\\|*.*
-ExcludeKey2=FILE|%AppData%\\Example\\Logs\\|important.log
-
-[Nothing To Do *]
-DetectFile=%AppData%\\Nothing
-
-[Example App *]
-Section=Duplicates
-FileKey1=%Temp%\\example*.tmp
-";
-
-    #[test]
-    fn parses_entries_into_cleaners() {
-        let cleaners = parse(SAMPLE);
-        assert_eq!(
-            cleaners.len(),
-            2,
-            "the entry with nothing to clean is left out"
-        );
-        let first = &cleaners[0];
-        assert_eq!(first.id, "w2-example_app");
-        assert_eq!(first.name, "Example App");
-        assert_eq!(first.description, "winapp2.ini · Applications");
-        assert_eq!(
-            first.detect,
-            vec![
-                Detect::Path(r"%AppData%\Example".into()),
-                Detect::Registry(r"HKCU\Software\Example".into())
-            ]
-        );
-        let option = &first.options[0];
-        assert_eq!(
-            option.warning.as_deref(),
-            Some("This removes your recent projects.")
-        );
-        assert_eq!(option.actions.len(), 6);
-        let Action::Delete(recurse) = &option.actions[0] else {
-            panic!()
-        };
-        assert_eq!(recurse.search, Search::WalkFiles);
-        assert_eq!(recurse.names.as_deref(), Some("*.*"));
-        assert_eq!(
-            recurse.exclude,
-            vec![
-                r"%AppData%\Example\Cache\Keep".to_string(),
-                r"%AppData%\Example\Logs\important.log".to_string()
-            ]
-        );
-        let Action::Delete(glob) = &option.actions[1] else {
-            panic!()
-        };
-        assert_eq!(glob.path, r"%AppData%\Example\Logs\*.log");
-        assert_eq!(glob.search, Search::Glob);
-        let Action::Delete(top) = &option.actions[3] else {
-            panic!()
-        };
-        assert_eq!(top.search, Search::WalkTop);
-        assert_eq!(
-            option.actions[5],
-            Action::Registry {
-                key: r"HKCU\Software\Example".into(),
-                value: Some("LastFile".into())
-            }
-        );
-        assert_eq!(cleaners[1].id, "w2-example_app-2");
-        assert_eq!(cleaners[1].description, "winapp2.ini · Duplicates");
-    }
-
-    #[test]
-    fn a_registry_exclusion_inside_a_regkey_keeps_that_key() {
-        let text = "[App *]\nFileKey1=%AppData%\\App|*.log\n\
-            RegKey1=HKCU\\Software\\App\nRegKey2=HKEY_CURRENT_USER\\Software\\Other\n\
-            RegKey3=HKCU\\Software\\Clear|Value\n\
-            ExcludeKey1=REG|HKCU\\Software\\App\\Settings\n\
-            ExcludeKey2=REG|HKCU\\Software\\other\\\n\
-            ExcludeKey3=REG|HKCU\\Software\\Clear|Value\n";
-        let option = &parse(text)[0].options[0];
-        let keys: Vec<_> = option
-            .actions
-            .iter()
-            .filter(|a| matches!(a, Action::Registry { .. }))
-            .collect();
-        assert!(keys.is_empty(), "{keys:?}");
-        assert_eq!(option.actions.len(), 1, "the file action stays");
-    }
-
-    #[test]
-    fn garbage_is_ignored() {
-        assert!(parse("not an ini\n=\n[]\nFileKey1=\n").is_empty());
-    }
-}
+#[path = "winapp2_tests.rs"]
+mod tests;

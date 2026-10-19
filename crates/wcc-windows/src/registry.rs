@@ -42,6 +42,19 @@ impl Registry for WindowsRegistry {
         })
     }
 
+    fn subkeys(&self, key: &str) -> Vec<String> {
+        let Some((root, rest)) = open(key) else {
+            return Vec::new();
+        };
+        let key = if rest.is_empty() {
+            Ok(root)
+        } else {
+            root.open_subkey_with_flags(&rest, KEY_READ)
+        };
+        key.map(|key| key.enum_keys().flatten().collect())
+            .unwrap_or_default()
+    }
+
     fn delete_key(&self, key: &str) -> io::Result<()> {
         let (root, rest) = open(key).ok_or_else(|| bad_key(key))?;
         if rest.is_empty() {

@@ -9,8 +9,8 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::model::{Category, Cleaner, Detect, OptionKey, Source};
-use crate::system::System;
-use crate::wildcard::glob;
+use crate::system::{Registry, System};
+use crate::wildcard::{Wildcard, glob};
 use crate::{cleanerml, defs, vars, winapp2};
 
 /// The file a winapp2.ini import is kept as, inside the cleaners folder.
@@ -149,8 +149,35 @@ pub fn is_present(cleaner: &Cleaner, system: &dyn System) -> bool {
         Detect::Path(pattern) => vars::expand(pattern, &lookup)
             .iter()
             .any(|p| !glob(p).is_empty()),
-        Detect::Registry(key) => system.registry().key_exists(key),
+        Detect::Registry(key) => key_found(system.registry(), key),
     })
+}
+
+/// Whether a registry key exists; `*` and `?` may stand in any part after
+/// the hive, as winapp2.ini writes some `Detect=` lines.
+fn key_found(registry: &dyn Registry, pattern: &str) -> bool {
+    if !Wildcard::has_wildcards(pattern) {
+        return registry.key_exists(pattern);
+    }
+    let mut parts = pattern.trim().trim_end_matches('\\').split('\\');
+    let mut keys: Vec<String> = parts.next().map(str::to_string).into_iter().collect();
+    for part in parts {
+        let wildcard = Wildcard::new(part);
+        keys = keys
+            .iter()
+            .flat_map(|key| {
+                registry
+                    .subkeys(key)
+                    .into_iter()
+                    .filter(|name| wildcard.matches(name))
+                    .map(move |name| format!(r"{key}\{name}"))
+            })
+            .collect();
+        if keys.is_empty() {
+            return false;
+        }
+    }
+    !keys.is_empty()
 }
 
 /// The cleaner and option list as the window shows it.

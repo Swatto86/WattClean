@@ -22,9 +22,14 @@ pub fn console(args: &[String]) -> i32 {
 
 #[cfg(windows)]
 fn run(command: &crate::Command, data_dir: &std::path::Path) -> i32 {
+    static NEVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let stop = wcc_windows::stop_on_ctrl_c().unwrap_or_else(|error| {
+        eprintln!("Ctrl+C will end the program at once: {error}");
+        &NEVER
+    });
     let system = wcc_windows::WindowsSystem::new();
     let mut out = std::io::stdout();
-    crate::execute(command, &system, data_dir, &mut out).unwrap_or_else(|error| {
+    crate::execute(command, &system, data_dir, stop, &mut out).unwrap_or_else(|error| {
         eprintln!("{error}");
         1
     })

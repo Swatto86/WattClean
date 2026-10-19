@@ -180,7 +180,7 @@ fn links_are_listed_but_never_followed() {
 
 /// A junction, which Windows lets any user create (a symlink needs rights).
 #[cfg(windows)]
-fn junction(link: &Path, target: &Path) {
+pub(crate) fn junction(link: &Path, target: &Path) {
     let status = std::process::Command::new("cmd")
         .arg("/C")
         .arg("mklink")

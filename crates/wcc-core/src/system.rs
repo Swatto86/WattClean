@@ -27,6 +27,9 @@ pub trait System: Send + Sync {
     fn free_space(&self, path: &Path) -> io::Result<u64>;
     /// Asks Windows to delete a file in use at the next restart.
     fn delete_on_reboot(&self, path: &Path) -> io::Result<()>;
+    /// How many names (hard links) a file's data has; shredding refuses
+    /// more than one.
+    fn link_count(&self, path: &Path) -> io::Result<u32>;
     /// Tells Explorer that recent-file lists changed.
     fn shell_changed(&self) {}
     /// How many bytes a free-space wipe may write before it stops; `None`
@@ -96,6 +99,9 @@ pub trait System: Send + Sync {
 pub trait Registry: Send + Sync {
     fn key_exists(&self, key: &str) -> bool;
     fn value_exists(&self, key: &str, name: &str) -> bool;
+    /// The names of the key's direct subkeys; empty when there are none or
+    /// the key cannot be read.
+    fn subkeys(&self, key: &str) -> Vec<String>;
     /// Deletes the key with everything below it.
     fn delete_key(&self, key: &str) -> io::Result<()>;
     fn delete_value(&self, key: &str, name: &str) -> io::Result<()>;
