@@ -83,9 +83,14 @@ shortcuts named after it when the entry names no folder. A folder inside a
 known one is folded into it, and a folder's name counts as the program's only
 directly under a root (`Program Files\Notepad++`) or under its publisher's
 folder (`Program Files\Acme\Widget`, inside Acme's only); component folders
-deeper down (`Go\src\net\http`) name nothing. Other entries of the same
-program (same name or install folder) are leftovers, not neighbours to
-protect.
+deeper down (`Go\src\net\http`) name nothing. A component several products
+share (or Windows keeps for good) names no folder. Other installed programs
+are known the same way (their components and shortcuts read once for all of
+them), so an MSI product with no install location still protects its
+folder. Other entries of the same program (same id or name) are leftovers,
+not neighbours to protect; a differently named program installed in the
+same folder keeps that folder (every Windows SDK part shares `Windows
+Kits\10`).
 ## Install tracing (ETW, 2026-10-14)
 
 In the app since 0.2.0: `wu-windows::traced` runs the installer under the
@@ -133,7 +138,10 @@ Live runs on this PC with the WattUninstaller NSIS setup:
   publisher's folder while it is still installed). A missed leftover costs
   kilobytes; a wrong deletion can break Windows. The only files allowed under
   Windows are a scheduled task's definition (never Microsoft's), and under
-  other accounts only `AppData\{Roaming,Local,LocalLow}\<folder>`.
+  other accounts only `AppData\{Roaming,Local,LocalLow}\<folder>` (never
+  `Local\Packages` or `Package Cache`; inside `Local\Programs` and
+  `Local\Temp` only a folder one level down). `Clients` and its category
+  lists stay, in both registry views; one client's key below may go.
 - **Guard refinements.** Windows' own file types and URL protocols (txtfile,
   htmlfile, http(s), mailto, batfile…) join the shell classes: never offered
   whole. A deep search offers a value only outside Microsoft's trees (except
@@ -207,7 +215,11 @@ Live runs on this PC with the WattUninstaller NSIS setup:
   the next starts, so two uninstallers never run together. Every chosen
   program's session (its identity and executables) is opened before the
   first uninstaller runs, because one program's uninstaller may delete
-  files another is known by. One restore point covers the batch.
+  files another is known by. One restore point covers the batch, named
+  for it ("Before uninstalling A and 2 more programs").
+- **A removal judges its leftovers again** (`scan::still_allowed`) against
+  the machine as it is then: a program installed since the scan keeps what
+  it uses, and such an item is reported as left in place.
 - **GitHub Actions is off** for this repo (Swatto's request). The
   workflow in `.github/workflows/` is kept but never runs, so the local full
   gate is the only verdict; do not wait for CI or re-enable Actions unasked.

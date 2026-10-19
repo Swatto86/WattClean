@@ -155,9 +155,9 @@ fn msi_component_folders_name_nothing_and_fold_into_the_install_folder() {
             )],
         );
     }
+    // The folder of a component shared with another product is not added.
     let identity = Identity::of_program(&system, &folders, &viewer);
-    let shared = x86.join(r"Common Files\Fabrikam\Shared");
-    assert_eq!(identity.install_dirs, vec![install, shared]);
+    assert_eq!(identity.install_dirs, vec![install]);
     for name in ["src", "encoding", "json", "net", "http", "api"] {
         assert!(
             !identity.matches_inner(name, Match::Exact),

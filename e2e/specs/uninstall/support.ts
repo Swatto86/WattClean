@@ -118,6 +118,17 @@ export async function clearSearch(): Promise<void> {
   await browser.keys(["Backspace"]);
 }
 
+/** The restore points the fake machine was asked for, oldest first. */
+export function restorePoints(): string[] {
+  const saved: unknown = JSON.parse(
+    fs.readFileSync(path.join(dataDir(), "machine", "registry.json"), "utf8"),
+  );
+  if (typeof saved !== "object" || saved === null) return [];
+  const points = "restore_points" in saved ? saved.restore_points : [];
+  if (!Array.isArray(points)) throw new Error("bad restore_points");
+  return points.map(String);
+}
+
 /** Folded registry key paths of the fake machine, e.g. `HKLM\software\acme`. */
 export function registryKeys(): string[] {
   const saved: unknown = JSON.parse(

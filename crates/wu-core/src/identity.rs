@@ -56,6 +56,7 @@ mod hints;
 mod names;
 mod site;
 
+pub use hints::Hints;
 pub use names::{is_generic, name_key, product_name, publisher_key};
 pub use site::{on_site, site_key};
 

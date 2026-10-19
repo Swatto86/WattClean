@@ -109,11 +109,11 @@ fn msi_products_leave_component_and_upgrade_records() {
         .unwrap()
         .join(r"Common Files\Fabrikam\Shared");
     assert!(
-        identity
+        !identity
             .install_dirs
             .iter()
             .any(|dir| crate::paths::same(dir, &shared)),
-        "component folders join the install folders: {:?}",
+        "a component shared with another product names no install folder: {:?}",
         identity.install_dirs
     );
     let report = uninstall_and_scan(&machine, "Fabrikam Viewer", Mode::Moderate);
@@ -122,7 +122,6 @@ fn msi_products_leave_component_and_upgrade_records() {
         format!(r"Components\{{C2C2C2C2-0000-0000-0000-000000000002}} → {VIEWER_PACKED}"),
         format!(r"UpgradeCodes\{{U1U1U1U1-0000-0000-0000-000000000001}} → {VIEWER_PACKED}"),
         format!(r"ARPCache\{VIEWER_CODE}"),
-        r"Common Files\Fabrikam\Shared".into(),
     ] {
         assert!(
             has(&report, &ending),
@@ -134,7 +133,8 @@ fn msi_products_leave_component_and_upgrade_records() {
         !shown(&report)
             .iter()
             .any(|item| item.contains("FFFFFFFF0000")
-                || item.ends_with("{C3C3C3C3-0000-0000-0000-000000000003}")),
+                || item.ends_with("{C3C3C3C3-0000-0000-0000-000000000003}")
+                || item.ends_with(r"Common Files\Fabrikam\Shared")),
         "another product's records stay: {:#?}",
         shown(&report)
     );

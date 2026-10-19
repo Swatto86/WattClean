@@ -12,6 +12,7 @@ mod clients;
 mod deep;
 mod files;
 pub mod guard;
+pub use guard::still_allowed;
 mod installer;
 mod logged;
 mod openwith;
@@ -28,7 +29,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::folders::Folders;
-use crate::identity::{Identity, Match};
+use crate::identity::{Hints, Identity, Match};
 use crate::model::{Program, RegPath};
 use crate::paths::is_within;
 use crate::system::System;
@@ -126,17 +127,16 @@ pub struct OtherProgram {
 
 impl OtherProgram {
     /// Every listed program except `target` and other entries of the same
-    /// program (the same name, or the same install folder), which are
-    /// leftovers of it rather than programs to protect.
+    /// program (the same id or name), which are leftovers of it rather than
+    /// programs to protect. A program installed in the target's own folder
+    /// is kept: that folder is then left in place. Where each lives comes
+    /// from its entry, Windows Installer's records and its shortcuts.
     pub fn all(
         system: &dyn System,
         folders: &Folders,
         programs: &[Program],
         target: Option<&Program>,
     ) -> Vec<Self> {
-        let target_dirs: Vec<PathBuf> = target
-            .map(|program| Identity::of_entry(system, folders, program).install_dirs)
-            .unwrap_or_default();
         let same_program = |program: &Program| {
             target.is_some_and(|target| {
                 program.id.eq_ignore_ascii_case(&target.id)
@@ -144,17 +144,13 @@ impl OtherProgram {
                         == crate::identity::name_key(&target.name)
             })
         };
+        let hints = Hints::load(system, folders);
         programs
             .iter()
             .filter(|program| !same_program(program))
-            .filter(|program| {
-                let dirs = Identity::of_entry(system, folders, program).install_dirs;
-                !dirs
-                    .iter()
-                    .any(|dir| target_dirs.iter().any(|ours| crate::paths::same(dir, ours)))
-            })
             .map(|program| {
-                let identity = Identity::of_entry(system, folders, program);
+                let mut identity = Identity::of_entry(system, folders, program);
+                identity.add_hints(system, &hints, folders);
                 Self {
                     name: program.name.clone(),
                     key: program.registry_key.clone(),

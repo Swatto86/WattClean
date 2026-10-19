@@ -2,6 +2,7 @@
 //! engine off the async runtime, and returns a typed result or a sentence.
 
 pub mod platform;
+pub mod prepare;
 pub mod session;
 pub mod state;
 pub mod traced;
@@ -20,9 +21,8 @@ use wu_core::scan::{Mode, ScanReport};
 use wu_core::settings::Settings;
 
 use crate::error::{CommandResult, blocking};
-use crate::uninstall::session::{
-    RemovalView, Session, SessionView, attach_log, forced_folder, now,
-};
+use crate::uninstall::prepare::{attach_log, forced_folder};
+use crate::uninstall::session::{RemovalView, Session, SessionView, now};
 use crate::uninstall::state::AppState;
 
 type App<'a> = State<'a, Arc<AppState>>;
@@ -108,10 +108,14 @@ pub async fn un_begin_forced(
 }
 
 #[tauri::command]
-pub async fn un_create_restore_point(state: App<'_>, session: u32) -> CommandResult<()> {
+pub async fn un_create_restore_point(
+    state: App<'_>,
+    session: u32,
+    batch: u32,
+) -> CommandResult<()> {
     let app = Arc::clone(&state);
     let session = state.session(session)?;
-    blocking(move || session.create_restore_point(app.system.as_ref())).await
+    blocking(move || session.create_restore_point(app.system.as_ref(), batch)).await
 }
 
 /// Start the program's own uninstaller; returns the command that ran.

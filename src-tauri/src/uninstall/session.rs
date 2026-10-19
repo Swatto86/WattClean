@@ -1,7 +1,6 @@
 //! One uninstall from start to finish: what is known about the program,
 //! its uninstaller while it runs, the scan, the removal, and the record.
 
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -165,8 +164,9 @@ impl Session {
         }
     }
 
-    pub fn create_restore_point(&self, system: &dyn System) -> CommandResult<()> {
-        let description = format!("Before uninstalling {}", self.identity.display_name);
+    /// One restore point before `batch` programs, this one first.
+    pub fn create_restore_point(&self, system: &dyn System, batch: u32) -> CommandResult<()> {
+        let description = restore_point_name(&self.identity.display_name, batch);
         system.create_restore_point(&description).map_err(|error| {
             let reason = if error.raw_os_error() == Some(SERVICE_DISABLED) {
                 "System Restore is turned off on this PC".to_owned()
@@ -229,9 +229,7 @@ impl Session {
     pub fn scan(&self, app: &AppState, mode: Mode) -> CommandResult<ScanReport> {
         let system = app.system.as_ref();
         let folders = Folders::load(system)?;
-        let programs = list_programs(system, true);
-        let target = self.program.as_ref();
-        let others = OtherProgram::all(system, &folders, &programs, target);
+        let others = self.others(system, &folders);
         let context = Context {
             system,
             folders: &folders,
@@ -247,6 +245,12 @@ impl Session {
         }
         self.state().report = Some(report.clone());
         Ok(report)
+    }
+
+    /// Every installed program but this one, as the machine is now.
+    fn others(&self, system: &dyn System, folders: &Folders) -> Vec<OtherProgram> {
+        let programs = list_programs(system, true);
+        OtherProgram::all(system, folders, &programs, self.program.as_ref())
     }
 
     pub fn remove(&self, app: &AppState, ids: &[u32]) -> CommandResult<RemovalView> {
@@ -266,23 +270,47 @@ impl Session {
                     .ok_or("The list of leftovers changed; scan again.")?,
             );
         }
+        // Judged again against the machine as it is now: a program
+        // installed since the scan may use what it found.
+        let system = app.system.as_ref();
+        let folders = Folders::load(system)?;
+        let others = self.others(system, &folders);
+        let context = Context {
+            system,
+            folders: &folders,
+            others: &others,
+            progress: &self.progress,
+            log: self.log.as_ref(),
+            protected: &app.protected,
+        };
+        let (chosen, refused): (Vec<_>, Vec<_>) = chosen
+            .into_iter()
+            .partition(|item| scan::still_allowed(&context, &self.identity, &item.target));
         let removal = backup::remove(
-            app.system.as_ref(),
+            system,
             &app.backups_dir(),
             &self.identity.display_name,
             &chosen,
             now(),
         );
-        release_hives(app.system.as_ref());
+        release_hives(system);
         let removal = removal?;
         self.record(app, Some(report.mode), Some(&removal))?;
         Ok(RemovalView {
             removed: removal.removed,
             at_restart: removal.at_restart,
-            failed: removal
-                .failed
+            failed: refused
                 .into_iter()
-                .map(|(item, error)| FailedItem { item, error })
+                .map(|item| FailedItem {
+                    item: item.target.display(),
+                    error: "Left in place: Windows or another program uses it now.".to_owned(),
+                })
+                .chain(
+                    removal
+                        .failed
+                        .into_iter()
+                        .map(|(item, error)| FailedItem { item, error }),
+                )
                 .collect(),
             bytes: removal.bytes,
             backup_id: removal.backup.id,
@@ -328,44 +356,14 @@ impl Session {
     }
 }
 
-/// Validate a forced uninstall's folder: absolute, existing, a folder.
-pub fn forced_folder(text: &str, folders: &Folders) -> CommandResult<Option<PathBuf>> {
-    let text = text.trim().trim_matches('"');
-    if text.is_empty() {
-        return Ok(None);
+/// What the restore point is called: the program, or the first of several
+/// it is made before.
+fn restore_point_name(name: &str, batch: u32) -> String {
+    match batch {
+        0 | 1 => format!("Before uninstalling {name}"),
+        2 => format!("Before uninstalling {name} and 1 more program"),
+        n => format!("Before uninstalling {name} and {} more programs", n - 1),
     }
-    let path = PathBuf::from(text);
-    if !path.is_absolute() || !path.is_dir() {
-        return Err(
-            "Choose an existing folder, written as a full path such as C:\\Program Files\\App."
-                .into(),
-        );
-    }
-    // Everything registered under the folder would be ticked for removal, so
-    // Windows' folders, the drive root and the shared roots are refused.
-    if !Identity::is_own_folder(&path, folders) {
-        return Err(
-            "That folder is shared by Windows or other programs. Choose the program's own folder, such as C:\\Program Files\\App, or leave it empty."
-                .into(),
-        );
-    }
-    Ok(Some(path))
-}
-
-/// The program's install log, if it was installed with tracing. A program
-/// whose entry names no folder gets the folders the log saw it create.
-pub fn attach_log(
-    data_dir: &std::path::Path,
-    folders: &Folders,
-    program: &Program,
-    identity: &mut Identity,
-) -> Option<InstallLog> {
-    let log = wu_core::install_log::for_program(data_dir, program)?;
-    if identity.install_dirs.is_empty() {
-        identity.install_dirs = log.install_dirs(folders);
-        identity.read_executables();
-    }
-    Some(log)
 }
 
 /// Unload other accounts' hives after each phase; a failure here is a
@@ -373,5 +371,26 @@ pub fn attach_log(
 pub fn release_hives(system: &dyn System) {
     if let Err(error) = system.release_account_hives() {
         eprintln!("could not unload an account's registry hive: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::restore_point_name;
+
+    #[test]
+    fn a_batch_restore_point_says_it_covers_the_batch() {
+        assert_eq!(
+            restore_point_name("Notepad++", 1),
+            "Before uninstalling Notepad++"
+        );
+        assert_eq!(
+            restore_point_name("Notepad++", 2),
+            "Before uninstalling Notepad++ and 1 more program"
+        );
+        assert_eq!(
+            restore_point_name("Notepad++", 4),
+            "Before uninstalling Notepad++ and 3 more programs"
+        );
     }
 }

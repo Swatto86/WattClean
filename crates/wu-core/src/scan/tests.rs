@@ -4,6 +4,7 @@ use crate::programs::{find_program, list_programs};
 
 mod guard;
 mod hardening;
+mod others;
 mod registrations;
 
 pub struct Quiet;

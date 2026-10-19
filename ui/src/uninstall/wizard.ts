@@ -167,7 +167,7 @@ export class Wizard {
       ];
       render("todo", "", []);
       try {
-        await api.createRestorePoint(this.session.id);
+        await api.createRestorePoint(this.session.id, this.place?.total ?? 1);
         restoreRow = ["Restore point", "done", "Created."];
       } catch (error: unknown) {
         restoreRow = ["Restore point", "failed", message(error)];

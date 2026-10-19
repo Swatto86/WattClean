@@ -10,6 +10,7 @@ import {
   programNames,
   ready,
   registryKeys,
+  restorePoints,
   screenshot,
   waitForButton,
 } from "./support.ts";
@@ -79,9 +80,11 @@ describe("uninstalling several programs", () => {
       order,
     );
     await $("#un-mode-safe").click();
-    if (await $("#un-wizard-restore").isSelected())
+    // One restore point, named for the whole batch.
+    if (!(await $("#un-wizard-restore").isSelected()))
       await $("#un-wizard-restore").click();
     await screenshot("batch-confirm");
+    const earlierPoints = restorePoints().length;
     await $("#un-wizard-start").click();
 
     await finishProgram("Acme Widget Helper", "1 of 2");
@@ -94,6 +97,9 @@ describe("uninstalling several programs", () => {
     await finishProgram("Woodgrove Runtime", "2 of 2");
     keys = registryKeys();
     assert.ok(!keys.includes(WOODGROVE_KEY), "the second uninstaller ran");
+    assert.deepEqual(restorePoints().slice(earlierPoints), [
+      "Before uninstalling Acme Widget Helper and 1 more program",
+    ]);
     await (await waitForButton("wizard-close")).click();
 
     const summary = await $("#un-batch-summary");

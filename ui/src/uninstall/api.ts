@@ -51,8 +51,9 @@ export const api = {
     call("un_begin_uninstall", { programId }, sessionView),
   beginForced: (name: string, folder: string) =>
     call("un_begin_forced", { name, folder }, sessionView),
-  createRestorePoint: (session: number) =>
-    call("un_create_restore_point", { session }, nothing),
+  /** One restore point before `batch` programs, this session's first. */
+  createRestorePoint: (session: number, batch: number) =>
+    call("un_create_restore_point", { session, batch }, nothing),
   runUninstaller: (session: number, quiet: boolean) =>
     call("un_run_uninstaller", { session, quiet }, str),
   uninstallerFinished: (session: number) =>

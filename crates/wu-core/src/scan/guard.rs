@@ -117,6 +117,20 @@ pub fn path_allowed(context: &Context<'_>, identity: &Identity, path: &Path) -> 
     !others_use(context, path)
 }
 
+/// Whether a leftover found earlier may still be removed, judged against
+/// the machine as it is now: a program installed since the scan may use
+/// it. One that is already gone passes; the removal reports it.
+pub fn still_allowed(context: &Context<'_>, identity: &Identity, target: &Target) -> bool {
+    let identity = identity.with_others(context.others);
+    match target {
+        Target::Key { key } => key_allowed(context, key),
+        Target::Value { key, .. } => value_allowed(context, key),
+        Target::Folder { path } | Target::File { path } => {
+            std::fs::symlink_metadata(path).is_err() || path_allowed(context, &identity, path)
+        }
+    }
+}
+
 fn others_use(context: &Context<'_>, path: &Path) -> bool {
     context.others.iter().any(|other| {
         other
@@ -145,11 +159,20 @@ fn other_user_data(folders: &crate::folders::Folders, path: &Path) -> Option<boo
         parts.get(2).map(String::as_str),
         Some("roaming" | "local" | "locallow")
     );
-    let own_folder = parts
-        .get(3)
-        .is_some_and(|name| !name.starts_with("microsoft") && !name.starts_with("windows"));
+    // Store apps' data and installer caches are never a program's own.
+    let own_folder = parts.get(3).is_some_and(|name| {
+        !name.starts_with("microsoft")
+            && !name.starts_with("windows")
+            && !["packages", "package cache"].contains(&name.as_str())
+    });
+    // `Local\Programs` and `Local\Temp` hold every program's folders: only
+    // one inside them is a program's own.
+    let deep_enough = match parts.get(3).map(String::as_str) {
+        Some("programs" | "temp") => parts.len() >= 5,
+        _ => parts.len() >= 4,
+    };
     Some(
-        parts.len() >= 4
+        deep_enough
             && parts.get(1).map(String::as_str) == Some("appdata")
             && data_root
             && own_folder,

@@ -181,9 +181,14 @@ pub fn key_allowed(context: &Context<'_>, key: &RegPath) -> bool {
     if path.starts_with("system\\") && !service && !log_source {
         return false;
     }
-    // `Clients\<category>` lists are shared; one client's key below is not.
+    // `Clients` and its `<category>` lists are shared; one client's key
+    // below is not.
     let clients = ["software\\clients", "software\\wow6432node\\clients"];
-    if clients.iter().any(|base| strictly_under(&path, base)) && depth <= 3 {
+    if clients.iter().any(|base| {
+        path.strip_prefix(base).is_some_and(|rest| {
+            rest.is_empty() || (rest.starts_with('\\') && rest.matches('\\').count() == 1)
+        })
+    }) {
         return false;
     }
     // Task-cache entries are whole only at one task's own key.

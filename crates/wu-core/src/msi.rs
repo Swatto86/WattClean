@@ -1,6 +1,7 @@
 //! Windows Installer's own records of a product: the packed form of its
 //! product code, and the files its components registered.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::model::{Hive, RawValue, RegPath};
@@ -57,31 +58,65 @@ fn component_path(data: &str) -> Option<PathBuf> {
     embedded_path(text)
 }
 
-/// The folders the product's files live in, shallowest first, with a folder
-/// inside another of them dropped: a product registering every file has
-/// hundreds of folders, all inside its own.
-pub fn product_dirs(system: &dyn System, packed: &str) -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = component_files(system, packed)
-        .into_iter()
-        .filter_map(|(_, file)| file.parent().map(Path::to_path_buf))
-        .collect();
-    let products = RegPath::new(Hive::LocalMachine, PRODUCTS).child(packed);
-    let icon = text_value(&values_or_empty(system, &products), "ProductIcon");
-    if let Some(dir) = icon
-        .as_deref()
-        .and_then(embedded_path)
-        .and_then(|icon| icon.parent().map(Path::to_path_buf))
-    {
-        dirs.push(dir);
-    }
-    dirs.sort_by_key(|dir| dir.components().count());
-    let mut top: Vec<PathBuf> = Vec::new();
-    for dir in dirs {
-        if !top.iter().any(|known| is_within(&dir, known)) {
-            top.push(dir);
+/// The folders of the files each product's own components registered, read
+/// in one pass for every product (packed codes in upper case). A component
+/// several products share, or one Windows keeps for good, names no
+/// product's folder: it is not any one product's.
+pub struct ComponentIndex(HashMap<String, Vec<PathBuf>>);
+
+impl ComponentIndex {
+    pub fn load(system: &dyn System) -> Self {
+        let components = RegPath::new(Hive::LocalMachine, COMPONENTS);
+        let mut dirs: HashMap<String, Vec<PathBuf>> = HashMap::new();
+        for name in subkeys_or_empty(system, &components) {
+            let values = values_or_empty(system, &components.child(&name));
+            let [value] = values.as_slice() else {
+                continue;
+            };
+            if let Some(dir) = value
+                .as_text()
+                .as_deref()
+                .and_then(component_path)
+                .and_then(|file| file.parent().map(Path::to_path_buf))
+            {
+                dirs.entry(value.name.to_uppercase()).or_default().push(dir);
+            }
         }
+        Self(dirs)
     }
-    top
+
+    /// The folders the product's files live in, shallowest first, with a
+    /// folder inside another of them dropped: a product registering every
+    /// file has hundreds of folders, all inside its own.
+    pub fn product_dirs(&self, system: &dyn System, packed: &str) -> Vec<PathBuf> {
+        let mut dirs = self
+            .0
+            .get(&packed.to_uppercase())
+            .cloned()
+            .unwrap_or_default();
+        let products = RegPath::new(Hive::LocalMachine, PRODUCTS).child(packed);
+        let icon = text_value(&values_or_empty(system, &products), "ProductIcon");
+        if let Some(dir) = icon
+            .as_deref()
+            .and_then(embedded_path)
+            .and_then(|icon| icon.parent().map(Path::to_path_buf))
+        {
+            dirs.push(dir);
+        }
+        dirs.sort_by_key(|dir| dir.components().count());
+        let mut top: Vec<PathBuf> = Vec::new();
+        for dir in dirs {
+            if !top.iter().any(|known| is_within(&dir, known)) {
+                top.push(dir);
+            }
+        }
+        top
+    }
+}
+
+/// [`ComponentIndex::product_dirs`] for one product.
+pub fn product_dirs(system: &dyn System, packed: &str) -> Vec<PathBuf> {
+    ComponentIndex::load(system).product_dirs(system, packed)
 }
 
 /// The product's name as Windows Installer recorded it.
