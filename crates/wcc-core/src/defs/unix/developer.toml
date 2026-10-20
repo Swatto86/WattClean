@@ -44,7 +44,8 @@ category = "developer"
 template = "electron"
 vars = { root = '%CONFIG%/VSCodium' }
 detect = ['{root}']
-running = ["codium"]
+# The macOS app runs as VSCodium; codium is its command and Linux's program.
+running = ["codium", "vscodium"]
 
 [[cleaner]]
 id = "jetbrains"
@@ -170,14 +171,19 @@ id = "uv"
 name = "uv"
 description = "Python package manager"
 category = "developer"
-detect = ['%CACHE%/uv']
+# uv follows XDG on macOS too, unless ~/Library/Caches/uv was there first.
+# On Linux both are one folder, planned once.
+detect = ['%XDG_CACHE_HOME%/uv', '%CACHE%/uv']
 
 [[cleaner.option]]
 id = "cache"
 name = "Package cache"
 description = "Downloaded packages and Python builds uv keeps"
 warning = "Virtual environments uv made link to this cache: recreate them after cleaning."
-actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/uv' }]
+actions = [
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/uv' },
+  { op = "delete", search = "walk.all", path = '%CACHE%/uv' },
+]
 
 [[cleaner]]
 id = "conda"

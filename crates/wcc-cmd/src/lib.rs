@@ -14,7 +14,7 @@ use wcc_core::run::{self, RunSettings};
 use wcc_core::settings::{Settings, check_full_path};
 use wcc_core::shred;
 use wcc_core::store;
-use wcc_core::system::System;
+use wcc_core::system::{Platform, System};
 
 pub const USAGE: &str = "\
 WattClean disk cleaner (wattclean-cmd disk)
@@ -178,7 +178,7 @@ pub fn human(bytes: u64) -> String {
     format!("{size:.1} {}", UNITS[unit])
 }
 
-fn summary(report: &Report, out: &mut dyn Write) -> std::io::Result<()> {
+fn summary(report: &Report, platform: Platform, out: &mut dyn Write) -> std::io::Result<()> {
     let t = &report.totals;
     let cleaning = report.mode == Mode::Clean;
     writeln!(out)?;
@@ -219,13 +219,22 @@ fn summary(report: &Report, out: &mut dyn Write) -> std::io::Result<()> {
         writeln!(out, "Problems: {}", t.problems)?;
     }
     if !report.running.is_empty() {
-        writeln!(
-            out,
-            "Running (files in use were skipped): {}",
-            report.running.join(", ")
-        )?;
+        writeln!(out, "{}", running_line(platform, &report.running))?;
     }
     Ok(())
+}
+
+/// The programs that were running, and what that meant: Windows refuses to
+/// delete a file in use, so only those were skipped; on macOS and Linux the
+/// engine left the programs' options alone.
+fn running_line(platform: Platform, names: &[String]) -> String {
+    let list = names.join(", ");
+    let them = if names.len() == 1 { "it" } else { "them" };
+    match platform {
+        Platform::Windows => format!("Running (files in use were skipped): {list}"),
+        Platform::Macos => format!("Running (left alone: quit {them}, then clean again): {list}"),
+        Platform::Linux => format!("Running (left alone: close {them}, then clean again): {list}"),
+    }
 }
 
 /// Runs a parsed command and returns the exit code.
@@ -289,7 +298,7 @@ pub fn execute(
                 };
                 run::run(&catalog, &chosen, *mode, system, &run_settings, &printer)
             };
-            summary(&report, out)?;
+            summary(&report, system.platform(), out)?;
             Ok(if report.totals.problems > 0 { 1 } else { 0 })
         }
         Command::Shred(paths) => shred(paths, system, &keep, stop, out),

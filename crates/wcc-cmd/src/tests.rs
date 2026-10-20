@@ -156,3 +156,20 @@ fn sizes_read_simply() {
     assert_eq!(human(1536), "1.5 KB");
     assert_eq!(human(3 << 30), "3.0 GB");
 }
+
+#[test]
+fn running_programs_are_described_as_each_system_treats_them() {
+    let names = ["Firefox".to_string(), "Slack".to_string()];
+    assert_eq!(
+        running_line(Platform::Windows, &names),
+        "Running (files in use were skipped): Firefox, Slack"
+    );
+    assert_eq!(
+        running_line(Platform::Macos, &names),
+        "Running (left alone: quit them, then clean again): Firefox, Slack"
+    );
+    assert_eq!(
+        running_line(Platform::Linux, &names[..1]),
+        "Running (left alone: close it, then clean again): Firefox"
+    );
+}

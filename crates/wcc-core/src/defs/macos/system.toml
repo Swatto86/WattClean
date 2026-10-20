@@ -84,7 +84,7 @@ actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Saved Ap
 id = "free_disk_space"
 name = "Free disk space"
 description = "Overwrite the free space of the drive holding your temporary files, after everything else"
-warning = "This is slow: it writes over all the free space on the drive, which is full while it runs. On an SSD the drive itself decides where data goes, so this cannot promise every old block is overwritten."
+warning = "This is slow: it writes over all the free space on the drive, which is full while it runs. While it is full, macOS makes room by removing Time Machine's local snapshots, and may remove downloaded copies of iCloud files, so what was just cleaned can no longer be restored from a local snapshot. On an SSD the drive itself decides where data goes, so this cannot promise every old block is overwritten; on an encrypted SSD, as every Mac with Apple silicon or a T2 chip has built in, it adds little."
 actions = [{ op = "free-disk-space" }]
 
 [[cleaner.option]]

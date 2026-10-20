@@ -6,6 +6,7 @@ import type { Context, Page } from "../context.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, duration, percent } from "../format.ts";
+import { wipeCaveat } from "../platform.ts";
 
 export const wipePage = (_ctx: Context): Page => {
   let running = false;
@@ -71,7 +72,8 @@ export const wipePage = (_ctx: Context): Page => {
     if (running) return;
     const answer = await confirm({
       title: `Wipe the free space on ${drive.root}?`,
-      message: `WattClean fills about ${bytes(drive.free)} with zeros and then deletes what it wrote. Your files are not touched. It can take a long time, and while it runs the drive is full, so programs that need to save may complain. On SSDs, TRIM usually clears freed space already.`,
+      message:
+        `WattClean fills about ${bytes(drive.free)} with zeros and then deletes what it wrote. Your files are not touched. It can take a long time, and while it runs the drive is full, so programs that need to save may complain. On SSDs, TRIM usually clears freed space already. ${wipeCaveat(drive.removable)}`.trimEnd(),
       ok: "Wipe",
       danger: true,
     });

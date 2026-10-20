@@ -100,17 +100,17 @@ running = ["soffice.bin", "soffice"]
 id = "backups"
 name = "Backup copies"
 description = "Automatic backup copies of documents"
+warning = "Documents can no longer be recovered from LibreOffice's backup copies, including unsaved work it kept after a crash."
 actions = [{ op = "delete", search = "walk.all", path = '%XDG_CONFIG_HOME%/libreoffice/*/user/backup' }]
 
+# user/uno_packages/cache is not a cache: it holds the extensions installed
+# and their registration, which LibreOffice cannot make again.
 [[cleaner.option]]
 id = "cache"
-name = "Cache"
-description = "Pictures and extension data LibreOffice makes again"
+name = "Temporary files"
+description = "LibreOffice's own temporary folder"
 default = true
-actions = [
-  { op = "delete", search = "walk.all", path = '%XDG_CONFIG_HOME%/libreoffice/*/user/temp' },
-  { op = "delete", search = "walk.all", path = '%XDG_CONFIG_HOME%/libreoffice/*/user/uno_packages/cache' },
-]
+actions = [{ op = "delete", search = "walk.all", path = '%XDG_CONFIG_HOME%/libreoffice/*/user/temp' }]
 
 [[cleaner]]
 id = "vlc"

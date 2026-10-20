@@ -51,7 +51,8 @@ template = "electron"
 vars = { root = '%CONFIG%/Claude' }
 # claude-code there is the app's own copy of Claude Code: not a cache.
 detect = ['{root}']
-running = ["claude"]
+# Claude Code runs as "claude" too, so the app is known by its helpers.
+running = ["claude helper", "claude helper (renderer)"]
 
 [[cleaner]]
 id = "notion"
@@ -115,17 +116,17 @@ running = ["soffice"]
 id = "backups"
 name = "Backup copies"
 description = "Automatic backup copies of documents"
+warning = "Documents can no longer be recovered from LibreOffice's backup copies, including unsaved work it kept after a crash."
 actions = [{ op = "delete", search = "walk.all", path = '%CONFIG%/LibreOffice/*/user/backup' }]
 
+# user/uno_packages/cache is not a cache: it holds the extensions installed
+# and their registration, which LibreOffice cannot make again.
 [[cleaner.option]]
 id = "cache"
-name = "Cache"
-description = "Pictures and extension data LibreOffice makes again"
+name = "Temporary files"
+description = "LibreOffice's own temporary folder"
 default = true
-actions = [
-  { op = "delete", search = "walk.all", path = '%CONFIG%/LibreOffice/*/user/temp' },
-  { op = "delete", search = "walk.all", path = '%CONFIG%/LibreOffice/*/user/uno_packages/cache' },
-]
+actions = [{ op = "delete", search = "walk.all", path = '%CONFIG%/LibreOffice/*/user/temp' }]
 
 [[cleaner]]
 id = "office"
@@ -159,7 +160,8 @@ name = "Microsoft Teams"
 description = "Chat and meetings"
 category = "applications"
 detect = ['%HOME%/Library/Containers/com.microsoft.teams2']
-running = ["microsoft teams"]
+# New Teams runs as MSTeams; classic Teams was "Microsoft Teams".
+running = ["msteams", "microsoft teams"]
 
 [[cleaner.option]]
 id = "cache"
@@ -176,7 +178,7 @@ id = "vlc"
 name = "VLC"
 description = "Media player"
 category = "applications"
-detect = ['%CONFIG%/org.videolan.vlc']
+detect = ['%CONFIG%/org.videolan.vlc', '%CACHE%/org.videolan.vlc']
 running = ["vlc"]
 
 [[cleaner.option]]
@@ -184,4 +186,4 @@ id = "cache"
 name = "Art cache"
 description = "Album art VLC downloaded"
 default = true
-actions = [{ op = "delete", search = "walk.all", path = '%CONFIG%/org.videolan.vlc/art' }]
+actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/org.videolan.vlc/art' }]

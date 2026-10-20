@@ -3,7 +3,7 @@
 import type { ItemKind, OptionReport, Progress, Report } from "../api.ts";
 import { el, glyph } from "../dom.ts";
 import { bytes, count, duration, percent, plural } from "../format.ts";
-import { isWindows } from "../platform.ts";
+import { isWindows, runningBanner } from "../platform.ts";
 
 const KIND_LABELS: Record<ItemKind, string> = {
   file: "File",
@@ -163,7 +163,7 @@ export const renderReport = (
         glyph("warning"),
         el("span", {
           class: "banner-text",
-          text: `Running now: ${report.running.join(", ")}. Close ${report.running.length === 1 ? "it" : "them"} before cleaning, or files ${report.running.length === 1 ? "it has" : "they have"} open are skipped.`,
+          text: runningBanner(report.running),
         }),
       ),
     );

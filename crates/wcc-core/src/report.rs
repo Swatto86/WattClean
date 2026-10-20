@@ -154,7 +154,10 @@ pub struct Report {
     pub totals: Counts,
     pub cancelled: bool,
     pub elapsed_ms: u64,
-    /// Selected programs that were running (files they hold are skipped).
+    /// Selected programs that were running. On Windows the files they hold
+    /// open are skipped (in use); on macOS and Linux, which would delete
+    /// them from under the program, their options were left alone, with a
+    /// problem saying so.
     pub running: Vec<String>,
 }
 

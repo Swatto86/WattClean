@@ -43,6 +43,9 @@ pub struct State {
 pub struct FakeSystem {
     root: PathBuf,
     state: Mutex<State>,
+    /// The system the engine is told it runs on: Windows unless a test
+    /// says otherwise (`posing_as`).
+    platform: Platform,
 }
 
 /// A key as the test machine files it: short hive, the rest lower case.
@@ -66,7 +69,16 @@ impl FakeSystem {
         Ok(Self {
             root,
             state: Mutex::new(state),
+            platform: Platform::Windows,
         })
+    }
+
+    /// Tells the engine this machine runs `platform`, for tests of what it
+    /// does differently there; the files stay shaped as a Windows PC's.
+    #[must_use]
+    pub fn posing_as(mut self, platform: Platform) -> Self {
+        self.platform = platform;
+        self
     }
 
     pub fn drive_c(&self) -> PathBuf {
@@ -142,9 +154,10 @@ fn tree_size(dir: &Path) -> (u64, u64) {
 }
 
 impl System for FakeSystem {
-    /// The test machine is shaped as a Windows PC on every platform.
+    /// The test machine is shaped as a Windows PC on every platform, and
+    /// says Windows unless a test made it pose as another.
     fn platform(&self) -> Platform {
-        Platform::Windows
+        self.platform
     }
 
     fn find_program(&self, name: &str) -> Option<PathBuf> {

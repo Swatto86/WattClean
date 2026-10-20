@@ -13,7 +13,7 @@ use crate::model::{Action, Cleaner, CleanerOption, OptionKey};
 use crate::ops::{CustomPath, Op, Planner};
 use crate::paths::Guard;
 use crate::report::{Counts, Mode, OptionReport, Progress, Report, Sink};
-use crate::system::System;
+use crate::system::{Platform, System};
 
 /// Settings that shape a run.
 #[derive(Debug, Clone, Default)]
@@ -67,13 +67,23 @@ pub fn run(
     // Programs that are running and installed: Chromium shares chrome.exe
     // with Chrome, so a running name alone says too little.
     let running_now = system.running();
-    let mut running: Vec<String> = options
-        .iter()
-        .filter(|(c, _)| c.running.iter().any(|exe| running_now.contains(exe)))
-        .filter(|(c, _)| crate::catalog::is_present(c, system))
-        .map(|(c, _)| c.name.clone())
-        .collect();
-    running.dedup();
+    let mut running_ids: Vec<&str> = Vec::new();
+    let mut running: Vec<String> = Vec::new();
+    for (cleaner, _) in &options {
+        if !running_ids.contains(&cleaner.id.as_str())
+            && cleaner.running.iter().any(|exe| running_now.contains(exe))
+            && crate::catalog::is_present(cleaner, system)
+        {
+            running_ids.push(&cleaner.id);
+            running.push(cleaner.name.clone());
+        }
+    }
+    // Windows refuses to delete a file a program holds open, so a running
+    // program loses only what it does not hold. macOS and Linux delete it
+    // from under the program, which goes on using it (a database's journal
+    // among them): there its options are left until it is closed.
+    let platform = system.platform();
+    let leave_running = platform != Platform::Windows;
 
     let mut step = Step {
         mode,
@@ -82,6 +92,7 @@ pub fn run(
         sink,
         seen: HashSet::new(),
         changed_shell: false,
+        left_alone: HashSet::new(),
     };
     let mut reports = Vec::new();
     let mut totals = Counts::default();
@@ -90,7 +101,11 @@ pub fn run(
             break;
         }
         let place = (index, options.len());
-        let report = step.option(cleaner, option, place, &totals);
+        let report = if leave_running && running_ids.contains(&cleaner.id.as_str()) {
+            step.left_alone(cleaner, option, platform)
+        } else {
+            step.option(cleaner, option, place, &totals)
+        };
         totals.absorb(&report.counts);
         reports.push(report);
     }
@@ -128,9 +143,37 @@ struct Step<'a> {
     seen: HashSet<String>,
     /// A registry entry went, so Explorer is told afterwards.
     changed_shell: bool,
+    /// Running programs already said to be left alone, by cleaner id.
+    left_alone: HashSet<String>,
 }
 
 impl Step<'_> {
+    /// An option of a program that is running, on a system that would
+    /// delete its open files: nothing is planned, and the program's first
+    /// option says why, once.
+    fn left_alone(
+        &mut self,
+        cleaner: &Cleaner,
+        option: &CleanerOption,
+        platform: Platform,
+    ) -> OptionReport {
+        let key = OptionKey::new(&cleaner.id, &option.id);
+        let mut report = OptionReport::new(&key, &cleaner.name, &option.name);
+        if self.left_alone.insert(cleaner.id.clone()) {
+            let verb = if platform == Platform::Macos {
+                "Quit"
+            } else {
+                "Close"
+            };
+            report.push_problem(
+                cleaner.name.clone(),
+                format!("it is running, so it was left alone. {verb} it, then clean again."),
+                false,
+            );
+        }
+        report
+    }
+
     fn option(
         &mut self,
         cleaner: &Cleaner,
@@ -203,3 +246,7 @@ mod tests;
 #[cfg(test)]
 #[path = "run_command_tests.rs"]
 mod command_tests;
+
+#[cfg(test)]
+#[path = "run_running_tests.rs"]
+mod running_tests;

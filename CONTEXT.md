@@ -112,7 +112,9 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   a chosen path (Shred, Custom paths) is taken literally, as names may hold
   `%`, `*`, `?` and `\`; nothing is emptied or edited through a link; the
   temporary-folder option keeps hidden and session entries and anything
-  touched in the last two days. `TMPDIR` and `XDG_CACHE_HOME`,
+  touched in the last two days; a running program's options are left
+  alone, since these systems delete files in use (`docs/disk-cleaner.md`).
+  `TMPDIR` and `XDG_CACHE_HOME`,
   `XDG_DATA_HOME` and `XDG_CONFIG_HOME` are not trusted when one is, or
   holds, `/`, the home folder, a user folder, a protected home folder or a
   system folder other than a temporary one: it gives way to its usual

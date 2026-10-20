@@ -202,6 +202,16 @@ Left out on purpose, with reasons:
 - Deleting is permanent (not the Recycle Bin), as in BleachBit; the
   confirmation says so, with the warnings of the ticked options and the
   running programs. "Don't ask again" turns it off (Settings).
+- A selected program that is running (and installed) is named in the
+  confirmation and the report. Windows refuses to delete a file in use, so
+  only those are skipped. macOS and Linux delete it from under the program,
+  which goes on using it (a database's journal among them), so there the
+  program's options are left out of preview and clean alike, with one
+  problem per program saying to quit (close) it first.
+- On macOS, a free-space wipe's warnings say that while the disk is full
+  macOS removes Time Machine's local snapshots and downloaded iCloud
+  copies. No lower limit is set: macOS purges at its own low-space
+  thresholds, before the disk is full, so stopping short would not help.
 - Temporary files are cleaned only when unchanged for a day, so installers
   and programs running now keep theirs.
 - Folders are removed only when everything in them went; whatever was

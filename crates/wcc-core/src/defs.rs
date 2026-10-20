@@ -320,3 +320,7 @@ fn build_action(def: &ActionDef, fill: &dyn Fn(&str) -> String) -> Result<Action
 #[cfg(test)]
 #[path = "defs_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "defs_unix_tests.rs"]
+mod unix_tests;

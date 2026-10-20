@@ -6,7 +6,7 @@ import type { Context, Page } from "../context.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { plural } from "../format.ts";
-import { trashName } from "../platform.ts";
+import { runningWarning, trashName } from "../platform.ts";
 import {
   defaults,
   everything,
@@ -173,9 +173,7 @@ export const cleanerPage = (ctx: Context): Page => {
     const lines: string[] = [];
     for (const cleaner of catalog.cleaners) {
       if (cleaner.running && keys.some((k) => k.startsWith(`${cleaner.id}.`))) {
-        lines.push(
-          `${cleaner.name} is running: files it has open will be skipped.`,
-        );
+        lines.push(runningWarning(cleaner.name));
       }
       for (const option of cleaner.options) {
         if (option.warning && keys.includes(key(cleaner.id, option.id))) {
