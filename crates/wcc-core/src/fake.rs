@@ -31,8 +31,12 @@ pub struct State {
     pub shell_notifications: u32,
     /// Programs a task may run, with what each prints whenever it runs.
     pub programs: BTreeMap<String, String>,
-    /// Every program run, as `name arg …`, `admin ` first when it asked
-    /// for administrator rights.
+    /// Programs only in a folder the account can write (as Homebrew's is):
+    /// found for a task that runs as the account, never for one that runs
+    /// as administrator.
+    pub untrusted: Vec<String>,
+    /// Every program run, as `name arg …`, after any `VARIABLE=value` it
+    /// was given and `admin ` first when it asked for administrator rights.
     pub ran: Vec<String>,
 }
 
@@ -78,6 +82,20 @@ impl FakeSystem {
         self.with_state(|s| {
             s.programs.insert(name.to_string(), prints.to_string());
         })
+    }
+
+    /// Gives the test machine a program only in a folder the account can
+    /// write, where any program the account runs could have put it.
+    pub fn add_untrusted_program(&self, name: &str, prints: &str) -> io::Result<()> {
+        self.with_state(|s| {
+            s.programs.insert(name.to_string(), prints.to_string());
+            s.untrusted.push(name.to_string());
+        })
+    }
+
+    fn untrusted(&self, name: &str) -> bool {
+        self.read(|s| s.untrusted.iter().any(|n| n == name))
+            .unwrap_or(false)
     }
 
     /// Every program run so far (see [`State::ran`]).
@@ -135,11 +153,16 @@ impl System for FakeSystem {
             .then(|| self.root.join("bin").join(name))
     }
 
+    fn find_admin_program(&self, name: &str) -> Option<PathBuf> {
+        self.find_program(name).filter(|_| !self.untrusted(name))
+    }
+
     fn run_program(
         &self,
         program: &Path,
         args: &[String],
         admin: bool,
+        env: &[(&str, &str)],
     ) -> io::Result<ProgramOutput> {
         let name = program
             .file_name()
@@ -149,7 +172,21 @@ impl System for FakeSystem {
             .read(|s| s.programs.get(&name).cloned())
             .flatten()
             .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
-        let mut line = if admin { format!("admin {name}") } else { name };
+        if admin && self.untrusted(&name) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "not run with administrator rights",
+            ));
+        }
+        let mut line = if admin {
+            "admin ".to_string()
+        } else {
+            String::new()
+        };
+        for (variable, value) in env {
+            line.push_str(&format!("{variable}={value} "));
+        }
+        line.push_str(&name);
         for arg in args {
             line.push(' ');
             line.push_str(arg);

@@ -61,6 +61,11 @@ pub struct Task {
     /// would free (`brew cleanup -n`); the preview shows that instead of
     /// the measured size.
     pub estimate: Option<&'static [&'static str]>,
+    /// Variables set for the command and its dry run (not its listing),
+    /// such as `HOMEBREW_NO_AUTOREMOVE`. Never for a task that needs
+    /// administrator rights: the password prompt starts the program with an
+    /// environment of its own.
+    pub env: &'static [(&'static str, &'static str)],
 }
 
 impl Task {
@@ -93,6 +98,7 @@ const fn task(id: &'static str, program: &'static str, args: &'static [&'static 
         measure: &[],
         list: None,
         estimate: None,
+        env: &[],
     }
 }
 
@@ -113,6 +119,11 @@ const fn listed(mut task: Task, list: List) -> Task {
 
 const fn estimated(mut task: Task, dry_run: &'static [&'static str]) -> Task {
     task.estimate = Some(dry_run);
+    task
+}
+
+const fn with_env(mut task: Task, env: &'static [(&'static str, &'static str)]) -> Task {
+    task.env = env;
     task
 }
 
@@ -194,13 +205,18 @@ pub const TASKS: &[Task] = &[
         "journalctl",
         &["--vacuum-time=2weeks"],
     )),
-    // Homebrew (macOS and Linux).
-    estimated(
-        measured(
-            task("brew-cleanup", "brew", &["cleanup", "--prune=all"]),
-            &["%HOMEBREW_CACHE%"],
+    // Homebrew (macOS and Linux). Left to itself, `brew cleanup` also
+    // uninstalls the formulae nothing needs: that is brew-autoremove, an
+    // option of its own with a warning and the list in its preview.
+    with_env(
+        estimated(
+            measured(
+                task("brew-cleanup", "brew", &["cleanup", "--prune=all"]),
+                &["%HOMEBREW_CACHE%"],
+            ),
+            &["cleanup", "--prune=all", "-n"],
         ),
-        &["cleanup", "--prune=all", "-n"],
+        &[("HOMEBREW_NO_AUTOREMOVE", "1")],
     ),
     listed(
         task("brew-autoremove", "brew", &["autoremove"]),
@@ -283,5 +299,18 @@ mod tests {
             Some("apt-get clean")
         );
         assert!(find("rm-rf").is_none());
+    }
+
+    /// Variables cannot pass the password prompt; Homebrew's cleanup must
+    /// never autoremove.
+    #[test]
+    fn no_administrator_task_needs_variables() {
+        for task in TASKS {
+            assert!(!(task.admin && !task.env.is_empty()), "{}", task.id);
+        }
+        assert_eq!(
+            find("brew-cleanup").map(|task| task.env),
+            Some(&[("HOMEBREW_NO_AUTOREMOVE", "1")][..])
+        );
     }
 }

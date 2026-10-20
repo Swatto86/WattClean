@@ -2,7 +2,7 @@
 //! root in a temporary folder, programs that print what a test gives them,
 //! and a record of every command run.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -17,6 +17,11 @@ pub struct Machine {
     /// Every command run, `admin ` first when it asked for rights.
     pub ran: Mutex<Vec<String>>,
     pub bundles: BTreeMap<PathBuf, BundleInfo>,
+    /// Programs only in a folder the account can write: never found for a
+    /// command run as administrator.
+    pub untrusted: BTreeSet<String>,
+    /// Where a program is found, when not in `/usr/bin`.
+    pub places: BTreeMap<String, PathBuf>,
 }
 
 impl Machine {
@@ -34,6 +39,8 @@ impl Machine {
             ),
             ran: Mutex::new(Vec::new()),
             bundles: BTreeMap::new(),
+            untrusted: BTreeSet::new(),
+            places: BTreeMap::new(),
         }
     }
 
@@ -73,11 +80,17 @@ impl PackageSystem for Machine {
     }
 
     fn find_program(&self, name: &str) -> Option<PathBuf> {
-        self.prints
-            .lock()
-            .unwrap()
-            .contains_key(name)
-            .then(|| PathBuf::from("/usr/bin").join(name))
+        self.prints.lock().unwrap().contains_key(name).then(|| {
+            self.places
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from("/usr/bin").join(name))
+        })
+    }
+
+    fn find_admin_program(&self, name: &str) -> Option<PathBuf> {
+        self.find_program(name)
+            .filter(|_| !self.untrusted.contains(name))
     }
 
     fn run(&self, program: &Path, args: &[String], admin: bool) -> io::Result<Output> {

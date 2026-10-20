@@ -63,12 +63,12 @@ impl Planner<'_> {
     /// A task, when its program is installed and (for a task with a
     /// listing step) the listing names something to act on.
     pub(crate) fn command(&self, task: &'static Task) -> Result<Option<Op>, Problem> {
-        let Some(program) = self.system.find_program(task.program) else {
+        let Some(program) = self.program(task, task.program) else {
             return Ok(None);
         };
         let mut listed = Vec::new();
         if let Some(list) = task.list {
-            let Some(lister) = self.system.find_program(list.program) else {
+            let Some(lister) = self.program(task, list.program) else {
                 return Ok(None);
             };
             let args: Vec<String> = list.args.iter().map(ToString::to_string).collect();
@@ -76,22 +76,22 @@ impl Planner<'_> {
             // -Qtdq does): only its output counts.
             let output = self
                 .system
-                .run_program(&lister, &args, false)
+                .run_program(&lister, &args, false, &[])
                 .map_err(|error| Problem {
                     path: PathBuf::from(task.command_line()),
                     message: crate::search::describe(&error),
                 })?;
-            listed = tasks::parse(list.parse, &output.stdout);
+            listed = tasks::parse(list.parse, list.then, &output.stdout);
             if listed.is_empty() {
                 return Ok(None);
             }
         }
-        // The dry run only refines the preview: when it fails, the measured
-        // size stands.
+        // The dry run only refines the preview: when it cannot run or
+        // fails, the measured size stands.
         let estimate = task.estimate.and_then(|dry_run| {
             let args: Vec<String> = dry_run.iter().map(ToString::to_string).collect();
             self.system
-                .run_program(&program, &args, false)
+                .run_program(&program, &args, false, task.env)
                 .ok()
                 .filter(|output| output.success)
                 .and_then(|output| freed_estimate(&output.stdout))
@@ -104,16 +104,32 @@ impl Planner<'_> {
             estimate,
         }))
     }
+
+    /// Where a task's program (or its listing's) is. For a task run as
+    /// administrator, only where only an administrator can change it: its
+    /// listing too, since what that lists is what the command acts on.
+    fn program(&self, task: &Task, name: &str) -> Option<PathBuf> {
+        if task.admin {
+            self.system.find_admin_program(name)
+        } else {
+            self.system.find_program(name)
+        }
+    }
 }
 
 /// Bytes a dry run says it would free, from Homebrew's closing line
 /// `==> This operation would free approximately 390.1MB of disk space.`
-/// (decimal units, as Homebrew prints them).
+/// (decimal units, as Homebrew prints them). A dry run without that line
+/// has nothing to free: 0, not the size of the whole cache, which brew
+/// never removes whole. `None` when the figure cannot be read.
 pub(crate) fn freed_estimate(stdout: &str) -> Option<u64> {
-    let line = stdout
+    let Some(line) = stdout
         .lines()
         .rev()
-        .find(|line| line.contains("would free approximately "))?;
+        .find(|line| line.contains("would free approximately "))
+    else {
+        return Some(0);
+    };
     let amount = line
         .split("would free approximately ")
         .nth(1)?
@@ -162,7 +178,9 @@ impl Executor<'_> {
             if (self.cancelled)() {
                 return Ok(false);
             }
-            let output = self.system.run_program(program, &args, task.admin)?;
+            let output = self
+                .system
+                .run_program(program, &args, task.admin, task.env)?;
             if !output.success {
                 let said = output
                     .stderr
@@ -181,6 +199,40 @@ impl Executor<'_> {
 #[cfg(test)]
 mod tests {
     use super::freed_estimate;
+    use crate::fake::FakeSystem;
+    use crate::ops::{Op, Planner};
+    use crate::paths::Guard;
+
+    /// What brew's dry run says it frees, planned on the test machine.
+    fn brew_estimate(dry_run_prints: &str) -> Option<u64> {
+        let dir = tempfile::tempdir().unwrap();
+        let system = FakeSystem::open(dir.path()).unwrap();
+        system.add_program("brew", dry_run_prints).unwrap();
+        let guard = Guard::new(&[], &[]);
+        let planner = Planner {
+            system: &system,
+            guard: &guard,
+            custom_paths: &[],
+            now: std::time::SystemTime::now(),
+            cancelled: &|| false,
+        };
+        let task = crate::tasks::find("brew-cleanup").unwrap();
+        match planner.command(task) {
+            Ok(Some(Op::Command { estimate, .. })) => estimate,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// A dry run that succeeds and names nothing to free means nothing is
+    /// freed, not "everything in the cache" (which brew never removes whole).
+    #[test]
+    fn a_dry_run_that_frees_nothing_previews_nothing() {
+        assert_eq!(brew_estimate(""), Some(0));
+        assert_eq!(
+            brew_estimate("==> This operation would free approximately 2.5MB of disk space.\n"),
+            Some(2_500_000)
+        );
+    }
 
     #[test]
     fn homebrews_own_estimate_is_read_in_decimal_units() {
@@ -195,7 +247,11 @@ mod tests {
             freed_estimate("==> This operation would free approximately 55B of disk space."),
             Some(55)
         );
-        assert_eq!(freed_estimate("Nothing to clean"), None);
+        assert_eq!(freed_estimate(""), Some(0));
+        assert_eq!(
+            freed_estimate("==> This operation would free approximately 3PB of disk space."),
+            None
+        );
         assert_eq!(
             freed_estimate("would free approximately lots of disk space"),
             None

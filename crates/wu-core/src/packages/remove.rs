@@ -44,8 +44,11 @@ pub fn removal(
         ));
     }
     let id = package.id.clone();
+    // Run as administrator, a program comes only from where only an
+    // administrator can change it.
+    let found = |program: &str| system.find_admin_program(program).is_some();
     let (program, mut args, admin): (&str, Vec<&str>, bool) = match package.manager {
-        Manager::Apt if system.find_program("apt-get").is_some() => (
+        Manager::Apt if found("apt-get") => (
             "apt-get",
             vec!["-y", if purge { "purge" } else { "remove" }],
             true,
@@ -55,10 +58,8 @@ pub fn removal(
             vec![if purge { "--purge" } else { "--remove" }],
             true,
         ),
-        Manager::Rpm if system.find_program("dnf").is_some() => ("dnf", vec!["-y", "remove"], true),
-        Manager::Rpm if system.find_program("zypper").is_some() => {
-            ("zypper", vec!["--non-interactive", "remove"], true)
-        }
+        Manager::Rpm if found("dnf") => ("dnf", vec!["-y", "remove"], true),
+        Manager::Rpm if found("zypper") => ("zypper", vec!["--non-interactive", "remove"], true),
         Manager::Rpm => ("rpm", vec!["-e"], true),
         Manager::Pacman => (
             "pacman",
@@ -101,7 +102,12 @@ pub fn removal(
         Manager::MacPorts => ("port", vec!["uninstall"], true),
         Manager::AppImage | Manager::MacApp => return trash_target(package),
     };
-    let program_path = system.find_program(program).ok_or_else(|| {
+    let program_path = if admin {
+        system.find_admin_program(program)
+    } else {
+        system.find_program(program)
+    };
+    let program_path = program_path.ok_or_else(|| {
         format!(
             "{program} is not installed, so {} cannot be removed here",
             package.name
@@ -199,6 +205,28 @@ mod tests {
         for id in ["-y", "a b", "x;reboot", "$(id)", ""] {
             let package = Package::new(Manager::Apt, id, id);
             assert!(removal(&machine, &package, false).is_err(), "{id:?}");
+        }
+    }
+
+    /// A removal run as administrator never takes its program from a folder
+    /// the account (or anything it runs) can write; Homebrew's, run as the
+    /// account, still can.
+    #[test]
+    fn an_administrator_removal_never_runs_a_program_the_account_could_have_planted() {
+        let mut machine = Machine::new(&["port", "brew", "apt-get", "dpkg"]);
+        machine
+            .untrusted
+            .extend(["port", "brew", "apt-get"].map(String::from));
+        let port = Package::new(Manager::MacPorts, "ffmpeg", "ffmpeg");
+        assert!(removal(&machine, &port, false).is_err());
+        let brew = Package::new(Manager::Homebrew, "wget", "wget");
+        assert!(removal(&machine, &brew, false).is_ok());
+        let apt = Package::new(Manager::Apt, "vlc", "VLC");
+        match removal(&machine, &apt, false) {
+            Ok(Removal::Command { program, admin, .. }) => {
+                assert_eq!((program, admin), ("/usr/bin/dpkg".into(), true));
+            }
+            other => panic!("{other:?}"),
         }
     }
 

@@ -50,14 +50,23 @@ pub trait System: Send + Sync {
     fn find_program(&self, _name: &str) -> Option<PathBuf> {
         None
     }
+    /// The same for a program that will run with administrator rights:
+    /// only from folders only an administrator can change, never the
+    /// account's own (Homebrew's, the home folder, `PATH`), where anything
+    /// the account runs could have put a program to be run as root.
+    fn find_admin_program(&self, _name: &str) -> Option<PathBuf> {
+        None
+    }
     /// Runs a program with these arguments (never through a shell) and
     /// waits for it; `admin` asks for administrator (root) rights first
-    /// when this program does not have them.
+    /// when this program does not have them. `env` sets variables for this
+    /// one run.
     fn run_program(
         &self,
         _program: &Path,
         _args: &[String],
         _admin: bool,
+        _env: &[(&str, &str)],
     ) -> io::Result<ProgramOutput> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,

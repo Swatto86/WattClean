@@ -1,7 +1,7 @@
 //! Reading what a task's listing step printed: names checked before they
 //! are handed back to a package manager.
 
-use super::{Listed, Parse};
+use super::{Listed, Parse, Use};
 
 /// A package name safe to hand back to a package manager: no option
 /// (`-x`), no spaces or shell characters.
@@ -16,8 +16,13 @@ pub fn safe_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '_' | '-' | ':' | '@'))
 }
 
-/// What a listing step's output names, unsafe names left out.
-pub fn parse(parse: Parse, output: &str) -> Vec<Listed> {
+/// What a listing step's output names. A name passed back to the package
+/// manager must pass [`safe_name`]; others are left out, so the command
+/// never acts on them. A name only shown (`Use::Preview`, where the command
+/// acts on its own) is kept when each `/`-separated part passes, as in a
+/// Homebrew tap's `user/repo/name`; any still refused are counted first,
+/// never dropped silently, since the command acts on them all the same.
+pub fn parse(parse: Parse, then: Use, output: &str) -> Vec<Listed> {
     let one = |name: &str| Listed {
         label: name.to_string(),
         args: vec![name.to_string()],
@@ -76,8 +81,29 @@ pub fn parse(parse: Parse, output: &str) -> Vec<Listed> {
             })
             .collect(),
     };
-    out.retain(|listed| listed.args.first().is_some_and(|name| safe_name(name)));
+    let found = out.len();
+    out.retain(|listed| {
+        listed.args.first().is_some_and(|name| match then {
+            Use::Preview => name.split('/').all(safe_name),
+            Use::Append | Use::Each => safe_name(name),
+        })
+    });
+    let refused = found - out.len();
     out.dedup();
+    if then == Use::Preview && refused > 0 {
+        let label = if refused == 1 {
+            "1 name that cannot be shown".to_string()
+        } else {
+            format!("{refused} names that cannot be shown")
+        };
+        out.insert(
+            0,
+            Listed {
+                label,
+                args: Vec::new(),
+            },
+        );
+    }
     out
 }
 
@@ -101,20 +127,20 @@ mod tests {
     fn listings_are_read_from_each_package_manager() {
         let apt = "NOTE: This is only a simulation!\nRemv libold1 [1.0-1]\nRemv -bad [1]\nInst x\n";
         assert_eq!(
-            parse(Parse::AptRemoved, apt),
+            parse(Parse::AptRemoved, Use::Append, apt),
             vec![Listed {
                 label: "libold1".into(),
                 args: vec!["libold1".into()],
             }]
         );
         let dpkg = "ii  bash\nrc  oldapp\nrc  other:amd64\n";
-        let names: Vec<_> = parse(Parse::DpkgResidual, dpkg)
+        let names: Vec<_> = parse(Parse::DpkgResidual, Use::Append, dpkg)
             .into_iter()
             .map(|l| l.label)
             .collect();
         assert_eq!(names, ["oldapp", "other:amd64"]);
         let brew = "==> Would autoremove 2 unneeded formulae:\nlibyaml\nopenssl@1.1\n";
-        let names: Vec<_> = parse(Parse::Lines, brew)
+        let names: Vec<_> = parse(Parse::Lines, Use::Preview, brew)
             .into_iter()
             .map(|l| l.label)
             .collect();
@@ -123,19 +149,47 @@ mod tests {
                     core  16-2.61  16928  latest/stable  canonical✓  core,disabled\n\
                     core  16-2.62  17200  latest/stable  canonical✓  core\n\
                     firefox  128.0  4650  latest/stable  mozilla✓  disabled\n";
-        assert!(parse(Parse::Tool, "").is_empty());
+        assert!(parse(Parse::Tool, Use::Preview, "").is_empty());
         assert!(
             parse(
                 Parse::Tool,
+                Use::Preview,
                 "xcrun: error: unable to find utility \"simctl\"\n"
             )
             .is_empty()
         );
         let xcode = "/Applications/Xcode.app/Contents/Developer/usr/bin/simctl\n";
-        assert_eq!(parse(Parse::Tool, xcode).len(), 1);
-        let listed = parse(Parse::SnapDisabled, snap);
+        assert_eq!(parse(Parse::Tool, Use::Preview, xcode).len(), 1);
+        let listed = parse(Parse::SnapDisabled, Use::Each, snap);
         assert_eq!(listed.len(), 2);
         assert_eq!(listed[0].label, "core (revision 16928)");
         assert_eq!(listed[1].args, ["firefox", "--revision=4650"]);
+    }
+
+    /// A name only shown may be a tap's `user/repo/name`; one passed back
+    /// may not. A shown listing never drops a name without saying so.
+    #[test]
+    fn a_preview_keeps_tap_names_and_counts_what_it_cannot_show() {
+        let brew = "==> Would autoremove 4 unneeded formulae:\n\
+                    hashicorp/tap/foo\nlibyaml\n-rf\na//b\n";
+        let labels = |then| -> Vec<String> {
+            parse(Parse::Lines, then, brew)
+                .into_iter()
+                .map(|l| l.label)
+                .collect()
+        };
+        assert_eq!(
+            labels(Use::Preview),
+            [
+                "2 names that cannot be shown",
+                "hashicorp/tap/foo",
+                "libyaml"
+            ]
+        );
+        assert_eq!(labels(Use::Append), ["libyaml"]);
+        assert_eq!(labels(Use::Each), ["libyaml"]);
+        let one = parse(Parse::Lines, Use::Preview, "$(id)\n");
+        assert_eq!(one.len(), 1);
+        assert_eq!(one[0].label, "1 name that cannot be shown");
     }
 }

@@ -85,12 +85,23 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   one table in Rust (`wcc-core/src/tasks.rs`): apt, dnf, zypper, pacman,
   Flatpak, Snap, Nix, Homebrew, MacPorts, journald and developer tools. A
   definition file can only name a task, never a command; names a listing
-  step reads back are checked before they are passed on. Programs are
-  looked for where package managers install, then on `PATH`; only `gem` is
-  looked for first in the version managers' folders (rbenv, asdf, mise,
-  rvm), as in the account's terminal. Those folders are the account's to
-  write, so nothing run as administrator is ever taken from them
-  (`wcc-unix/src/process.rs`). System caches
+  step reads back are checked before they are passed on. A program run as
+  the account is looked for where package managers install (Apple
+  Silicon's Homebrew first, as Homebrew's `shellenv` puts it, so an Intel
+  one left in `/usr/local` cannot hide it; pnpm's and the Docker tools'
+  macOS homes after the system's), then on `PATH`; only `gem` is looked
+  for first in the version managers' folders (rbenv, asdf, mise, rvm), as
+  in the account's terminal. Those folders, Homebrew's and `PATH` are the
+  account's to write, so a program run as administrator (and an
+  administrator task's listing, which decides what it acts on) comes only
+  from the system's folders (and MacPorts' on macOS), and only when its
+  real path, every folder above it and every folder holding a link on the
+  way belong to root and nobody else may write them; a copy that fails is
+  passed over, and the check is made again just before it runs
+  (`wcc-unix/src/process/lookup.rs`). A task may set variables for its own
+  runs, never through the password prompt: `brew cleanup` runs with
+  `HOMEBREW_NO_AUTOREMOVE=1`, since uninstalling unneeded formulae is the
+  separate, warned autoremove option. System caches
   belong to root, so those commands ask for administrator rights each time
   (polkit's `pkexec`, macOS's own prompt): the app itself never runs as
   root, and there is no "restart as administrator" outside Windows.

@@ -100,8 +100,11 @@ mozilla-history, mozilla-downloads), `json` (`address` a/b/c), `ini`
 `command` (`task` = an id from `tasks::TASKS`: a package manager's clean,
 run with administrator rights when it needs them, its listing shown in the
 preview; a definition can name a task, never a command; the preview's size
-comes from the tool's own dry run when it has one, such as `brew cleanup -n`,
-and a task whose tool is missing, such as Xcode's `simctl`, is not offered). File actions take `path`,
+comes from the tool's own dry run when it has one, such as `brew cleanup -n`
+(one that runs and names nothing to free means 0), and a task whose tool is
+missing, such as Xcode's `simctl`, is not offered. A listing only shown
+keeps a tap's `user/repo/name` and counts any name it cannot show; names
+passed back to the tool must be plain package names). File actions take `path`,
 `search` (file, glob, walk.files, walk.all, walk.top, find.dirs), and filters
 `regex`, `nregex`, `wholeregex`, `nwholeregex`, `names` (wildcards),
 `kind` (file/dir), `older_than_days`, `exclude` (paths; a `*` in an

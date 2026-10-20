@@ -38,8 +38,12 @@ impl PackageSystem for UnixPackages {
         wcc_unix::process::find(name, self.home.as_deref())
     }
 
+    fn find_admin_program(&self, name: &str) -> Option<PathBuf> {
+        wcc_unix::process::find_trusted(name)
+    }
+
     fn run(&self, program: &Path, args: &[String], admin: bool) -> io::Result<Output> {
-        let output = wcc_unix::process::run(program, args, admin)?;
+        let output = wcc_unix::process::run(program, args, admin, &[])?;
         Ok(Output {
             success: output.success,
             stdout: output.stdout,

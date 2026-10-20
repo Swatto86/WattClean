@@ -138,6 +138,10 @@ pub trait PackageSystem: Send + Sync {
     }
     /// A program in the system's own program folders.
     fn find_program(&self, name: &str) -> Option<PathBuf>;
+    /// A program that will run with administrator rights: only from
+    /// folders only an administrator can change, never the account's own
+    /// (Homebrew's, the home folder, `PATH`).
+    fn find_admin_program(&self, name: &str) -> Option<PathBuf>;
     /// Runs a program (never through a shell); `admin` asks for
     /// administrator rights first.
     fn run(&self, program: &Path, args: &[String], admin: bool) -> io::Result<Output>;

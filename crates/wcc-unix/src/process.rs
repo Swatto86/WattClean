@@ -1,105 +1,30 @@
-//! Finding a program in the system's own folders and running it, with
-//! administrator rights when asked: through polkit's `pkexec` on Linux and
+//! Finding a program (`lookup`) and running it, with administrator rights
+//! when asked: through polkit's `pkexec` on Linux and
 //! the system's own password prompt (`osascript`) on macOS. Arguments are
 //! always passed one by one, never through a shell, except to macOS's
 //! prompt, which takes one command line: there every argument is quoted.
 
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use wcc_core::system::ProgramOutput;
 
-/// Where package managers and developer tools install themselves, searched
-/// before `PATH` (a desktop app's `PATH` is often short, and on macOS lacks
-/// Homebrew and MacPorts). `~` is the home folder.
-const FOLDERS: &[&str] = &[
-    "/usr/local/sbin",
-    "/usr/local/bin",
-    "/usr/sbin",
-    "/usr/bin",
-    "/sbin",
-    "/bin",
-    "/opt/homebrew/bin",
-    "/opt/local/bin",
-    "/home/linuxbrew/.linuxbrew/bin",
-    "~/.linuxbrew/bin",
-    "/snap/bin",
-    "/nix/var/nix/profiles/default/bin",
-    "~/.nix-profile/bin",
-    "/usr/local/go/bin",
-    "/usr/lib/go/bin",
-    "~/.local/bin",
-    "~/.local/share/pnpm",
-    "~/.bun/bin",
-    "~/miniconda3/bin",
-    "~/miniforge3/bin",
-    "~/anaconda3/bin",
-    "/opt/conda/bin",
-    "/Applications/Docker.app/Contents/Resources/bin",
-];
+mod lookup;
 
-/// Programs a version manager puts in place of the system's, searched in
-/// `VERSION_MANAGERS` first as in the account's terminal: the account's own
-/// Ruby is the one whose gems are its own, not macOS's in `/usr/bin`. Only
-/// these: those folders belong to the account, so nothing that runs with
-/// administrator rights may be found there.
-const VERSIONED: &[&str] = &["gem"];
-
-const VERSION_MANAGERS: &[&str] = &[
-    "~/.rbenv/shims",
-    "~/.asdf/shims",
-    "~/.local/share/mise/shims",
-    "~/.rvm/wrappers/default",
-];
-
-/// The full path of an executable program called `name`; `None` when none
-/// is installed. `name` is a bare name: anything with a separator is
-/// refused.
-pub fn find(name: &str, home: Option<&Path>) -> Option<PathBuf> {
-    if name.is_empty() || name.contains('/') {
-        return None;
-    }
-    let from_path = std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
-        .unwrap_or_default();
-    let first = if VERSIONED.contains(&name) {
-        VERSION_MANAGERS
-    } else {
-        &[]
-    };
-    first
-        .iter()
-        .chain(FOLDERS)
-        .filter_map(|folder| match folder.strip_prefix("~/") {
-            Some(rest) => home.map(|home| home.join(rest)),
-            None => Some(PathBuf::from(folder)),
-        })
-        .chain(from_path.into_iter().filter(|dir| dir.is_absolute()))
-        .map(|dir| dir.join(name))
-        .find(|candidate| is_executable(candidate))
-}
-
-fn is_executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path)
-        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
-}
+pub use lookup::{find, find_trusted};
 
 /// Runs `program` with `args` and waits for it; with `admin`, asks for
-/// administrator rights first unless this program already has them.
-pub fn run(program: &Path, args: &[String], admin: bool) -> io::Result<ProgramOutput> {
-    let prompted = admin && !crate::sys::is_elevated();
-    let mut command = if prompted {
-        as_admin(program, args)?
-    } else {
-        let mut command = Command::new(program);
-        command.args(args);
-        command
-    };
-    // Output in one language, so listings parse the same everywhere.
-    command.env("LC_ALL", "C").stdin(Stdio::null());
+/// administrator rights first unless this program already has them. `env`
+/// sets variables for this one run.
+pub fn run(
+    program: &Path,
+    args: &[String],
+    admin: bool,
+    env: &[(&str, &str)],
+) -> io::Result<ProgramOutput> {
+    let (mut command, prompted) = prepare(program, args, admin, env, crate::sys::is_elevated())?;
     let output = command.output().map_err(|error| {
         io::Error::new(
             error.kind(),
@@ -118,6 +43,50 @@ pub fn run(program: &Path, args: &[String], admin: bool) -> io::Result<ProgramOu
         ));
     }
     Ok(result)
+}
+
+/// The command [`run`] starts, and whether it goes through the password
+/// prompt. A program run as administrator was chosen with
+/// [`find_trusted`] when the run was planned; it is checked again here,
+/// and its checked real path is what starts. Variables cannot be passed
+/// through the prompt (pkexec and macOS's prompt start the program with an
+/// environment of their own), so asking for both is refused rather than
+/// the variables silently dropped.
+fn prepare(
+    program: &Path,
+    args: &[String],
+    admin: bool,
+    env: &[(&str, &str)],
+    elevated: bool,
+) -> io::Result<(Command, bool)> {
+    let program = if admin {
+        lookup::trusted(program)?
+    } else {
+        program.to_path_buf()
+    };
+    let prompted = admin && !elevated;
+    if prompted && !env.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "{} cannot be given settings through the administrator prompt",
+                program.display()
+            ),
+        ));
+    }
+    let mut command = if prompted {
+        as_admin(&program, args)?
+    } else {
+        let mut command = Command::new(&program);
+        command.args(args);
+        command
+    };
+    // Output in one language, so listings parse the same everywhere.
+    command
+        .envs(env.iter().copied())
+        .env("LC_ALL", "C")
+        .stdin(Stdio::null());
+    Ok((command, prompted))
 }
 
 /// Runs a quick read-only command (a clipboard or process query), ending it
@@ -164,7 +133,7 @@ pub fn quick(program: &Path, args: &[&str], limit: Duration) -> Option<String> {
 
 #[cfg(not(target_os = "macos"))]
 fn as_admin(program: &Path, args: &[String]) -> io::Result<Command> {
-    let pkexec = find("pkexec", None).ok_or_else(|| {
+    let pkexec = find_trusted("pkexec").ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::PermissionDenied,
             "this needs administrator rights: install polkit (pkexec) or run WattClean as root",
@@ -231,34 +200,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn programs_are_found_by_bare_name_only() {
-        assert!(find("sh", None).is_some());
-        assert!(find("/bin/sh", None).is_none());
-        assert!(find("../sh", None).is_none());
-        assert!(find("no-such-program-wattclean", None).is_none());
-    }
-
-    /// The account's own Ruby is the one whose gems it cleans, not the
-    /// system's in `/usr/bin`; nothing else is taken from a version
-    /// manager's folders, which the account (and any program it runs) can
-    /// write to.
-    #[test]
-    fn only_the_account_rubys_gem_comes_from_a_version_manager() {
-        use std::os::unix::fs::PermissionsExt;
-        let home = tempfile::tempdir().unwrap();
-        let shims = home.path().join(".rbenv/shims");
-        std::fs::create_dir_all(&shims).unwrap();
-        for name in ["gem", "sh"] {
-            let shim = shims.join(name);
-            std::fs::write(&shim, "#!/bin/sh\n").unwrap();
-            std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
-        assert_eq!(find("gem", Some(home.path())), Some(shims.join("gem")));
-        let sh = find("sh", Some(home.path()));
-        assert!(sh.is_some() && sh != Some(shims.join("sh")), "{sh:?}");
-    }
-
-    #[test]
     fn a_program_runs_with_its_arguments_unparsed() {
         let sh = find("sh", None).unwrap();
         let args = vec![
@@ -267,11 +208,81 @@ mod tests {
             "x".to_string(),
             "a b;c".to_string(),
         ];
-        let output = run(&sh, &args, false).unwrap();
+        let output = run(&sh, &args, false, &[]).unwrap();
         assert!(output.success);
         assert_eq!(output.stdout, "a b;c");
-        let failed = run(&sh, &["-c".to_string(), "exit 3".to_string()], false).unwrap();
+        let failed = run(&sh, &["-c".to_string(), "exit 3".to_string()], false, &[]).unwrap();
         assert!(!failed.success);
+    }
+
+    /// Variables reach the program run as the account; through the
+    /// password prompt they could not, so that is refused. Nothing here
+    /// is started with administrator rights: `prepare` only builds the
+    /// command.
+    #[test]
+    fn settings_reach_the_program_but_never_through_the_prompt() {
+        let sh = find("sh", None).unwrap();
+        let env = [("HOMEBREW_NO_AUTOREMOVE", "1")];
+        let args = vec![
+            "-c".to_string(),
+            "printf %s \"$HOMEBREW_NO_AUTOREMOVE\"".to_string(),
+        ];
+        assert_eq!(run(&sh, &args, false, &env).unwrap().stdout, "1");
+        assert_eq!(run(&sh, &args, false, &[]).unwrap().stdout, "");
+        let refused = prepare(Path::new("/bin/sh"), &args, true, &env, false).unwrap_err();
+        assert_eq!(refused.kind(), io::ErrorKind::InvalidInput);
+        let (command, prompted) = prepare(Path::new("/bin/sh"), &args, true, &env, true).unwrap();
+        assert!(!prompted);
+        assert!(
+            command
+                .get_envs()
+                .any(|(name, value)| name == "HOMEBREW_NO_AUTOREMOVE"
+                    && value == Some(std::ffi::OsStr::new("1")))
+        );
+    }
+
+    /// A program the account could have changed is refused when it would
+    /// run as administrator (checked again, though planning chose it with
+    /// `find_trusted`), whether or not WattClean already has the rights.
+    #[test]
+    fn an_administrator_command_starts_only_a_checked_system_program() {
+        use std::os::unix::fs::PermissionsExt;
+        let planted = tempfile::tempdir().unwrap();
+        let port = planted.path().join("port");
+        std::fs::write(&port, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&port, std::fs::Permissions::from_mode(0o755)).unwrap();
+        for elevated in [false, true] {
+            let refused = prepare(&port, &[], true, &[], elevated).unwrap_err();
+            assert_eq!(refused.kind(), io::ErrorKind::PermissionDenied);
+        }
+        assert!(prepare(&port, &[], false, &[], false).is_ok());
+
+        let real = std::fs::canonicalize("/bin/sh").unwrap();
+        let (command, prompted) = prepare(Path::new("/bin/sh"), &[], true, &[], true).unwrap();
+        assert!(!prompted);
+        assert_eq!(command.get_program(), real.as_os_str());
+        match prepare(Path::new("/bin/sh"), &["-x".to_string()], true, &[], false) {
+            Ok((command, prompted)) => {
+                assert!(prompted);
+                let args: Vec<String> = command
+                    .get_args()
+                    .map(|arg| arg.to_string_lossy().into_owned())
+                    .collect();
+                if cfg!(target_os = "macos") {
+                    assert_eq!(command.get_program(), "/usr/bin/osascript");
+                    let script = format!("'{}' '-x'", real.display());
+                    assert!(args[1].contains(&script), "{args:?}");
+                } else {
+                    assert_eq!(Some(command.get_program().into()), find_trusted("pkexec"));
+                    assert_eq!(args, [real.to_string_lossy().into_owned(), "-x".into()]);
+                }
+            }
+            // A Linux machine without polkit says how to get the rights.
+            Err(error) => assert!(
+                !cfg!(target_os = "macos") && find_trusted("pkexec").is_none(),
+                "{error}"
+            ),
+        }
     }
 
     #[test]

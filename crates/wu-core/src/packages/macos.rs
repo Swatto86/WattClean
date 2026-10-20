@@ -107,21 +107,23 @@ struct Cask {
 }
 
 /// Homebrew's formulae and casks. A formula you asked for counts as an
-/// application; one installed only for another does not.
+/// application; one installed only for another does not. A formula's size
+/// is its folder in the Cellar of the Homebrew that listed it (`bin/brew`
+/// lives in Homebrew's prefix, beside `Cellar`), not of another one left
+/// on the machine.
 pub fn homebrew(system: &dyn PackageSystem) -> Option<Vec<Package>> {
     let text = query(system, "brew", &["info", "--json=v2", "--installed"])?;
     let mut packages = parse_brew(&text)?;
-    let cellars = [
-        "/opt/homebrew/Cellar",
-        "/usr/local/Cellar",
-        "/home/linuxbrew/.linuxbrew/Cellar",
-    ];
+    let cellar = system
+        .find_program("brew")
+        .and_then(|brew| Some(brew.parent()?.parent()?.join("Cellar")))
+        .map(|cellar| system.at(&cellar.to_string_lossy()));
     for package in &mut packages {
         package.size = match package.manager {
-            Manager::Homebrew => cellars
-                .iter()
-                .map(|cellar| system.at(cellar).join(&package.id))
-                .find(|folder| folder.is_dir())
+            Manager::Homebrew => cellar
+                .as_ref()
+                .map(|cellar| cellar.join(&package.id))
+                .filter(|folder| folder.is_dir())
                 .map(|folder| tree_size(&folder)),
             // A cask's size is its app's, set when the app is matched.
             _ => None,
@@ -347,6 +349,28 @@ mod tests {
         );
         assert!(!casks[2].app, "a font is not an application");
         assert!(casks[3].app && casks[3].app_files == ["tool.app"]);
+    }
+
+    /// A formula's size comes from the Cellar of the Homebrew that listed
+    /// it, not from another one left on the Mac (an Intel Homebrew in
+    /// `/usr/local` beside Apple Silicon's in `/opt/homebrew`).
+    #[test]
+    fn formula_sizes_come_from_the_homebrew_that_listed_them() {
+        let mut machine = crate::packages::testing::Machine::macos();
+        machine.prints(
+            "brew",
+            r#"{"formulae":[{"name":"wget","installed":[{"version":"1"}]}]}"#,
+        );
+        machine
+            .places
+            .insert("brew".into(), "/usr/local/bin/brew".into());
+        for (cellar, bytes) in [("opt/homebrew/Cellar", 10), ("usr/local/Cellar", 3)] {
+            let keg = machine.at("/").join(cellar).join("wget/1");
+            std::fs::create_dir_all(&keg).unwrap();
+            std::fs::write(keg.join("bin"), vec![0u8; bytes]).unwrap();
+        }
+        let formulae = homebrew(&machine).unwrap();
+        assert_eq!(formulae[0].size, Some(3));
     }
 
     #[test]

@@ -294,13 +294,18 @@ impl System for UnixSystem {
         self.tool(name)
     }
 
+    fn find_admin_program(&self, name: &str) -> Option<PathBuf> {
+        process::find_trusted(name)
+    }
+
     fn run_program(
         &self,
         program: &Path,
         args: &[String],
         admin: bool,
+        env: &[(&str, &str)],
     ) -> io::Result<ProgramOutput> {
-        process::run(program, args, admin)
+        process::run(program, args, admin, env)
     }
 }
 
