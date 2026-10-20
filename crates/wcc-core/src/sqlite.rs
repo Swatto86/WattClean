@@ -1,6 +1,7 @@
-//! Work inside browser databases: removing history, downloads, form entries
-//! and site search engines while keeping the rest (bookmarks stay), and
-//! vacuuming to give back the space deleted rows leave.
+//! Work inside browser databases (and macOS's download records): removing
+//! history, downloads, form entries and site search engines while keeping
+//! the rest (bookmarks stay), and vacuuming to give back the space deleted
+//! rows leave.
 //!
 //! Browsers change their schemas, so every statement is tried on its own and
 //! a missing table or column is not an error. A database the browser has
@@ -75,6 +76,8 @@ fn statements(op: SqliteOp) -> &'static [&'static str] {
         ],
         SqliteOp::MozillaDownloads => &["DELETE FROM moz_annos WHERE anno_attribute_id IN \
              (SELECT id FROM moz_anno_attributes WHERE name LIKE 'downloads/%')"],
+        // Rows only: LaunchServices keeps adding to the table.
+        SqliteOp::QuarantineEvents => &["DELETE FROM LSQuarantineEvent"],
     }
 }
 
@@ -189,6 +192,30 @@ mod tests {
             .query_row("SELECT visit_count FROM moz_places", [], |r| r.get(0))
             .unwrap();
         assert_eq!(visits, 0);
+    }
+
+    /// macOS's download records: every row goes, the table stays for
+    /// LaunchServices to add to.
+    #[test]
+    fn download_records_go_and_their_table_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir
+            .path()
+            .join("com.apple.LaunchServices.QuarantineEventsV2");
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE LSQuarantineEvent (LSQuarantineEventIdentifier TEXT PRIMARY KEY NOT NULL,
+                     LSQuarantineTimeStamp REAL, LSQuarantineAgentName TEXT,
+                     LSQuarantineDataURLString TEXT);
+                 INSERT INTO LSQuarantineEvent VALUES ('A', 1.0, 'Safari', 'https://example.com/a.dmg'),
+                                                      ('B', 2.0, 'Messages', NULL);",
+            )
+            .unwrap();
+        drop(connection);
+        assert!(is_database(&path));
+        run(&path, SqliteOp::QuarantineEvents).unwrap();
+        assert_eq!(count(&path, "LSQuarantineEvent"), 0);
     }
 
     #[test]

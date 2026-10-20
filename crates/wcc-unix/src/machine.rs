@@ -260,6 +260,7 @@ impl System for UnixSystem {
         out.extend(
             wcc_core::vars::UNIX_VARIABLES
                 .iter()
+                .chain(wcc_core::vars::MACOS_VARIABLES)
                 .filter_map(|name| self.folders.path(name)),
         );
         if let Some(home) = self.home() {
@@ -319,8 +320,25 @@ mod tests {
     #[test]
     fn every_definition_variable_has_a_folder() {
         let system = UnixSystem::new();
-        for name in wcc_core::vars::UNIX_VARIABLES {
+        let macos: &[&str] = if cfg!(target_os = "macos") {
+            wcc_core::vars::MACOS_VARIABLES
+        } else {
+            &[]
+        };
+        for name in wcc_core::vars::UNIX_VARIABLES.iter().chain(macos) {
             assert_eq!(system.var(name).len(), 1, "{name}");
         }
+    }
+
+    /// Only what compilers keep in the Darwin cache folder is cleaned,
+    /// never the folder itself.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_darwin_cache_folder_itself_is_protected() {
+        let system = UnixSystem::new();
+        let guard = wcc_core::paths::Guard::new(&system.protected_folders(), &[]);
+        let cache = system.folders.path("DARWIN_USER_CACHE").unwrap();
+        assert!(guard.check(&cache).is_err());
+        assert!(guard.check(&cache.join("clang/ModuleCache/x.pcm")).is_ok());
     }
 }

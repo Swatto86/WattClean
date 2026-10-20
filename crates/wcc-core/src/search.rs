@@ -67,7 +67,31 @@ impl Searcher<'_> {
                 if (self.cancelled)() {
                     return;
                 }
+                let folder = root.parent().unwrap_or(&root);
+                let kept = match filter.kept_in(folder) {
+                    // Said once for the folder, however many items it holds.
+                    Some(Err(message)) => {
+                        let problem = Problem {
+                            path: folder.to_path_buf(),
+                            message,
+                        };
+                        if !out.problems.contains(&problem) {
+                            out.problems.push(problem);
+                        }
+                        continue;
+                    }
+                    Some(Ok(kept)) if kept.keeps_all(&root) => continue,
+                    kept => kept.and_then(Result::ok),
+                };
+                let start = out.found.len();
                 self.search_root(&root, spec.search, filter, out);
+                // What this root holds that the link keeps (a folder
+                // holding the item in use).
+                if let Some(kept) = kept {
+                    let found = out.found.split_off(start);
+                    out.found
+                        .extend(found.into_iter().filter(|f| !kept.keeps(&f.path)));
+                }
             }
         }
     }
@@ -308,3 +332,7 @@ pub fn describe(error: &std::io::Error) -> String {
 #[cfg(test)]
 #[path = "search_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "search_keep_tests.rs"]
+mod keep_tests;

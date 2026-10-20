@@ -59,6 +59,12 @@ pub fn parse(parse: Parse, then: Use, output: &str) -> Vec<Listed> {
             })
             .into_iter()
             .collect(),
+        Parse::SnapshotDates => output
+            .lines()
+            .map(str::trim)
+            .filter(|line| snapshot_date(line))
+            .map(one)
+            .collect(),
         Parse::SnapDisabled => output
             .lines()
             .skip(1)
@@ -105,6 +111,15 @@ pub fn parse(parse: Parse, then: Use, output: &str) -> Vec<Listed> {
         );
     }
     out
+}
+
+/// `YYYY-MM-DD-HHMMSS`, as `tmutil` names a snapshot.
+fn snapshot_date(line: &str) -> bool {
+    let digits =
+        |part: &str, len: usize| part.len() == len && part.bytes().all(|b| b.is_ascii_digit());
+    let parts: Vec<&str> = line.split('-').collect();
+    matches!(parts.as_slice(), [year, month, day, time]
+        if digits(year, 4) && digits(month, 2) && digits(day, 2) && digits(time, 6))
 }
 
 #[cfg(test)]
@@ -164,6 +179,23 @@ mod tests {
         assert_eq!(listed.len(), 2);
         assert_eq!(listed[0].label, "core (revision 16928)");
         assert_eq!(listed[1].args, ["firefox", "--revision=4650"]);
+    }
+
+    /// `tmutil listlocalsnapshotdates /` starts with a heading, which is no
+    /// snapshot; only `YYYY-MM-DD-HHMMSS` lines are.
+    #[test]
+    fn snapshot_dates_are_read_without_the_heading() {
+        let list = crate::tasks::find("tm-snapshots")
+            .and_then(|task| task.list)
+            .unwrap();
+        let out = "Snapshot dates for disk /:\n2026-10-19-101530\n 2026-10-20-091500 \n\
+                   not-a-date\n2026-1-19-101530\n2026-10-19-10153x\n";
+        let labels: Vec<_> = parse(list.parse, list.then, out)
+            .into_iter()
+            .map(|l| l.label)
+            .collect();
+        assert_eq!(labels, ["2026-10-19-101530", "2026-10-20-091500"]);
+        assert!(parse(list.parse, list.then, "Snapshot dates for disk /:\n").is_empty());
     }
 
     /// A name only shown may be a tap's `user/repo/name`; one passed back

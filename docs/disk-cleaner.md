@@ -54,7 +54,7 @@ beside the app by `src-tauri/installer-hooks.nsh`.
 | `exec` | Carrying out operations (shred, delete at restart) |
 | `run` | Preview or clean of a selection, with progress and stop |
 | `report` | What a run found or did; progress; the `Sink` trait |
-| `sqlite` | History, downloads, form data, site search engines, vacuum |
+| `sqlite` | History, downloads, form data, site search engines, macOS's download records, vacuum |
 | `edit` | Removing one key from JSON or one section/parameter from INI |
 | `shred` | Overwrite-then-delete; wiping free space |
 | `settings`, `store`, `history` | JSON in the data folder |
@@ -95,7 +95,7 @@ skip = []                        # template options to leave out
 
 Actions (`op`): `delete`, `truncate`, `sqlite` (`sql` = vacuum,
 chrome-history, chrome-downloads, chrome-autofill, chrome-keywords,
-mozilla-history, mozilla-downloads), `json` (`address` a/b/c), `ini`
+mozilla-history, mozilla-downloads, quarantine-events), `json` (`address` a/b/c), `ini`
 (`section`, optional `parameter`), `registry` (`key`, optional `value`),
 `recycle-bin` (the Trash on Linux and macOS), `clipboard`, `custom-paths`,
 `command` (`task` = an id from `tasks::TASKS`: a package manager's clean,
@@ -109,7 +109,11 @@ passed back to the tool must be plain package names). File actions take `path`,
 `search` (file, glob, walk.files, walk.all, walk.top, find.dirs), and filters
 `regex`, `nregex`, `wholeregex`, `nwholeregex`, `names` (wildcards),
 `kind` (file/dir), `older_than_days`, `exclude` (paths; a `*` in an
-exclusion spans folders). An exclusion that uses a variable the PC does not
+exclusion spans folders), `keep_link` (a link relative to each found
+item's folder, such as `../current`: the item it names, what is in it, the
+link and any folder holding either stay; read when planned, so a clean
+reads it again; missing, not a link or naming nothing in that folder, and
+nothing there goes, with the reason in the report). An exclusion that uses a variable the PC does not
 have (other than `%ONEDRIVE%`) makes the action find nothing and report why,
 rather than run without it. `walk.all` with a name filter removes matching
 files only, never folders. A link to a folder is removed as a folder (the
@@ -130,7 +134,9 @@ below `path` for folders named by `names`, beside a file matching `beside`
 `defs_tests.rs`; `%PROGRAMFILES%` stands for both Program Files folders.
 On Linux and macOS: `vars::UNIX_VARIABLES` (`%HOME%`, the XDG folders,
 `%CONFIG%` and `%CACHE%` — XDG on Linux, `~/Library/…` on macOS — the user
-folders, `%TRASH%`, `%HOMEBREW_CACHE%`, `%GOPATH%`, `%CARGO_HOME%`).
+folders, `%TRASH%`, `%HOMEBREW_CACHE%`, `%GOPATH%`, `%CARGO_HOME%`), and on
+macOS only `vars::MACOS_VARIABLES` (`%DARWIN_USER_CACHE%`, the account's
+`/var/folders/…/C`, itself protected).
 
 Custom `.toml` and CleanerML `.xml` files go in the data folder's
 `cleaners` folder; winapp2.ini is kept there as `winapp2.ini`.
@@ -183,7 +189,7 @@ with `--list-cleaners`, `--preview`, `--clean`, `--shred`,
 `--wipe-free-space`, `--preset`, `--all-but-warning`, `--overwrite`.
 
 Added beyond BleachBit: History page, per-cleaner tick counts, Select All,
-build output of Rust, .NET and Python projects, a test machine for
+build output of Rust, .NET, Swift and Python projects, a test machine for
 automated end-to-end tests.
 
 Left out on purpose, with reasons:
@@ -217,6 +223,17 @@ Left out on purpose, with reasons:
 - Folders are removed only when everything in them went; whatever was
   kept, in use or new keeps its folder.
 - A clean always plans again; it never trusts an earlier preview.
+- Codex keeps every release it updated from; its old versions are found
+  with `keep_link`, so the one `current` names stays (the option is not
+  ticked by default, and Codex running leaves it alone).
+- macOS options that ask for an administrator's password (Time Machine
+  local snapshots, the system log, the DNS cache) are never ticked by
+  default. Each run as administrator asks again, so snapshots go in one
+  `tmutil deletelocalsnapshots /` run, offered only when `tmutil` lists
+  some; the system log is erased without `--uuidtext`.
+- The compiled module cache is cleaned inside the account's Darwin cache
+  folder, never the folder itself: it holds live system caches (fonts,
+  the Dock's icons) that programs keep open.
 - Shredding refuses a file whose data has other names (hard links, as
   Windows' own files have): overwriting it would destroy the data under
   every name. It renames the file to a random name first: a folder that
@@ -243,7 +260,8 @@ Left out on purpose, with reasons:
   winapp2.ini are import formats only.
 - Build output (Developer tools › Build output) is found by a folder's
   name together with the project file beside it (`target` beside
-  `Cargo.toml`, `bin`/`obj` beside a `.csproj`), never by the name alone,
+  `Cargo.toml`, `bin`/`obj` beside a `.csproj`, `.build` beside
+  `Package.swift`), never by the name alone,
   which would also match a person's own folder called `build` or `target`.
   Python's `__pycache__` needs no partner. It searches the profile only,
   with deep scan's exclusions.

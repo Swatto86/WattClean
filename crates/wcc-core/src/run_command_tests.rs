@@ -225,3 +225,60 @@ fn an_administrator_command_never_runs_a_program_the_account_could_have_planted(
     run_keys(&catalog, &system, &["macports.clean"], Mode::Clean);
     assert_eq!(system.ran(), ["admin port clean --all installed"]);
 }
+
+/// macOS's own built-in cleaners on the test machine posing as a Mac.
+fn mac_machine() -> (tempfile::TempDir, FakeSystem, Catalog) {
+    let dir = tempfile::tempdir().unwrap();
+    let system = FakeSystem::open(dir.path())
+        .unwrap()
+        .posing_as(Platform::Macos);
+    let catalog = Catalog::load(Platform::Macos, None, false);
+    assert!(catalog.problems.is_empty(), "{:?}", catalog.problems);
+    (dir, system, catalog)
+}
+
+/// The preview shows the snapshots `tmutil` lists, by date, and runs
+/// nothing else; the clean removes them all in one run (one password).
+#[test]
+fn time_machine_snapshots_are_listed_by_date_and_removed_in_one_run() {
+    let (_dir, system, catalog) = mac_machine();
+    let listing = "Snapshot dates for disk /:\n2026-10-19-101530\n2026-10-19-111530\n";
+    system.add_program("tmutil", listing).unwrap();
+    let keys = ["system.local_snapshots"];
+    let report = run_keys(&catalog, &system, &keys, Mode::Preview);
+    let items = &report.options[0].items;
+    assert_eq!(items.len(), 1, "{report:#?}");
+    assert_eq!(items[0].path, "tmutil deletelocalsnapshots /");
+    assert_eq!(
+        items[0].note.as_deref(),
+        Some("as administrator: 2026-10-19-101530, 2026-10-19-111530")
+    );
+    assert_eq!(system.ran(), ["tmutil listlocalsnapshotdates /"]);
+    run_keys(&catalog, &system, &keys, Mode::Clean);
+    let removals: Vec<String> = system
+        .ran()
+        .into_iter()
+        .filter(|line| line.contains("delete"))
+        .collect();
+    assert_eq!(removals, ["admin tmutil deletelocalsnapshots /"]);
+}
+
+/// With no snapshot (only the heading listed) there is nothing to offer.
+#[test]
+fn no_local_snapshots_means_nothing_to_run() {
+    let (_dir, system, catalog) = mac_machine();
+    system
+        .add_program("tmutil", "Snapshot dates for disk /:\n")
+        .unwrap();
+    let report = run_keys(&catalog, &system, &["system.local_snapshots"], Mode::Clean);
+    assert!(report.options[0].items.is_empty(), "{report:#?}");
+    assert_eq!(system.ran(), ["tmutil listlocalsnapshotdates /"]);
+}
+
+#[test]
+fn the_dns_cache_is_flushed_as_administrator() {
+    let (_dir, system, catalog) = mac_machine();
+    system.add_program("killall", "").unwrap();
+    run_keys(&catalog, &system, &["system.dns_cache"], Mode::Clean);
+    assert_eq!(system.ran(), ["admin killall -HUP mDNSResponder"]);
+}

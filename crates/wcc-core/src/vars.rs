@@ -33,6 +33,12 @@ pub const UNIX_VARIABLES: &[&str] = &[
     "CARGO_HOME",
 ];
 
+/// Variables only macOS definitions may use, beside [`UNIX_VARIABLES`].
+/// `DARWIN_USER_CACHE` is the account's own cache folder macOS keeps beside
+/// its temporary one (`/var/folders/…/C`), where compilers keep their module
+/// caches. Linux has none, so a pattern naming it finds nothing there.
+pub const MACOS_VARIABLES: &[&str] = &["DARWIN_USER_CACHE"];
+
 /// Looks a variable up by name (case-insensitive); empty when unknown.
 pub trait Vars {
     fn values(&self, name: &str) -> Vec<String>;

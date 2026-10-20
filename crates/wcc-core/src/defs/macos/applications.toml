@@ -187,3 +187,30 @@ name = "Art cache"
 description = "Album art VLC downloaded"
 default = true
 actions = [{ op = "delete", search = "walk.all", path = '%CACHE%/org.videolan.vlc/art' }]
+
+# Only the media cache's usual place: one moved to another drive stays.
+[[cleaner]]
+id = "adobe_media"
+name = "Adobe media cache"
+description = "Premiere Pro, After Effects and Media Encoder"
+category = "applications"
+detect = ['%CONFIG%/Adobe/Common/Media Cache Files', '%CONFIG%/Adobe/Common/Media Cache']
+running = [
+  "adobe premiere pro 2024",
+  "adobe premiere pro 2025",
+  "adobe premiere pro 2026",
+  "after effects",
+  "adobe media encoder 2024",
+  "adobe media encoder 2025",
+  "adobe media encoder 2026",
+]
+
+[[cleaner.option]]
+id = "media_cache"
+name = "Media cache"
+description = "Conformed audio and waveform files the apps make again from your footage"
+warning = "Projects open more slowly the first time while the apps rebuild these files."
+actions = [
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Adobe/Common/Media Cache Files' },
+  { op = "delete", search = "walk.all", path = '%CONFIG%/Adobe/Common/Media Cache' },
+]

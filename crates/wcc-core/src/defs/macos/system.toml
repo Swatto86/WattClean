@@ -1,9 +1,9 @@
 # macOS itself. Format: see docs/disk-cleaner.md ("Cleaner definitions").
-# Paths take %VARIABLES% (vars::UNIX_VARIABLES) and * ? wildcards. Only
-# what this account owns is cleaned. macOS protects some folders (the Trash,
-# Safari's, Mail's, and other apps' data folders such as Chrome's profile):
-# WattClean reports them as not allowed until you give it Full Disk Access
-# in System Settings › Privacy & Security.
+# Paths take %VARIABLES% (vars::UNIX_VARIABLES and MACOS_VARIABLES) and
+# * ? wildcards. Only what this account owns is cleaned. macOS protects some
+# folders (the Trash, Safari's, Mail's, and other apps' data folders such as
+# Chrome's profile): WattClean reports them as not allowed until you give it
+# Full Disk Access in System Settings › Privacy & Security.
 
 [[cleaner]]
 id = "system"
@@ -74,11 +74,39 @@ actions = [
 ]
 
 [[cleaner.option]]
+id = "download_records"
+name = "Download records"
+description = "macOS's list of every file you downloaded, from any app (the files themselves stay)"
+actions = [{ op = "sqlite", path = '%HOME%/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2', sql = "quarantine-events" }]
+
+[[cleaner.option]]
 id = "saved_state"
 name = "Saved window state"
 description = "The windows each app reopens where you left them"
 warning = "Apps open with fresh windows instead of the ones you had open."
 actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Saved Application State' }]
+
+# These three ask for an administrator's password, so none is ticked by
+# itself.
+[[cleaner.option]]
+id = "local_snapshots"
+name = "Time Machine local snapshots"
+description = "Hourly snapshots Time Machine keeps on this Mac until it can back up (tmutil deletelocalsnapshots)"
+warning = "Files can no longer be restored from these snapshots; backups on your backup disk stay. macOS also removes them by itself when space runs low."
+actions = [{ op = "command", task = "tm-snapshots" }]
+
+[[cleaner.option]]
+id = "system_logs"
+name = "System log"
+description = "macOS's own log of system and app activity (log erase --all)"
+warning = "Problems that happened before can no longer be looked into in Console. macOS starts a new log at once."
+actions = [{ op = "command", task = "log-erase" }]
+
+[[cleaner.option]]
+id = "dns_cache"
+name = "DNS cache"
+description = "Host names this Mac looked up recently (they are looked up again as needed)"
+actions = [{ op = "command", task = "dns-flush" }]
 
 [[cleaner.option]]
 id = "free_disk_space"
@@ -92,6 +120,21 @@ id = "custom"
 name = "Custom paths"
 description = "The files and folders you list in Settings › Custom paths"
 actions = [{ op = "custom-paths" }]
+
+# Device backups (MobileSync) are never touched.
+[[cleaner]]
+id = "apple_devices"
+name = "iPhone and iPad"
+description = "Software updates Finder downloaded for your devices"
+category = "system"
+detect = ['%HOME%/Library/iTunes/*Software Updates']
+
+[[cleaner.option]]
+id = "firmware"
+name = "Software update downloads"
+description = "iOS and iPadOS installers Finder downloaded to update or restore a device by cable; it downloads them again when needed"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/iTunes/*Software Updates', regex = '\.ipsw$' }]
 
 [[cleaner]]
 id = "shell"

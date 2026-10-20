@@ -227,7 +227,8 @@ id = "codex"
 name = "Codex"
 description = "OpenAI's coding agent"
 category = "developer"
-detect = ['%XDG_CACHE_HOME%/codex-runtimes']
+detect = ['%XDG_CACHE_HOME%/codex-runtimes', '%HOME%/.codex/packages']
+running = ["codex"]
 
 [[cleaner.option]]
 id = "installers"
@@ -235,6 +236,17 @@ name = "Old runtime installers"
 description = "Runtime downloads Codex unpacked while updating, unchanged for a week (the runtime in use stays)"
 actions = [
   { op = "delete", search = "walk.top", path = '%XDG_CACHE_HOME%/codex-runtimes/codex-runtime-install-*', older_than_days = 7 },
+]
+
+# Codex keeps every release it updates from. The `current` link beside
+# each package's releases names the one in use, read again at each clean;
+# without it nothing there goes.
+[[cleaner.option]]
+id = "old_versions"
+name = "Old versions"
+description = "Earlier Codex versions kept after each update (the version in use stays)"
+actions = [
+  { op = "delete", search = "walk.top", path = '%HOME%/.codex/packages/*/releases/*', keep_link = '../current' },
 ]
 
 [[cleaner]]
@@ -397,6 +409,18 @@ description = "target folders beside a Cargo.toml, anywhere in your home folder"
 warning = "Each Rust project is compiled from scratch on its next build, which can take many minutes. Searches your whole home folder."
 actions = [
   { op = "delete", search = "find.dirs", path = '%HOME%', names = 'target', beside = 'Cargo.toml', exclude = [
+    '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
+    '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
+  ] },
+]
+
+[[cleaner.option]]
+id = "swift"
+name = "Swift build folders"
+description = ".build folders beside a Package.swift, anywhere in your home folder"
+warning = "Each Swift package is built from scratch and fetches its dependencies again on its next build. Searches your whole home folder."
+actions = [
+  { op = "delete", search = "find.dirs", path = '%HOME%', names = '.build', beside = 'Package.swift', exclude = [
     '%HOME%/.*', '%HOME%/Library', '%HOME%/snap', '%HOME%/go', '%HOME%/*/node_modules', '%HOME%/*/.git',
     '%HOME%/*.photoslibrary', '%HOME%/*.musiclibrary', '%HOME%/*.tvlibrary', '%HOME%/*.imovielibrary', '%HOME%/*.fcpbundle', '%HOME%/*.logicx', '%HOME%/*.sparsebundle', '%HOME%/*.app', '%HOME%/OrbStack',
   ] },

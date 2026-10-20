@@ -3,7 +3,7 @@
 //! entry it meets.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use regex::{Regex, RegexBuilder};
@@ -38,6 +38,46 @@ pub struct Filter {
     pub(crate) older_than: Option<SystemTime>,
     pub(crate) exclude_roots: Vec<String>,
     pub(crate) exclude_patterns: Vec<Wildcard>,
+    /// `FileSpec::keep_link`, in this platform's spelling.
+    keep_link: Option<String>,
+}
+
+/// What a `keep_link` keeps among the items found in one folder: the link,
+/// the item it names and everything in that item. Compared in the folder's
+/// real spelling (every link on the way resolved), so a folder reached
+/// through a link still matches what the link names.
+pub(crate) struct Kept {
+    folder: PathBuf,
+    real_folder: PathBuf,
+    link: String,
+    target: String,
+}
+
+impl Kept {
+    /// `item` in the folder's real spelling; `None` for an item not found
+    /// in the folder, which is kept.
+    fn real(&self, item: &Path) -> Option<String> {
+        let rest = item.strip_prefix(&self.folder).ok()?;
+        Some(paths::key(&self.real_folder.join(rest)))
+    }
+
+    /// Whether `item`, found in the folder or below it, must stay: it is
+    /// the link, the item the link names or inside it, or a folder holding
+    /// either.
+    pub(crate) fn keeps(&self, item: &Path) -> bool {
+        self.real(item).is_none_or(|key| {
+            paths::is_within(&key, &self.target)
+                || paths::is_within(&self.target, &key)
+                || paths::is_within(&self.link, &key)
+        })
+    }
+
+    /// Whether everything at or below `item` stays: it is the link, or the
+    /// item the link names or inside it.
+    pub(crate) fn keeps_all(&self, item: &Path) -> bool {
+        self.real(item)
+            .is_none_or(|key| paths::is_within(&key, &self.target) || key == self.link)
+    }
 }
 
 fn compile(pattern: Option<&String>) -> Result<Option<Regex>, SpecError> {
@@ -96,7 +136,37 @@ impl Filter {
                 .and_then(|days| now.checked_sub(Duration::from_secs(u64::from(days) * 86_400))),
             exclude_roots,
             exclude_patterns,
+            keep_link: spec.keep_link.as_deref().map(paths::native),
         })
+    }
+
+    /// What `keep_link` keeps in `folder`, read from the machine as it is
+    /// now (a clean plans again, so an update since the preview is seen);
+    /// `None` without a `keep_link`. `Err` says why nothing in the folder
+    /// may go: the link is missing, is not a link, or names nothing in the
+    /// folder, so which item is in use is not known.
+    pub(crate) fn kept_in(&self, folder: &Path) -> Option<Result<Kept, String>> {
+        let link = self.keep_link.as_deref()?;
+        let kept = || -> Option<Kept> {
+            let at = folder.join(link);
+            if !fs::symlink_metadata(&at).ok()?.file_type().is_symlink() {
+                return None;
+            }
+            let real_folder = fs::canonicalize(folder).ok()?;
+            let target = paths::key(&fs::canonicalize(&at).ok()?);
+            paths::is_within(&target, &paths::key(&real_folder)).then(|| Kept {
+                folder: folder.to_path_buf(),
+                link: paths::key(&real_folder.join(link)),
+                target,
+                real_folder,
+            })
+        };
+        Some(kept().ok_or_else(|| {
+            format!(
+                "left alone: the link {link:?} is missing or names nothing in this folder, \
+                 so the one in use is not known"
+            )
+        }))
     }
 
     pub(crate) fn excluded(&self, path: &Path) -> bool {

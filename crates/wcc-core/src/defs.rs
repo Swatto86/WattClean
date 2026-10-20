@@ -125,6 +125,8 @@ struct ActionDef {
     older_than_days: Option<u32>,
     #[serde(default)]
     exclude: Vec<String>,
+    /// A link beside the found items naming the one to keep (`../current`).
+    keep_link: Option<String>,
     sql: Option<SqliteOp>,
     address: Option<String>,
     section: Option<String>,
@@ -268,6 +270,13 @@ fn build_action(def: &ActionDef, fill: &dyn Fn(&str) -> String) -> Result<Action
         if search != Search::FindDirs && def.beside.is_some() {
             return Err("beside works only with find.dirs".into());
         }
+        // Named from each found item's folder: a full path or a variable
+        // could name anything.
+        if let Some(link) = &def.keep_link
+            && (link.is_empty() || link.starts_with(['/', '\\']) || link.contains([':', '%']))
+        {
+            return Err("keep_link must be a path relative to the found items' folder".into());
+        }
         Ok(FileSpec {
             path: fill(path),
             search,
@@ -280,6 +289,7 @@ fn build_action(def: &ActionDef, fill: &dyn Fn(&str) -> String) -> Result<Action
             kind: def.kind,
             older_than_days: def.older_than_days,
             exclude: def.exclude.iter().map(|e| fill(e)).collect(),
+            keep_link: def.keep_link.clone(),
             literal: false,
         })
     };
@@ -324,3 +334,7 @@ mod tests;
 #[cfg(test)]
 #[path = "defs_unix_tests.rs"]
 mod unix_tests;
+
+#[cfg(test)]
+#[path = "defs_planned_tests.rs"]
+mod planned_tests;

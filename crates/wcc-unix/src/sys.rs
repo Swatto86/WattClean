@@ -128,10 +128,23 @@ pub fn mount_info(path: &Path) -> io::Result<Mount> {
 #[cfg(target_os = "macos")]
 pub fn user_temp_dir() -> Option<String> {
     const CS_DARWIN_USER_TEMP_DIR: libc::c_int = 65537;
+    darwin_user_dir(CS_DARWIN_USER_TEMP_DIR)
+}
+
+/// The account's own cache folder beside it (`/var/folders/…/C`).
+#[cfg(target_os = "macos")]
+pub fn user_cache_dir() -> Option<String> {
+    const CS_DARWIN_USER_CACHE_DIR: libc::c_int = 65538;
+    darwin_user_dir(CS_DARWIN_USER_CACHE_DIR)
+}
+
+/// One of the account's own folders macOS names through `confstr`.
+#[cfg(target_os = "macos")]
+fn darwin_user_dir(name: libc::c_int) -> Option<String> {
     let mut buf = vec![0u8; 1024];
     // SAFETY: `buf` is writable for `buf.len()` bytes and confstr writes at
     // most that many, NUL included.
-    let n = unsafe { libc::confstr(CS_DARWIN_USER_TEMP_DIR, buf.as_mut_ptr().cast(), buf.len()) };
+    let n = unsafe { libc::confstr(name, buf.as_mut_ptr().cast(), buf.len()) };
     if n == 0 || n > buf.len() {
         return None;
     }
@@ -208,12 +221,18 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn macos_knows_the_accounts_temporary_folder_and_its_volumes() {
+    fn macos_knows_the_accounts_temporary_and_cache_folders_and_its_volumes() {
         let temp = user_temp_dir().unwrap();
         assert!(
             Path::new(&temp).is_dir() && can_write(Path::new(&temp)),
             "{temp}"
         );
+        let cache = user_cache_dir().unwrap();
+        assert!(
+            Path::new(&cache).is_dir() && cache.ends_with("/C"),
+            "{cache}"
+        );
+        assert_eq!(Path::new(&cache).parent(), Path::new(&temp).parent());
         // The data volume is hidden from Finder itself: only /Volumes
         // entries are judged by that.
         let data = mount_info(Path::new("/System/Volumes/Data")).unwrap();

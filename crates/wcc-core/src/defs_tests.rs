@@ -126,10 +126,10 @@ fn every_file_parses(platform: Platform) {
 #[test]
 fn built_in_paths_use_only_known_variables_and_no_leftover_placeholders() {
     for platform in PLATFORMS {
-        let known: &[&str] = if platform == Platform::Windows {
-            KNOWN_VARIABLES
-        } else {
-            crate::vars::UNIX_VARIABLES
+        let known = match platform {
+            Platform::Windows => KNOWN_VARIABLES.to_vec(),
+            Platform::Linux => crate::vars::UNIX_VARIABLES.to_vec(),
+            Platform::Macos => [crate::vars::UNIX_VARIABLES, crate::vars::MACOS_VARIABLES].concat(),
         };
         let (cleaners, _) = built_in(platform);
         for cleaner in &cleaners {

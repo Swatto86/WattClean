@@ -158,6 +158,11 @@ pub struct FileSpec {
     pub older_than_days: Option<u32>,
     /// Never touch items at or below these paths (variables and wildcards).
     pub exclude: Vec<String>,
+    /// A link, relative to the folder each item is found in (`../current`),
+    /// naming the one item there to keep: the version in use. That item,
+    /// what is in it, the link and any folder holding either stay. When the
+    /// link is missing or names nothing in that folder, nothing there goes.
+    pub keep_link: Option<String>,
     /// `path` is a file or folder a person chose, taken exactly as written:
     /// no variables, wildcards or separator changes (on Linux and macOS a
     /// name may hold `%`, `*`, `?` and `\`).
@@ -200,6 +205,8 @@ pub enum SqliteOp {
     MozillaHistory,
     /// Firefox's download list (places.sqlite).
     MozillaDownloads,
+    /// macOS's record of every downloaded file (QuarantineEventsV2).
+    QuarantineEvents,
 }
 
 impl SqliteOp {
@@ -212,6 +219,7 @@ impl SqliteOp {
             Self::ChromeKeywords => "site search engines",
             Self::MozillaHistory => "history",
             Self::MozillaDownloads => "download history",
+            Self::QuarantineEvents => "download records",
         }
     }
 }

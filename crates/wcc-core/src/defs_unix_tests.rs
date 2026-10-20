@@ -4,9 +4,9 @@
 use super::*;
 use crate::model::{Action, Cleaner, CleanerOption, Detect};
 
-const UNIX: [Platform; 2] = [Platform::Linux, Platform::Macos];
+pub(super) const UNIX: [Platform; 2] = [Platform::Linux, Platform::Macos];
 
-fn cleaner(platform: Platform, id: &str) -> Cleaner {
+pub(super) fn cleaner(platform: Platform, id: &str) -> Cleaner {
     built_in(platform)
         .0
         .into_iter()
@@ -14,7 +14,7 @@ fn cleaner(platform: Platform, id: &str) -> Cleaner {
         .unwrap_or_else(|| panic!("{platform:?} has no {id}"))
 }
 
-fn option<'a>(cleaner: &'a Cleaner, id: &str) -> &'a CleanerOption {
+pub(super) fn option<'a>(cleaner: &'a Cleaner, id: &str) -> &'a CleanerOption {
     cleaner
         .options
         .iter()

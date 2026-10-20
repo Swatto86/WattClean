@@ -1,14 +1,20 @@
 # Apple's developer tools and their package managers. Xcode makes all of
 # this again: builds start from scratch, device support downloads again
-# when a device is connected.
+# when a device is connected. The compilers' module cache is in the
+# account's Darwin cache folder, never cleaned whole: it holds live system
+# caches (fonts, the Dock's icons) too.
 
 [[cleaner]]
 id = "xcode"
 name = "Xcode"
-description = "Apple's developer tools"
+description = "Apple's developer tools and Command Line Tools"
 category = "developer"
-detect = ['%HOME%/Library/Developer']
-running = ["xcode"]
+detect = [
+  '%HOME%/Library/Developer',
+  '%DARWIN_USER_CACHE%/clang/ModuleCache',
+  '%DARWIN_USER_CACHE%/org.llvm.clang*/ModuleCache',
+]
+running = ["xcode", "clang", "swift-frontend"]
 
 [[cleaner.option]]
 id = "derived_data"
@@ -34,6 +40,7 @@ actions = [
   { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/watchOS DeviceSupport' },
   { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/tvOS DeviceSupport' },
   { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/visionOS DeviceSupport' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/macOS DeviceSupport' },
 ]
 
 [[cleaner.option]]
@@ -46,9 +53,35 @@ actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Develope
 [[cleaner.option]]
 id = "simulator_caches"
 name = "Simulator caches"
-description = "Caches of the iOS and other simulators"
+description = "Caches of the iOS and other simulators, and the copies of them parallel tests run on"
 default = true
-actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/CoreSimulator/Caches' }]
+actions = [
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/CoreSimulator/Caches' },
+  { op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/XCTestDevices' },
+]
+
+[[cleaner.option]]
+id = "documentation"
+name = "Documentation cache"
+description = "Documentation Xcode downloaded to show; it downloads it again when needed"
+default = true
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/DocumentationCache' }]
+
+[[cleaner.option]]
+id = "device_logs"
+name = "Device logs"
+description = "Logs and crash reports Xcode copied from your devices"
+warning = "Crash reports copied from your devices can no longer be read in Xcode's Organizer."
+actions = [{ op = "delete", search = "walk.all", path = '%HOME%/Library/Developer/Xcode/iOS Device Logs' }]
+
+[[cleaner.option]]
+id = "module_cache"
+name = "Compiled module cache"
+description = "Clang and Swift modules compiled from the SDK headers; the next build compiles them again"
+actions = [
+  { op = "delete", search = "walk.all", path = '%DARWIN_USER_CACHE%/clang/ModuleCache' },
+  { op = "delete", search = "walk.all", path = '%DARWIN_USER_CACHE%/org.llvm.clang*/ModuleCache' },
+]
 
 [[cleaner.option]]
 id = "unavailable_simulators"

@@ -1,5 +1,6 @@
-//! The folders definitions name with `%VARIABLES%` (`vars::UNIX_VARIABLES`):
-//! the XDG base and user folders on Linux, the Library folders on macOS.
+//! The folders definitions name with `%VARIABLES%` (`vars::UNIX_VARIABLES`,
+//! and `vars::MACOS_VARIABLES` on macOS): the XDG base and user folders on
+//! Linux, the Library folders on macOS.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -91,6 +92,9 @@ impl Folders {
             set("CARGO_HOME").unwrap_or_else(|| under(".cargo")),
         );
         if platform == Platform::Macos {
+            if let Some(cache) = darwin_user_cache().filter(|dir| holds_none_of(dir, &kept)) {
+                put("DARWIN_USER_CACHE", cache);
+            }
             put("CONFIG", under("Library/Application Support"));
             put("CACHE", under("Library/Caches"));
             put("TRASH", under(".Trash"));
@@ -185,6 +189,18 @@ fn default_temp(platform: Platform) -> String {
     "/tmp".to_string()
 }
 
+/// The account's Darwin cache folder (`/var/folders/…/C`): macOS's own,
+/// not from the environment.
+#[cfg(target_os = "macos")]
+fn darwin_user_cache() -> Option<String> {
+    crate::sys::user_cache_dir()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn darwin_user_cache() -> Option<String> {
+    None
+}
+
 /// The first folder of a `:`-separated list (`GOPATH` may hold several).
 fn first_of_list(list: &str) -> String {
     list.split(':').next().unwrap_or(list).to_string()
@@ -233,6 +249,7 @@ mod tests {
         assert_eq!(folders.get("TEMP"), Some("/tmp"));
         assert_eq!(folders.get("HOMEBREW_CACHE"), Some("/var/cache/t/Homebrew"));
         assert_eq!(folders.get("DOWNLOADS"), Some("/home/t/Downloads"));
+        assert_eq!(folders.get("DARWIN_USER_CACHE"), None, "macOS's alone");
         for name in wcc_core::vars::UNIX_VARIABLES {
             assert!(folders.get(name).is_some(), "{name} has no value");
         }
@@ -253,6 +270,11 @@ mod tests {
         assert_eq!(folders.get("TEMP"), Some("/var/folders/ab/xyz/T"));
         for name in wcc_core::vars::UNIX_VARIABLES {
             assert!(folders.get(name).is_some(), "{name} has no value");
+        }
+        // The account's own, beside its temporary folder: never from `HOME`.
+        if cfg!(target_os = "macos") {
+            let cache = folders.get("DARWIN_USER_CACHE").unwrap_or_default();
+            assert!(cache.starts_with('/') && cache.ends_with("/C"), "{cache:?}");
         }
     }
 

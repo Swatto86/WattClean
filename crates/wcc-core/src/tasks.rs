@@ -21,6 +21,9 @@ pub enum Parse {
     SnapDisabled,
     /// `xcrun --find simctl`: any path printed means the tool is there.
     Tool,
+    /// `tmutil listlocalsnapshotdates`: each `YYYY-MM-DD-HHMMSS` line is one
+    /// snapshot (its heading is not).
+    SnapshotDates,
 }
 
 /// How the listed names are used.
@@ -268,6 +271,29 @@ pub const TASKS: &[Task] = &[
         },
     ),
     task("quicklook-reset", "qlmanage", &["-r", "cache"]),
+    // Every local snapshot of the start-up disk in one run, so one password
+    // prompt (each run as administrator asks again).
+    listed(
+        admin(task(
+            "tm-snapshots",
+            "tmutil",
+            &["deletelocalsnapshots", "/"],
+        )),
+        List {
+            program: "tmutil",
+            args: &["listlocalsnapshotdates", "/"],
+            parse: Parse::SnapshotDates,
+            then: Use::Preview,
+        },
+    ),
+    // The unified system log; never `--uuidtext`, which prunes the symbols
+    // other tools read.
+    measured(
+        admin(task("log-erase", "log", &["erase", "--all"])),
+        &["/private/var/db/diagnostics"],
+    ),
+    // HUP makes mDNSResponder forget its cache without stopping.
+    admin(task("dns-flush", "killall", &["-HUP", "mDNSResponder"])),
 ];
 
 /// The task with this id.
@@ -299,6 +325,21 @@ mod tests {
             Some("apt-get clean")
         );
         assert!(find("rm-rf").is_none());
+    }
+
+    /// macOS's own maintenance needs administrator rights, and erasing the
+    /// log never prunes the symbols other tools read (`--uuidtext`).
+    #[test]
+    fn macos_system_tasks_run_as_administrator() {
+        for (id, line) in [
+            ("tm-snapshots", "tmutil deletelocalsnapshots /"),
+            ("log-erase", "log erase --all"),
+            ("dns-flush", "killall -HUP mDNSResponder"),
+        ] {
+            let task = find(id).unwrap();
+            assert!(task.admin, "{id}");
+            assert_eq!(task.command_line(), line);
+        }
     }
 
     /// Variables cannot pass the password prompt; Homebrew's cleanup must
