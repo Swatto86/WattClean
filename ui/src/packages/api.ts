@@ -28,6 +28,8 @@ export interface LeftoverView {
   /** Null when the system would not let WattClean look inside. */
   size: number | null;
   folder: boolean;
+  /** A background job's plist: its job is stopped before it moves. */
+  job: boolean;
 }
 
 export interface Uninstalled {
@@ -64,6 +66,7 @@ const leftoverView = (v: unknown, w: string): LeftoverView => {
     path: str(o["path"], `${w}.path`),
     size: optNum(o["size"], `${w}.size`),
     folder: bool(o["folder"], `${w}.folder`),
+    job: bool(o["job"], `${w}.job`),
   };
 };
 
@@ -112,4 +115,6 @@ export const packagesApi = {
     call("un_pkg_uninstall", decodeUninstalled, { key, purge }),
   trashLeftovers: (numbers: number[]) =>
     call("un_pkg_trash_leftovers", decodeTrashed, { numbers }),
+  reveal: (number: number) =>
+    call("un_pkg_reveal", () => undefined, { number }),
 };

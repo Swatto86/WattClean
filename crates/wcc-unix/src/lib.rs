@@ -30,4 +30,4 @@ pub use folders::Folders;
 #[cfg(unix)]
 pub use machine::UnixSystem;
 #[cfg(unix)]
-pub use sys::is_elevated;
+pub use sys::{is_elevated, uid};

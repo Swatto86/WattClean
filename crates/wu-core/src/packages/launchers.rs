@@ -60,7 +60,7 @@ fn owners(
             .chain(files.iter().cloned())
             .collect();
         system
-            .run(program, &args, false)
+            .run(program, &args, false, &[])
             .map(|output| output.stdout)
             .unwrap_or_default()
     };

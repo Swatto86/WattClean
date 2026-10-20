@@ -138,5 +138,6 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         packages::un_pkg_list,
         packages::un_pkg_uninstall,
         packages::un_pkg_trash_leftovers,
+        packages::un_pkg_reveal,
     ]
 }

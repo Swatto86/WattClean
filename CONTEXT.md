@@ -138,7 +138,11 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   exact name only, never offered when another installed program goes by
   the name, never pre-ticked, and moved to the Trash (freedesktop.org Trash
   on Linux, Finder on macOS) rather than backed up: the Trash is how these
-  systems undo.
+  systems undo. On macOS an app still open is not removed, a formula's
+  background service is stopped first, Homebrew's sudo asks for passwords
+  through WattClean's own password box (`SUDO_ASKPASS`), and the account's
+  LaunchAgents that name or start the app are offered too, their jobs
+  stopped before they go (`docs/uninstaller.md`).
 - **winapp2.ini is Windows-only** (its entries are Windows paths); BleachBit
   CleanerML files are read for each platform's own parts, `~` being home.
 - **Data folders**: `~/.local/share/WattClean` (XDG) on Linux,

@@ -1,4 +1,6 @@
 use super::*;
+use crate::packages::Output;
+use crate::packages::others::{apt_takes, rpm_takes};
 use crate::packages::testing::Machine;
 
 fn args(removal: Result<Removal, String>) -> (Vec<String>, bool) {

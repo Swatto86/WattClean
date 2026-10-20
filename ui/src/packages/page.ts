@@ -1,8 +1,9 @@
 // Uninstall programs on Linux and macOS: what the package managers and
 // Applications folders hold. Uninstalling runs the package manager's own
 // removal (which may ask for an administrator's password), then offers what
-// the program left in the home folder; nothing is ticked, and what is
-// ticked goes to the Trash.
+// the program left in the home folder and the background jobs that start
+// it; nothing is ticked, each can be shown in the file manager first, and
+// what is ticked goes to the Trash.
 
 import type { Context, Page } from "../context.ts";
 import { confirm, inform } from "../dialog.ts";
@@ -10,6 +11,7 @@ import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, count, plural } from "../format.ts";
 import { trashName } from "../platform.ts";
 import { packagesApi, type LeftoverView, type PackageView } from "./api.ts";
+import { removalHow, revealLabel } from "./text.ts";
 
 /** What "also remove its settings" means for each source, where it can. */
 const PURGE: Record<string, string> = {
@@ -39,6 +41,28 @@ const chooseLeftovers = (
       });
       return { box, leftover };
     });
+    const shown = el("p", {
+      class: "muted",
+      id: "un-pkg-reveal-status",
+      role: "status",
+    });
+    const show = (leftover: LeftoverView) => {
+      const button = el("button", {
+        type: "button",
+        class: "link",
+        id: `un-pkg-show-${leftover.number}`,
+        text: "Show",
+        title: revealLabel(),
+        "aria-describedby": `un-pkg-path-${leftover.number}`,
+      });
+      button.addEventListener("click", () => {
+        shown.textContent = "";
+        packagesApi.reveal(leftover.number).catch((error: unknown) => {
+          shown.textContent = String(error);
+        });
+      });
+      return button;
+    };
     const form = el(
       "form",
       { method: "dialog", class: "dialog-form" },
@@ -49,7 +73,7 @@ const chooseLeftovers = (
       }),
       el("p", {
         class: "dialog-text",
-        text: `Tick what to move to the ${trashName()}. Only folders named after ${name} are listed; check each one, since another program may share a name.`,
+        text: `Tick what to move to the ${trashName()}. Only items named after ${name}, and background jobs that start it, are listed; check each one, since another program may share a name. A background job is stopped before it moves.`,
       }),
       el(
         "ul",
@@ -62,16 +86,25 @@ const chooseLeftovers = (
               "label",
               { class: "check", for: box.id },
               box,
-              el("span", { class: "path", text: leftover.path }),
+              el("span", {
+                class: "path",
+                id: `un-pkg-path-${leftover.number}`,
+                text: leftover.path,
+              }),
             ),
             el("span", {
               class: "muted",
               text:
-                leftover.size === null ? "size unknown" : bytes(leftover.size),
+                (leftover.job ? "background job, " : "") +
+                (leftover.size === null
+                  ? "size unknown"
+                  : bytes(leftover.size)),
             }),
+            show(leftover),
           ),
         ),
       ),
+      shown,
       el(
         "div",
         { class: "dialog-buttons" },
@@ -240,15 +273,9 @@ export const programsPage = (_ctx: Context): Page => {
     const target = selectedPackage();
     if (!target) return;
     const purge = PURGE[target.source];
-    const how =
-      target.source === "Application"
-        ? `Finder moves it to the ${trashName()}, asking for an administrator's password if it is not yours to move.`
-        : target.source === "AppImage"
-          ? `The file moves to the ${trashName()}.`
-          : `${target.source} removes it, asking for an administrator's password when it needs one.`;
     const answer = await confirm({
       title: `Uninstall ${target.name}?`,
-      message: `${how} Then WattClean looks for what it left in your home folder.`,
+      message: `${removalHow(target.source)} Then WattClean looks for what it left in your home folder.`,
       ok: "Uninstall",
       danger: true,
       ...(purge ? { checkbox: purge } : {}),

@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
 use tauri::State;
-use wu_core::packages::{self, Leftover, Package, PackageSystem, Removal};
+use wu_core::packages::{self, Leftover, Package, PackageSystem, Removal, Step};
 
 use crate::error::{CommandError, CommandResult, blocking};
 
@@ -112,6 +112,8 @@ pub struct LeftoverView {
     /// `None` when its size could not be read.
     size: Option<u64>,
     folder: bool,
+    /// A background job's plist, stopped before it goes to the Trash.
+    job: bool,
 }
 
 #[derive(Serialize)]
@@ -124,7 +126,8 @@ pub struct Uninstalled {
 }
 
 /// Removes one listed program (with its settings when `purge`), then looks
-/// for what it left behind in the home folder.
+/// for what it left behind: in the home folder, and a Homebrew service's
+/// plist. An app still open is refused before anything is removed.
 #[tauri::command]
 pub async fn un_pkg_uninstall(
     state: App<'_>,
@@ -161,6 +164,7 @@ pub async fn un_pkg_uninstall(
                 path: leftover.path.display().to_string(),
                 size: leftover.size,
                 folder: leftover.folder,
+                job: leftover.job.is_some(),
             })
             .collect();
         *lock(&shared.leftovers) = found;
@@ -173,27 +177,64 @@ pub async fn un_pkg_uninstall(
     .await
 }
 
-/// Carries out a removal; returns the package manager's last words.
+/// Removes `package`; returns the package manager's last words.
 fn remove(
     system: &dyn PackageSystem,
     package: &Package,
     purge: bool,
 ) -> CommandResult<Option<String>> {
-    match packages::removal(system, package, purge)? {
+    let plan = packages::removal(system, package, purge)?;
+    carry_out(system, &package.name, plan)
+}
+
+/// Carries out a planned removal of the program called `name`: the steps
+/// before it in order (stopping its background service), then the package
+/// manager, which on macOS asks for Homebrew's passwords through
+/// WattClean's password box. Nothing more runs once a step fails.
+fn carry_out(
+    system: &dyn PackageSystem,
+    name: &str,
+    plan: Removal,
+) -> CommandResult<Option<String>> {
+    match plan {
         Removal::Command {
             program,
             args,
             admin,
+            before,
+            askpass,
         } => {
-            let output = system.run(&program, &args, admin)?;
+            for step in &before {
+                run_step(system, step).map_err(|said| {
+                    format!(
+                        "{name}'s background service could not be stopped, so it was left installed: {said}"
+                    )
+                })?;
+            }
+            let helper = if askpass {
+                let helper = system.askpass().map_err(|error| {
+                    format!(
+                        "WattClean could not prepare the password box Homebrew may need, so {name} was left installed: {error}"
+                    )
+                })?;
+                let text = helper.to_str().map(str::to_string);
+                Some(text.ok_or("WattClean's data folder has a name sudo cannot be given")?)
+            } else {
+                None
+            };
+            let env: Vec<(&str, &str)> = helper
+                .as_deref()
+                .map(|helper| ("SUDO_ASKPASS", helper))
+                .into_iter()
+                .collect();
+            let output = system.run(&program, &args, admin, &env)?;
             // Its error, not the progress it printed before failing.
             let said = output.last_words().map(str::to_string);
             if output.success {
                 Ok(said)
             } else {
                 Err(CommandError::from(format!(
-                    "{} could not be removed: {}",
-                    package.name,
+                    "{name} could not be removed: {}",
                     said.as_deref()
                         .unwrap_or("the package manager reported a failure")
                 )))
@@ -205,12 +246,22 @@ fn remove(
                 .unwrap_or_else(|| Err(std::io::Error::other("nothing was moved")))
                 .map(|()| None)
                 .map_err(|error| {
-                    CommandError::from(format!(
-                        "{} could not be moved to the Trash: {error}",
-                        package.name
-                    ))
+                    CommandError::from(format!("{name} could not be moved to the Trash: {error}"))
                 })
         }
+    }
+}
+
+/// Runs one step of a removal; what it said when it failed.
+fn run_step(system: &dyn PackageSystem, step: &Step) -> Result<(), String> {
+    let output = system
+        .run(&step.program, &step.args, step.admin, &[])
+        .map_err(|error| error.to_string())?;
+    if output.success {
+        Ok(())
+    } else {
+        let said = output.last_words().unwrap_or("it reported a failure");
+        Err(said.to_string())
     }
 }
 
@@ -226,87 +277,75 @@ pub struct Trashed {
 pub async fn un_pkg_trash_leftovers(state: App<'_>, numbers: Vec<usize>) -> CommandResult<Trashed> {
     let shared = Arc::clone(&state);
     blocking(move || {
-        let chosen: Vec<std::path::PathBuf> = {
+        let chosen: Vec<Leftover> = {
             let leftovers = lock(&shared.leftovers);
             let mut numbers = numbers;
             numbers.sort_unstable();
             numbers.dedup();
             numbers
                 .iter()
-                .map(|n| leftovers.get(*n).map(|l| l.path.clone()))
+                .map(|n| leftovers.get(*n).cloned())
                 .collect::<Option<_>>()
                 .ok_or("Those leftovers are no longer listed.")?
         };
-        let mut moved = 0;
-        let mut failed = Vec::new();
-        for (path, result) in chosen.iter().zip(shared.system.trash(&chosen)) {
-            match result {
-                Ok(()) => moved += 1,
-                Err(error) => failed.push(format!("{}: {error}", path.display())),
-            }
-        }
+        let trashed = trash_chosen(shared.system.as_ref(), &chosen);
         lock(&shared.leftovers).clear();
-        Ok(Trashed { moved, failed })
+        Ok(trashed)
     })
     .await
 }
 
-#[cfg(test)]
-mod tests {
-    use std::io;
-    use std::path::{Path, PathBuf};
-
-    use wu_core::packages::{BundleInfo, Manager, Output};
-
-    use super::*;
-
-    /// A Mac whose Homebrew fails a cask's removal at its sudo step: the
-    /// progress on stdout, the error on stderr.
-    struct SudoFails;
-
-    impl PackageSystem for SudoFails {
-        fn is_macos(&self) -> bool {
-            true
-        }
-        fn home(&self) -> Option<PathBuf> {
-            None
-        }
-        fn find_program(&self, name: &str) -> Option<PathBuf> {
-            Some(Path::new("/opt/homebrew/bin").join(name))
-        }
-        fn find_admin_program(&self, _name: &str) -> Option<PathBuf> {
-            None
-        }
-        fn run(&self, _program: &Path, _args: &[String], _admin: bool) -> io::Result<Output> {
-            Ok(Output {
-                success: false,
-                stdout: "==> Uninstalling Cask battle-net\n==> Removing files:\n/Applications/Battle.net.app\n".into(),
-                stderr: "Error: Failure while executing; `/usr/bin/sudo -u root -- /bin/rm -f -r -- /Applications/Battle.net.app` exited with 1. Here's the output:\nsudo: a terminal is required to read the password\nsudo: a password is required\n".into(),
-            })
-        }
-        fn bundle_info(&self, _bundle: &Path) -> Option<BundleInfo> {
-            None
-        }
-        fn trash(&self, paths: &[PathBuf]) -> Vec<io::Result<()>> {
-            paths
-                .iter()
-                .map(|_| Err(io::Error::other("not here")))
-                .collect()
-        }
-    }
-
-    #[test]
-    fn a_failed_removal_reports_the_package_managers_error_not_its_progress() {
-        let cask = Package::new(Manager::HomebrewCask, "battle-net", "Blizzard Battle.net");
-        let Err(error) = remove(&SudoFails, &cask, false) else {
-            panic!("the removal should have failed");
+/// Moves `chosen` to the Trash. A plist whose background job launchd has
+/// loaded is stopped first (a trashed plist's job runs on until logout);
+/// one that cannot be stopped stays, and is reported.
+fn trash_chosen(system: &dyn PackageSystem, chosen: &[Leftover]) -> Trashed {
+    let mut failed = Vec::new();
+    let mut paths = Vec::new();
+    for leftover in chosen {
+        let stopped = match packages::stop_job(system, leftover) {
+            Ok(None) => Ok(()),
+            Ok(Some(step)) => run_step(system, &step)
+                .map_err(|said| format!("its background job could not be stopped: {said}")),
+            Err(refused) => Err(refused),
         };
-        assert!(
-            error.message.starts_with(
-                "Blizzard Battle.net could not be removed: Error: Failure while executing;"
-            ),
-            "{}",
-            error.message
-        );
+        match stopped {
+            Ok(()) => paths.push(leftover.path.clone()),
+            Err(why) => failed.push(format!("{}: {why}", leftover.path.display())),
+        }
     }
+    let mut moved = 0;
+    for (path, result) in paths.iter().zip(system.trash(&paths)) {
+        match result {
+            Ok(()) => moved += 1,
+            Err(error) => failed.push(format!("{}: {error}", path.display())),
+        }
+    }
+    Trashed { moved, failed }
 }
+
+/// Shows one leftover (by number) of the last removal in Finder, or the
+/// folder holding it in the file manager.
+#[tauri::command]
+pub async fn un_pkg_reveal(state: App<'_>, number: usize) -> CommandResult<()> {
+    let shared = Arc::clone(&state);
+    blocking(move || {
+        // Not held while the file manager is asked: it may be slow to answer.
+        let leftovers = lock(&shared.leftovers).clone();
+        reveal(shared.system.as_ref(), &leftovers, number)
+    })
+    .await
+}
+
+fn reveal(system: &dyn PackageSystem, leftovers: &[Leftover], number: usize) -> CommandResult<()> {
+    let path = &leftovers
+        .get(number)
+        .ok_or("That leftover is no longer listed.")?
+        .path;
+    system.reveal(path).map_err(|error| {
+        CommandError::from(format!("{} could not be shown: {error}", path.display()))
+    })
+}
+
+#[cfg(test)]
+#[path = "packages_tests.rs"]
+mod tests;

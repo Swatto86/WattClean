@@ -6,10 +6,12 @@
 //! registry instead (the rest of this crate).
 
 mod extra;
+mod launchd;
 mod launchers;
 mod leftovers;
 mod linux;
 mod macos;
+mod others;
 mod remove;
 
 use std::io;
@@ -17,8 +19,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+pub use launchd::LaunchdJob;
 pub use leftovers::{Leftover, find_leftovers, keys_for};
-pub use remove::{Removal, removal};
+pub use remove::{Removal, Step, removal, stop_job};
 
 /// What installed a package, and so what removes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
@@ -86,6 +89,9 @@ pub struct Package {
     /// Other names it goes by: a cask's app's own name.
     #[serde(skip)]
     pub known_as: Vec<String>,
+    /// The app bundle a cask installed, once it was found.
+    #[serde(skip)]
+    pub app_path: Option<PathBuf>,
 }
 
 impl Package {
@@ -103,6 +109,16 @@ impl Package {
             zap: Vec::new(),
             app_files: Vec::new(),
             known_as: Vec::new(),
+            app_path: None,
+        }
+    }
+
+    /// The app bundle that goes with it: an app's own, or the one a cask
+    /// installed.
+    pub fn bundle(&self) -> Option<&Path> {
+        match self.manager {
+            Manager::MacApp => Some(Path::new(&self.id)),
+            _ => self.app_path.as_deref(),
         }
     }
 
@@ -159,12 +175,58 @@ pub trait PackageSystem: Send + Sync {
     /// (Homebrew's, the home folder, `PATH`).
     fn find_admin_program(&self, name: &str) -> Option<PathBuf>;
     /// Runs a program (never through a shell); `admin` asks for
-    /// administrator rights first.
-    fn run(&self, program: &Path, args: &[String], admin: bool) -> io::Result<Output>;
+    /// administrator rights first. `env` sets variables for this one run;
+    /// a program run through the administrator prompt cannot be given any.
+    fn run(
+        &self,
+        program: &Path,
+        args: &[String],
+        admin: bool,
+        env: &[(&str, &str)],
+    ) -> io::Result<Output>;
     /// An application bundle's `Info.plist`.
     fn bundle_info(&self, bundle: &Path) -> Option<BundleInfo>;
     /// Moves files and folders to the Trash, one result each.
     fn trash(&self, paths: &[PathBuf]) -> Vec<io::Result<()>>;
+    /// The full paths of the programs running from inside `folder` (an app
+    /// bundle, see [`within`]); nothing where that cannot be told.
+    fn running_from(&self, _folder: &Path) -> Vec<String> {
+        Vec::new()
+    }
+    /// What a launchd job's plist says, when it can be read.
+    fn launchd_job(&self, _plist: &Path) -> Option<LaunchdJob> {
+        None
+    }
+    /// This account's user id: launchd's `gui/<uid>` session.
+    fn uid(&self) -> Option<u32> {
+        None
+    }
+    /// Shows a file or folder in the file manager: Finder selects it on
+    /// macOS; on Linux the folder holding it opens.
+    fn reveal(&self, path: &Path) -> io::Result<()>;
+    /// The program sudo asks for an administrator's password through
+    /// (`SUDO_ASKPASS`) when Homebrew needs one on macOS, written afresh.
+    fn askpass(&self) -> io::Result<PathBuf> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "there is no password box for Homebrew here",
+        ))
+    }
+}
+
+/// Whether `path` lies inside `folder`: a whole-name prefix ending in `/`,
+/// so `Foo.app` never holds `Foo.app2/…`. Letter case is ignored, as on
+/// macOS's own disks.
+pub fn within(path: &str, folder: &Path) -> bool {
+    let folder = folder.to_string_lossy();
+    let folder = folder.trim_end_matches('/');
+    let Some((head, rest)) = path.split_at_checked(folder.len()) else {
+        return false;
+    };
+    !folder.is_empty()
+        && head.eq_ignore_ascii_case(folder)
+        && rest.len() > 1
+        && rest.starts_with('/')
 }
 
 /// Runs a read-only listing; its output, or nothing when the program is
@@ -173,7 +235,7 @@ pub(crate) fn query(system: &dyn PackageSystem, program: &str, args: &[&str]) ->
     let program = system.find_program(program)?;
     let args: Vec<String> = args.iter().map(ToString::to_string).collect();
     system
-        .run(&program, &args, false)
+        .run(&program, &args, false, &[])
         .ok()
         .filter(|output| output.success)
         .map(|output| output.stdout)
@@ -287,6 +349,22 @@ mod tests {
         for (output, expected) in cases {
             assert_eq!(output.last_words(), expected, "{output:?}");
         }
+    }
+
+    #[test]
+    fn a_path_is_within_a_bundle_only_below_its_whole_name() {
+        let tea = Path::new("/Applications/Tea.app");
+        assert!(within("/Applications/Tea.app/Contents/MacOS/tea", tea));
+        assert!(within("/applications/TEA.APP/Contents/MacOS/tea", tea));
+        assert!(within(
+            "/Applications/Tea.app/x",
+            Path::new("/Applications/Tea.app/")
+        ));
+        assert!(!within("/Applications/Tea.app2/Contents/MacOS/tea", tea));
+        assert!(!within("/Applications/Tea.app", tea));
+        assert!(!within("/Applications/Tea.app/", tea));
+        assert!(!within("/Applications/Te", tea));
+        assert!(!within("/Applications/Tea.app/x", Path::new("/")));
     }
 
     #[test]

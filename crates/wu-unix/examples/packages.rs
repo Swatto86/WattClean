@@ -54,7 +54,10 @@ fn main() {
         let size = leftover
             .size
             .map_or_else(|| "size unknown".to_string(), |s| format!("{s} bytes"));
-        println!("leftover: {} ({size})", leftover.path.display());
+        let job = leftover
+            .job
+            .map_or_else(String::new, |label| format!(", background job {label}"));
+        println!("leftover: {} ({size}{job})", leftover.path.display());
     }
 }
 

@@ -45,7 +45,8 @@ the fake machine is just a temp folder plus a JSON registry.
 There is no uninstall registry outside Windows, so the registry engine above
 is Windows-only and Linux and macOS have a package engine instead. The app
 layer is `src-tauri/src/packages.rs` (`un_pkg_list`, `un_pkg_uninstall`,
-`un_pkg_trash_leftovers`) and the page `ui/src/packages/` (ids `un-pkg-`).
+`un_pkg_trash_leftovers`, `un_pkg_reveal`) and the page `ui/src/packages/`
+(ids `un-pkg-`).
 
 | Module | Responsibility |
 | --- | --- |
@@ -53,10 +54,12 @@ layer is `src-tauri/src/packages.rs` (`un_pkg_list`, `un_pkg_uninstall`,
 | `packages::linux` | dpkg, rpm, pacman, Flatpak, Snap, Homebrew, AppImages in `~/Applications` and the like |
 | `packages::launchers` | A system package is an application when it installed a visible launcher in `/usr/share/applications`, whose name it takes; owners from `dpkg -S`, `pacman -Qo` (both name the file) and `rpm -qf` (lines taken in order only when there is one per file, else asked file by file) |
 | `packages::macos` | App bundles in `/Applications` and `~/Applications` (Apple's own left out), Homebrew formulae and casks (a cask takes its app's place, bundle id, version and size, matched by the app it installs or its uninstall step deletes; fonts and plugins are not applications; a formula's size from the Cellar beside the `brew` found), MacPorts |
-| `packages::remove` | The removal for each manager: `apt-get remove`/`purge` (first simulated with `apt-get -s`), `dnf`/`zypper` (first tested with `rpm -e --test --allmatches`)/`rpm`, `pacman -R`/`-Rns`, `flatpak uninstall` (`--delete-data`), `snap remove` (`--purge`), `brew uninstall` (`--cask --zap`: Homebrew's whole zap list, which may remove files other apps share, outside the home folder too, as the box says), `port uninstall`; an AppImage or bundle goes to the Trash |
+| `packages::remove` | The removal for each manager: `apt-get remove`/`purge`, `dnf`/`zypper`/`rpm`, `pacman -R`/`-Rns`, `flatpak uninstall` (`--delete-data`), `snap remove` (`--purge`), `brew uninstall` (`--cask --zap`: Homebrew's whole zap list, which may remove files other apps share, outside the home folder too, as the box says), `port uninstall`; an AppImage or bundle goes to the Trash. On macOS: refused while the app (a bundle, or a cask's app) is open; a formula's service stopped first; Homebrew run with `SUDO_ASKPASS`; the `launchctl bootout` that stops a leftover's job (`stop_job`) |
+| `packages::others` | What else a removal would take: APT simulated first (`apt-get -s`), dnf and zypper tested with `rpm -e --test --allmatches` |
+| `packages::launchd` | A launchd plist's label, program and `AssociatedBundleIdentifiers`; the account's LaunchAgents a removed program leaves, and a formula's root service plist |
 | `packages::leftovers` | Folders and files named exactly after the program in `~/.config`, `~/.local/share`, `~/.cache`, `~/.local/state`, `~/.var/app`, `~/snap`, home dot-folders, launchers and autostart entries, and the `~/Library` folders on macOS (by bundle id and name, `<TeamID>.<bundle id>` and `group.<bundle id>` by the bundle id only, and `<bundle id>.<suffix>` entries such as updaters unless a longer installed id owns them); Apple's own `com.apple.…` entries never, unless the app is Apple's |
 | `packages::extra` | macOS leftovers names cannot reach: a cask's own zap list (only `~/Library/…`, at least two folders down; left out: entries another installed cask shares, entries named after another installed program's name or bundle id, and a vendor's entry straight under a Library folder such as `Application Support/Microsoft` while another app of that vendor stays, the vendor read from the bundle id or, once the app is gone, from the identifiers its zap list names) and the folder a lone app came in (`/Applications/World of Warcraft` once no app is left anywhere in it, four folders down, links not followed) |
-| `wu-unix` | The real machine: programs found and run through `wcc-unix::process` (polkit's `pkexec` or macOS's prompt for administrator rights; a removal run as administrator takes its program only from root's own folders, as the disk cleaner's tasks do), `Info.plist` through `plutil`, the freedesktop.org Trash on Linux and Finder's on macOS |
+| `wu-unix` | The real machine: programs found and run through `wcc-unix::process` (polkit's `pkexec` or macOS's prompt for administrator rights; a removal run as administrator takes its program only from root's own folders, as the disk cleaner's tasks do), `Info.plist` and launchd plists through `plutil`, running programs from `ps -axo comm=` (full paths on macOS), the askpass script (`askpass.rs`), `open -R` or `xdg-open` to show an item, the freedesktop.org Trash on Linux and Finder's on macOS |
 
 Decisions in force:
 
@@ -91,6 +94,50 @@ Decisions in force:
   A leftover whose size cannot
   be read says "size unknown". None is pre-ticked, and the chosen go to the Trash: Linux and macOS undo
   through the Trash, so no backup of WattClean's own is kept.
+- **An open app is not removed** (macOS): moved while it runs, an app runs
+  on from the Trash and writes its folders again after they were offered.
+  A bundle (or a cask's app) is refused, "<name> is open: quit it, then
+  uninstall.", while `ps` shows a program whose path lies inside it (a
+  whole-name prefix ending in `/`, letter case ignored). If `ps` cannot
+  run, nothing is refused. On Linux nothing is checked (`ps` prints names).
+- **A formula's background service is stopped first** (macOS), since
+  `brew uninstall` leaves it running from a deleted folder, started again
+  at every login or boot. The account's own (`~/Library/LaunchAgents/
+  homebrew.mxcl.<name>.plist`): `brew services stop <name>`, which deletes
+  its plist. Root's (`/Library/LaunchDaemons/…`): `launchctl bootout
+  system/homebrew.mxcl.<name>` as administrator (Homebrew will not run as
+  root from an app), then its plist is offered as a leftover by its exact
+  name (Finder asks for a password to move it). Only a job launchd has
+  loaded (`launchctl print`) is booted out; when both plists exist,
+  Homebrew may refuse to stop the account's own (it does when that job is
+  not loaded), so it is left to the leftovers. A step that fails stops the
+  removal.
+- **Homebrew asks for passwords through WattClean** (macOS). Homebrew runs
+  a cask's `uninstall delete`/`pkgutil` steps through sudo, which has no
+  terminal in an app (and under `tauri dev` would wait on the terminal), so
+  Homebrew's removals run with `SUDO_ASKPASS` naming a fixed script
+  written afresh (mode 0700) as `<data>/uninstall/askpass.sh`: macOS's
+  dialog with a hidden answer, titled WattClean, generic text (no name
+  from outside goes into it), giving up after two minutes; cancelling or
+  giving up exits non-zero, so sudo gives up. WattClean never sees the
+  password.
+- **Background jobs are leftovers** (macOS, the account's
+  `~/Library/LaunchAgents` only): a plist whose `AssociatedBundleIdentifiers`
+  holds the app's bundle id, whose program lies inside the removed bundle,
+  or whose file name or label is one of the program's own names (or
+  `homebrew.mxcl.<formula>`), unless the other name is another program's.
+  Read with `plutil`, as is a LaunchAgents plist a cask's zap list names,
+  so its job is stopped too; WattClean's own (`co.swatto.wattclean…`)
+  never.
+  Before a ticked one moves, a loaded job is stopped with `launchctl bootout
+  gui/<uid> <plist>` (no administrator rights; the label must look like a
+  name); one that cannot be stopped is not moved and is reported. Putting
+  a plist back from the Trash takes effect at the next login. System-wide
+  jobs and helpers in `/Library` are not looked for yet.
+- **A leftover can be shown before deciding**: "Show" beside each one
+  (`un_pkg_reveal`, by number) runs `open -R` (Finder selects it) or opens
+  the folder holding it with `xdg-open` (left running, reaped when it
+  ends).
 - **Apps are what people start**: packages with a visible launcher, Flatpak
   and Snap applications (not runtimes or base snaps), AppImages, bundles,
   casks, formulae and ports asked for by name. "Show every package" lists

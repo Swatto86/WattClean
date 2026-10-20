@@ -3,6 +3,8 @@
 //! reads the registry there (`wu-windows`).
 
 #[cfg(unix)]
+mod askpass;
+#[cfg(unix)]
 mod machine;
 #[cfg(unix)]
 mod trash;

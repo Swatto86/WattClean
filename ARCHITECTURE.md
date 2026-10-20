@@ -50,7 +50,7 @@ the app by `src-tauri/installer-hooks.nsh`.
 | `disk/` | WattCompClean's commands: catalog, preview/clean, shred, wipe, community cleaners |
 | `registry/` | WattRegClean's commands: scan/search/clean, backups, tuner, watcher, schedules, start with Windows, native right-click menus (`menu.rs`) |
 | `uninstall/` | WattUninstaller's commands (Windows): programs, uninstall sessions, leftovers, backups, history, traced installs |
-| `packages.rs` | The uninstaller on Linux and macOS (`un_pkg_*`): list, remove with the package manager, leftovers to the Trash |
+| `packages.rs` | The uninstaller on Linux and macOS (`un_pkg_*`): list, remove with the package manager (after the steps that stop a background service), leftovers to the Trash (a loaded job stopped first), a leftover shown in the file manager |
 | `error.rs` | The one error shape the page receives |
 
 Every command name carries its module's prefix, so the three command sets

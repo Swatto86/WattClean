@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use super::{Manager, Package, PackageSystem, extra, tree_size};
+use super::{Manager, Package, PackageSystem, extra, launchd, tree_size};
 
 /// A file or folder a removed program left behind.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -26,6 +26,9 @@ pub struct Leftover {
     /// `None` when macOS will not let WattClean look inside.
     pub size: Option<u64>,
     pub folder: bool,
+    /// The label of the background job this plist starts in the account's
+    /// session: stopped before the plist goes to the Trash.
+    pub job: Option<String>,
 }
 
 /// Folder names shared by many programs or by the desktop itself.
@@ -151,7 +154,6 @@ const MACOS: &[(&str, &[&str])] = &[
     ("Library/HTTPStorages", &["{}", "{}.binarycookies"]),
     ("Library/WebKit", &["{}"]),
     ("Library/Cookies", &["{}.binarycookies"]),
-    ("Library/LaunchAgents", &["{}.plist"]),
     ("Library/Application Scripts", &["{}", "*.{}", "group.{}"]),
     ("", &[".{}"]),
 ];
@@ -288,11 +290,26 @@ pub fn find_leftovers(
             }
         }
     }
+    out.extend(launchd::leftovers(
+        system,
+        &home,
+        removed,
+        &mine,
+        &theirs,
+        bundle.as_deref(),
+        &other_bundles,
+    ));
+    let mut out = tidy(out, bundle.as_deref());
+    launchd::label_agents(system, &home, &mut out);
+    out
+}
+
+/// Leaves out Apple's own entries unless the app (`bundle`) is Apple's,
+/// sorts, and keeps each path once.
+fn tidy(mut out: Vec<Leftover>, bundle: Option<&str>) -> Vec<Leftover> {
     // Apple's entries are its own apps' (Notes' group, News' scripts), and
     // Apple's apps are never listed, so no name check can hold them back.
-    let apple = bundle
-        .as_deref()
-        .is_some_and(|id| id.starts_with("com.apple."));
+    let apple = bundle.is_some_and(|id| id.starts_with("com.apple."));
     out.retain(|leftover| {
         apple
             || !leftover
@@ -308,7 +325,7 @@ pub fn find_leftovers(
 /// `entry` is `<id>.<something>`, and no other installed app has a longer
 /// identifier that it belongs to (Chrome Canary's `com.google.chrome.canary`
 /// when Chrome is removed).
-fn owns(id: &str, entry: &str, other_ids: &[String]) -> bool {
+pub(super) fn owns(id: &str, entry: &str, other_ids: &[String]) -> bool {
     entry.len() > id.len() + 1
         && entry.starts_with(id)
         && entry.as_bytes().get(id.len()) == Some(&b'.')
@@ -324,6 +341,7 @@ pub(super) fn leftover(path: &Path) -> Leftover {
         path: path.to_path_buf(),
         size: readable.then(|| tree_size(path)),
         folder,
+        job: None,
     }
 }
 

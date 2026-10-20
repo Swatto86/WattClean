@@ -164,7 +164,7 @@ fn start(app: &mut tauri::App, started_hidden: bool) -> Result<(), Box<dyn std::
     start_windows_modules(app, &root, fake)?;
     #[cfg(not(windows))]
     app.manage(Arc::new(packages::AppState::new(Arc::new(
-        wu_unix::UnixPackages::new(),
+        wu_unix::UnixPackages::new().with_data(root.join("uninstall")),
     ))));
 
     app.manage(Arc::new(Shell::new(

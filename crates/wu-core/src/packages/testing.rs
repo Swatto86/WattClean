@@ -7,7 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use super::{BundleInfo, Output, Package, PackageSystem, find_leftovers};
+use super::{BundleInfo, LaunchdJob, Output, Package, PackageSystem, find_leftovers, within};
 
 pub struct Machine {
     dir: tempfile::TempDir,
@@ -24,6 +24,12 @@ pub struct Machine {
     pub untrusted: BTreeSet<String>,
     /// Where a program is found, when not in `/usr/bin`.
     pub places: BTreeMap<String, PathBuf>,
+    /// The full paths of the programs running.
+    pub running: Vec<String>,
+    /// What each launchd plist says.
+    pub jobs: BTreeMap<PathBuf, LaunchdJob>,
+    /// Every path shown in the file manager.
+    pub revealed: Mutex<Vec<PathBuf>>,
 }
 
 impl Machine {
@@ -44,6 +50,9 @@ impl Machine {
             bundles: BTreeMap::new(),
             untrusted: BTreeSet::new(),
             places: BTreeMap::new(),
+            running: Vec::new(),
+            jobs: BTreeMap::new(),
+            revealed: Mutex::new(Vec::new()),
         }
     }
 
@@ -109,7 +118,13 @@ impl PackageSystem for Machine {
             .filter(|_| !self.untrusted.contains(name))
     }
 
-    fn run(&self, program: &Path, args: &[String], admin: bool) -> io::Result<Output> {
+    fn run(
+        &self,
+        program: &Path,
+        args: &[String],
+        admin: bool,
+        env: &[(&str, &str)],
+    ) -> io::Result<Output> {
         let name = program.file_name().unwrap().to_string_lossy().to_string();
         let stdout = self
             .prints
@@ -124,11 +139,14 @@ impl PackageSystem for Machine {
             command.push_str(arg);
         }
         let reply = self.replies.lock().unwrap().get(&command).cloned();
-        let line = if admin {
+        let mut line = if admin {
             format!("admin {command}")
         } else {
             command
         };
+        for (name, value) in env.iter().rev() {
+            line = format!("{name}={value} {line}");
+        }
         self.ran.lock().unwrap().push(line);
         Ok(reply.unwrap_or(Output {
             success: true,
@@ -153,6 +171,31 @@ impl PackageSystem for Machine {
                 std::fs::rename(path, bin.join(name))
             })
             .collect()
+    }
+
+    fn running_from(&self, folder: &Path) -> Vec<String> {
+        self.running
+            .iter()
+            .filter(|path| within(path, folder))
+            .cloned()
+            .collect()
+    }
+
+    fn launchd_job(&self, plist: &Path) -> Option<LaunchdJob> {
+        self.jobs.get(plist).cloned()
+    }
+
+    fn uid(&self) -> Option<u32> {
+        Some(501)
+    }
+
+    fn reveal(&self, path: &Path) -> io::Result<()> {
+        self.revealed.lock().unwrap().push(path.to_path_buf());
+        Ok(())
+    }
+
+    fn askpass(&self) -> io::Result<PathBuf> {
+        Ok(self.dir.path().join("askpass"))
     }
 }
 

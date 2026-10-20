@@ -44,6 +44,7 @@ pub fn list(system: &dyn PackageSystem) -> (Vec<Package>, Vec<String>) {
                     cask.version.clone_from(&app.version);
                 }
                 cask.size = app.size;
+                cask.app_path = Some(PathBuf::from(&app.id));
                 cask.known_as.push(app.name.clone());
                 if let Some(stem) = Path::new(&app.id).file_stem() {
                     cask.known_as.push(stem.to_string_lossy().into_owned());
