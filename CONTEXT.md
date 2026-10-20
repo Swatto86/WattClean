@@ -112,7 +112,20 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   a chosen path (Shred, Custom paths) is taken literally, as names may hold
   `%`, `*`, `?` and `\`; nothing is emptied or edited through a link; the
   temporary-folder option keeps hidden and session entries and anything
-  touched in the last two days.
+  touched in the last two days. `TMPDIR` and `XDG_CACHE_HOME`,
+  `XDG_DATA_HOME` and `XDG_CONFIG_HOME` are not trusted when one is, or
+  holds, `/`, the home folder, a user folder, a protected home folder or a
+  system folder other than a temporary one: it gives way to its usual
+  folder. A Linux drive's Trash is used only as the freedesktop.org
+  specification says (`.Trash-<uid>` or `.Trash/<uid>` in a sticky
+  `.Trash`, real folders of this account, real `files` and `info`), so no
+  one can point it at someone's files. The clipboard is judged by the
+  kinds of data it lists (`clipboard info` on macOS, X11 targets,
+  `wl-paste --list-types`), never by reading it; with only xsel, which
+  cannot list them, the clear is always offered. Linux free-space wipes
+  skip ZFS (a compressed dataset stores the zeros as nothing, so the wipe
+  would never fill it) and read-only mounts, and write in a folder on any
+  mount of the drive's device (Btrfs subvolumes).
 - **The uninstaller on Linux and macOS is a package engine**
   (`wu-core/src/packages`, `wu-unix`), not the registry one: it lists what
   apt/dpkg, dnf/zypper/rpm, pacman, Flatpak, Snap, Homebrew (formulae and
@@ -145,7 +158,9 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   macOS will not let WattClean read (Safari, Mail, other apps' containers)
   is reported with a Full Disk Access hint; WattClean never asks for that
   access itself. Free-space wipes are offered only for local, visible,
-  writable volumes. Finder counts and empties the Trash and moves removed
+  writable volumes. The Trash is counted from every local volume's Trash
+  folder (`~/.Trash`, `.Trashes/<uid>`), and from Finder when one cannot
+  be read; Finder empties it and moves removed
   apps there, which macOS asks the user to allow once
   (`NSAppleEventsUsageDescription` in `src-tauri/Info.plist`). The
   menu-bar icon is a template image, and clicking the Dock icon brings the

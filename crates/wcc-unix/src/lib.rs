@@ -5,6 +5,8 @@
 //! also used by the uninstaller's `wu-unix`.
 
 #[cfg(unix)]
+mod clipboard;
+#[cfg(unix)]
 mod ctrl_c;
 #[cfg(unix)]
 mod drives;

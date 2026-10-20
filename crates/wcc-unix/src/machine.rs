@@ -5,16 +5,12 @@ use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Duration;
 
 use wcc_core::system::{Drive, ProgramOutput, Registry, System};
 
 use crate::folders::Folders;
 use crate::protected::{HOME_FOLDERS, SYSTEM_FOLDERS};
-use crate::{drives, process, sys, trash};
-
-/// How long a clipboard or process query may take.
-const QUICK: Duration = Duration::from_secs(3);
+use crate::{clipboard, drives, process, sys, trash};
 
 pub struct UnixSystem {
     folders: Folders,
@@ -111,7 +107,8 @@ fn running_programs() -> HashSet<String> {
 
 #[cfg(target_os = "macos")]
 fn running_programs() -> HashSet<String> {
-    process::quick(Path::new("/bin/ps"), &["-A", "-c", "-o", "comm="], QUICK)
+    let limit = std::time::Duration::from_secs(3);
+    process::quick(Path::new("/bin/ps"), &["-A", "-c", "-o", "comm="], limit)
         .unwrap_or_default()
         .lines()
         .map(|line| line.trim().to_lowercase())
@@ -137,35 +134,28 @@ impl System for UnixSystem {
         trash::count(&self.trash_folders())
     }
 
-    /// The Trash folder itself when macOS lets this program read it (Full
-    /// Disk Access), else Finder's count, without sizes.
+    /// The Trash folders of every local volume (`~/.Trash`, and
+    /// `.Trashes/<uid>` on the others), Finder asked as well when one could
+    /// not be read (`trash::mac_total`).
     #[cfg(target_os = "macos")]
     fn recycle_bin(&self) -> io::Result<(u64, u64)> {
-        let folder = self
+        let home_trash = self
             .folders
             .path("TRASH")
             .ok_or_else(|| io::Error::other("no home folder"))?;
-        match std::fs::read_dir(&folder) {
-            Ok(entries) => {
-                let mut items = 0;
-                let mut bytes = 0;
-                for entry in entries.flatten() {
-                    if entry.file_name() == ".DS_Store" {
-                        continue;
-                    }
-                    items += 1;
-                    bytes += wcc_core::command::measure(self, &[&entry.path().to_string_lossy()]);
-                }
-                Ok((items, bytes))
-            }
-            Err(_) => {
-                let count = trash::finder("tell application \"Finder\" to count items of trash")?;
-                let items = count
-                    .parse()
-                    .map_err(|_| io::Error::other(format!("Finder said {count:?}")))?;
-                Ok((items, 0))
-            }
-        }
+        let uid = sys::uid().to_string();
+        let mut folders = vec![home_trash];
+        folders.extend(
+            drives::drives()
+                .iter()
+                .map(|drive| Path::new(&drive.root).join(".Trashes").join(&uid)),
+        );
+        trash::mac_total(trash::mac_count(&folders), || {
+            let count = trash::finder("tell application \"Finder\" to count items of trash")?;
+            count
+                .parse()
+                .map_err(|_| io::Error::other(format!("Finder said {count:?}")))
+        })
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -179,19 +169,7 @@ impl System for UnixSystem {
     }
 
     fn clipboard_has_data(&self) -> bool {
-        let read = |name: &str, args: &[&str]| {
-            self.tool(name)
-                .and_then(|tool| process::quick(&tool, args, QUICK))
-                .is_some_and(|text| !text.trim().is_empty())
-        };
-        if cfg!(target_os = "macos") {
-            return read("pbpaste", &[]);
-        }
-        if std::env::var_os("WAYLAND_DISPLAY").is_some() && self.tool("wl-paste").is_some() {
-            return read("wl-paste", &["--list-types"]);
-        }
-        read("xclip", &["-selection", "clipboard", "-o"])
-            || read("xsel", &["--clipboard", "--output"])
+        clipboard::has_data(&|name| self.tool(name))
     }
 
     fn clear_clipboard(&self) -> io::Result<()> {

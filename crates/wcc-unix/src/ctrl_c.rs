@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 static STOP: AtomicBool = AtomicBool::new(false);
 
 /// From now on the first Ctrl+C (or a polite kill) sets the returned flag;
-/// a second one ends the program at once.
+/// a second one ends the program at once, with code 130.
 pub fn stop_on_ctrl_c() -> io::Result<&'static AtomicBool> {
     crate::sys::on_interrupt(on_signal)?;
     Ok(&STOP)
@@ -16,6 +16,6 @@ pub fn stop_on_ctrl_c() -> io::Result<&'static AtomicBool> {
 
 extern "C" fn on_signal(_signal: libc::c_int) {
     if STOP.swap(true, Ordering::SeqCst) {
-        std::process::exit(130);
+        crate::sys::exit_now(130);
     }
 }

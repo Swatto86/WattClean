@@ -4,7 +4,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use wcc_core::paths;
 use wcc_core::system::Platform;
+
+use crate::protected::{HOME_FOLDERS, SYSTEM_FOLDERS};
 
 /// Every variable's value on this machine, read once.
 #[derive(Debug, Clone, Default)]
@@ -15,40 +18,63 @@ pub struct Folders {
 impl Folders {
     /// The folders of the account this program runs as.
     pub fn of_this_account() -> Self {
-        Self::from_env(Platform::current(), &|name| {
-            let value = std::env::var(name).ok();
-            #[cfg(target_os = "macos")]
-            if name == "TMPDIR" && !value.as_deref().is_some_and(|v| v.trim().starts_with('/')) {
-                return crate::sys::user_temp_dir();
-            }
-            value
-        })
+        Self::from_env(Platform::current(), &|name| std::env::var(name).ok())
     }
 
     /// The folders from an environment (`env`), so tests need no real one.
     /// Without `HOME` only the temporary folder is known.
+    ///
+    /// The temporary folder is emptied of anything two days old and the
+    /// XDG cache folder of anything a week old, so `TMPDIR` and the XDG
+    /// folders are not trusted when one of them is, or holds, a folder of
+    /// the person's (home, Documents…, `.ssh`, `Library`…) or of the
+    /// system's: each such value gives way to its usual folder.
     pub fn from_env(platform: Platform, env: &dyn Fn(&str) -> Option<String>) -> Self {
         let set = |name: &str| {
             env(name)
                 .map(|value| value.trim().trim_end_matches('/').to_string())
                 .filter(|value| value.starts_with('/'))
         };
+        let mut kept: Vec<String> = SYSTEM_FOLDERS
+            .iter()
+            .filter(|folder| !TEMPORARY_FOLDERS.contains(folder))
+            .map(ToString::to_string)
+            .collect();
+        let trusted =
+            |name: &str, kept: &[String]| set(name).filter(|folder| holds_none_of(folder, kept));
         let mut values = BTreeMap::new();
-        let temp = set("TMPDIR").unwrap_or_else(|| "/tmp".to_string());
-        for name in ["TEMP", "TMP", "TMPDIR"] {
-            values.insert(name.to_string(), temp.clone());
-        }
         let Some(home) = set("HOME").filter(|home| home != "/") else {
+            let temp = trusted("TMPDIR", &kept).unwrap_or_else(|| default_temp(platform));
+            for name in ["TEMP", "TMP", "TMPDIR"] {
+                values.insert(name.to_string(), temp.clone());
+            }
             return Self { values };
         };
         let under = |rel: &str| format!("{home}/{rel}");
+        kept.push(home.clone());
+        kept.extend(HOME_FOLDERS.iter().map(|rel| under(rel)));
+        // Linux reads where the person's folders are from the configuration
+        // folder, which must hold none of them either.
+        let mut config = trusted("XDG_CONFIG_HOME", &kept).unwrap_or_else(|| under(".config"));
+        let mut people = user_folders(platform, &config, &home);
+        if !holds_none_of(
+            &config,
+            &people.iter().map(|(_, f)| f.clone()).collect::<Vec<_>>(),
+        ) {
+            config = under(".config");
+            people = user_folders(platform, &config, &home);
+        }
+        kept.extend(people.iter().map(|(_, folder)| folder.clone()));
+        let temp = trusted("TMPDIR", &kept).unwrap_or_else(|| default_temp(platform));
+        let cache = trusted("XDG_CACHE_HOME", &kept).unwrap_or_else(|| under(".cache"));
+        let data = trusted("XDG_DATA_HOME", &kept).unwrap_or_else(|| under(".local/share"));
         let mut put = |name: &str, value: String| {
             values.insert(name.to_string(), value);
         };
+        for name in ["TEMP", "TMP", "TMPDIR"] {
+            put(name, temp.clone());
+        }
         put("HOME", home.clone());
-        let config = set("XDG_CONFIG_HOME").unwrap_or_else(|| under(".config"));
-        let cache = set("XDG_CACHE_HOME").unwrap_or_else(|| under(".cache"));
-        let data = set("XDG_DATA_HOME").unwrap_or_else(|| under(".local/share"));
         put(
             "XDG_STATE_HOME",
             set("XDG_STATE_HOME").unwrap_or_else(|| under(".local/state")),
@@ -72,26 +98,17 @@ impl Folders {
                 "HOMEBREW_CACHE",
                 set("HOMEBREW_CACHE").unwrap_or_else(|| under("Library/Caches/Homebrew")),
             );
-            for (name, folder, _) in USER_FOLDERS {
-                put(
-                    name,
-                    under(if name == "VIDEOS" { "Movies" } else { folder }),
-                );
-            }
         } else {
-            put("CONFIG", config.clone());
+            put("CONFIG", config);
             put("CACHE", cache.clone());
             put("TRASH", format!("{data}/Trash"));
             put(
                 "HOMEBREW_CACHE",
                 set("HOMEBREW_CACHE").unwrap_or_else(|| format!("{cache}/Homebrew")),
             );
-            let dirs = std::fs::read_to_string(Path::new(&config).join("user-dirs.dirs"))
-                .unwrap_or_default();
-            for (name, folder, key) in USER_FOLDERS {
-                let value = user_dir(&dirs, key, &home).unwrap_or_else(|| under(folder));
-                put(name, value);
-            }
+        }
+        for (name, folder) in people {
+            put(name, folder);
         }
         Self { values }
     }
@@ -118,6 +135,55 @@ const USER_FOLDERS: [(&str, &str, &str); 6] = [
     ("PICTURES", "Pictures", "XDG_PICTURES_DIR"),
     ("VIDEOS", "Videos", "XDG_VIDEOS_DIR"),
 ];
+
+/// System folders a temporary folder may be: the system's own.
+const TEMPORARY_FOLDERS: [&str; 3] = ["/tmp", "/var/tmp", "/private/tmp"];
+
+/// Each person's own folder by variable: in the home folder on macOS (with
+/// Movies for videos), where Linux's `user-dirs.dirs` in `config` puts it.
+fn user_folders(platform: Platform, config: &str, home: &str) -> Vec<(&'static str, String)> {
+    let dirs = if platform == Platform::Macos {
+        String::new()
+    } else {
+        std::fs::read_to_string(Path::new(config).join("user-dirs.dirs")).unwrap_or_default()
+    };
+    USER_FOLDERS
+        .iter()
+        .map(|(name, folder, key)| {
+            let folder = if platform == Platform::Macos && *name == "VIDEOS" {
+                "Movies"
+            } else {
+                folder
+            };
+            let value = user_dir(&dirs, key, home).unwrap_or_else(|| format!("{home}/{folder}"));
+            (*name, value)
+        })
+        .collect()
+}
+
+/// Whether `folder` is none of `kept` and holds none of them (`/` holds
+/// them all), compared as the guard compares paths (`paths::key`).
+fn holds_none_of(folder: &str, kept: &[String]) -> bool {
+    let folder = paths::key(Path::new(folder));
+    !kept
+        .iter()
+        .any(|kept| paths::is_within(&paths::key(Path::new(kept)), &folder))
+}
+
+/// The temporary folder when `TMPDIR` is unset or not trusted: on macOS the
+/// account's own (`/var/folders/…/T`, which macOS knows even when ssh, cron
+/// or launchd set no `TMPDIR`), else `/tmp`.
+fn default_temp(platform: Platform) -> String {
+    #[cfg(target_os = "macos")]
+    if platform == Platform::Macos
+        && let Some(dir) = crate::sys::user_temp_dir()
+    {
+        return dir;
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = platform;
+    "/tmp".to_string()
+}
 
 /// The first folder of a `:`-separated list (`GOPATH` may hold several).
 fn first_of_list(list: &str) -> String {
@@ -195,6 +261,97 @@ mod tests {
         let folders = Folders::from_env(Platform::Linux, &env(&[("HOME", "/")]));
         assert_eq!(folders.get("HOME"), None);
         assert_eq!(folders.get("CACHE"), None);
+        assert_eq!(folders.get("TEMP"), Some("/tmp"));
+    }
+
+    #[test]
+    fn a_temporary_folder_that_holds_a_persons_files_is_not_trusted() {
+        for tmpdir in [
+            "/home/t",
+            "/home/t/Documents",
+            "/home/t/.ssh",
+            "/home",
+            "/usr",
+            "/HOME/T/",
+            "/home/t/..",
+        ] {
+            let folders = Folders::from_env(Platform::Linux, &|name| match name {
+                "HOME" => Some("/home/t".to_string()),
+                "TMPDIR" => Some(tmpdir.to_string()),
+                _ => None,
+            });
+            for name in ["TEMP", "TMP", "TMPDIR"] {
+                assert_eq!(folders.get(name), Some("/tmp"), "TMPDIR={tmpdir}");
+            }
+        }
+        for tmpdir in ["/tmp", "/var/tmp", "/home/t/tmp", "/run/user/1000"] {
+            let folders = Folders::from_env(Platform::Linux, &|name| match name {
+                "HOME" => Some("/home/t".to_string()),
+                "TMPDIR" => Some(tmpdir.to_string()),
+                _ => None,
+            });
+            assert_eq!(folders.get("TEMP"), Some(tmpdir));
+        }
+    }
+
+    #[test]
+    fn macos_never_takes_the_home_folder_or_its_documents_for_temporary() {
+        for tmpdir in [
+            "/Users/t",
+            "/Users/t/Documents",
+            "/Applications",
+            "/private/var",
+        ] {
+            let folders = Folders::from_env(Platform::Macos, &|name| match name {
+                "HOME" => Some("/Users/t".to_string()),
+                "TMPDIR" => Some(tmpdir.to_string()),
+                _ => None,
+            });
+            let temp = folders.get("TEMP").unwrap();
+            assert!(temp.starts_with('/'), "{temp}");
+            assert!(
+                temp != "/Users/t" && !temp.starts_with("/Users/t/") && temp != tmpdir,
+                "TMPDIR={tmpdir} gave {temp}"
+            );
+        }
+    }
+
+    #[test]
+    fn xdg_folders_that_hold_a_persons_files_fall_back_to_their_defaults() {
+        let folders = Folders::from_env(
+            Platform::Linux,
+            &env(&[
+                ("HOME", "/home/t"),
+                ("XDG_CACHE_HOME", "/home/t"),
+                ("XDG_DATA_HOME", "/home/t/Documents"),
+                ("XDG_CONFIG_HOME", "/etc"),
+            ]),
+        );
+        assert_eq!(folders.get("CACHE"), Some("/home/t/.cache"));
+        assert_eq!(folders.get("XDG_CACHE_HOME"), Some("/home/t/.cache"));
+        assert_eq!(folders.get("XDG_DATA_HOME"), Some("/home/t/.local/share"));
+        assert_eq!(folders.get("TRASH"), Some("/home/t/.local/share/Trash"));
+        assert_eq!(folders.get("XDG_CONFIG_HOME"), Some("/home/t/.config"));
+    }
+
+    #[test]
+    fn a_moved_user_folder_is_kept_out_of_temporary_too() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config");
+        std::fs::create_dir(&config).unwrap();
+        std::fs::write(
+            config.join("user-dirs.dirs"),
+            "XDG_DOCUMENTS_DIR=\"/data/docs\"\n",
+        )
+        .unwrap();
+        let config = config.to_string_lossy().into_owned();
+        let folders = Folders::from_env(Platform::Linux, &|name| match name {
+            "HOME" => Some("/home/t".to_string()),
+            "XDG_CONFIG_HOME" => Some(config.clone()),
+            "TMPDIR" => Some("/data".to_string()),
+            _ => None,
+        });
+        assert_eq!(folders.get("DOCUMENTS"), Some("/data/docs"));
         assert_eq!(folders.get("TEMP"), Some("/tmp"));
     }
 

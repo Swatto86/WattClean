@@ -5,8 +5,13 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-/// `ST_RDONLY`: the same bit on Linux and macOS.
+/// `ST_RDONLY` in `statvfs`'s flags.
+#[cfg(not(target_os = "macos"))]
 const ST_RDONLY: u64 = 1;
+
+/// `MNT_RDONLY` in `statfs`'s flags.
+#[cfg(target_os = "macos")]
+const MNT_RDONLY: u32 = 0x0000_0001;
 
 /// Sizes of the file system holding a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,15 +34,15 @@ pub fn is_elevated() -> bool {
 }
 
 /// This account's user id.
-#[cfg(not(target_os = "macos"))]
 pub fn uid() -> u32 {
     // SAFETY: getuid takes no arguments and cannot fail.
     unsafe { libc::getuid() }
 }
 
+#[cfg(not(target_os = "macos"))]
 #[allow(
     clippy::useless_conversion,
-    reason = "statvfs fields are u64 on Linux but u32 on macOS"
+    reason = "statvfs fields are u64 on 64-bit Linux but may be u32 elsewhere"
 )]
 pub fn space(path: &Path) -> io::Result<Space> {
     let c = c_path(path)?;
@@ -48,8 +53,8 @@ pub fn space(path: &Path) -> io::Result<Space> {
     if unsafe { libc::statvfs(c.as_ptr(), &raw mut stat) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    // The field types differ between Linux and macOS (u32 or u64); every
-    // one of them widens to u64 without loss.
+    // The field types differ between targets (u32 or u64); every one of
+    // them widens to u64 without loss.
     let block = u64::from(stat.f_frsize);
     Ok(Space {
         free: u64::from(stat.f_bavail).saturating_mul(block),
@@ -70,18 +75,41 @@ pub struct Mount {
     pub file_system: String,
 }
 
+/// macOS: from `statfs`. Its `statvfs` cuts the block counts to 32 bits,
+/// so a volume over 16 TiB (2^32 blocks of 4 KiB) would show its sizes
+/// modulo 16 TiB.
 #[cfg(target_os = "macos")]
-pub fn mount_info(path: &Path) -> io::Result<Mount> {
-    const MNT_LOCAL: u32 = 0x0000_1000;
-    const MNT_DONTBROWSE: u32 = 0x0010_0000;
+pub fn space(path: &Path) -> io::Result<Space> {
+    statfs(path).map(|stat| space_of(&stat))
+}
+
+#[cfg(target_os = "macos")]
+fn space_of(stat: &libc::statfs) -> Space {
+    let block = u64::from(stat.f_bsize);
+    Space {
+        free: stat.f_bavail.saturating_mul(block),
+        total: stat.f_blocks.saturating_mul(block),
+        read_only: stat.f_flags & MNT_RDONLY != 0,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn statfs(path: &Path) -> io::Result<libc::statfs> {
     let c = c_path(path)?;
-    // SAFETY: statfs is plain data; all-zero bytes are a valid value.
-    let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
+    let mut stat = libc::statfs::default();
     // SAFETY: `c` is a NUL-terminated path and `stat` a writable statfs that
     // outlives the call.
     if unsafe { libc::statfs(c.as_ptr(), &raw mut stat) } != 0 {
         return Err(io::Error::last_os_error());
     }
+    Ok(stat)
+}
+
+#[cfg(target_os = "macos")]
+pub fn mount_info(path: &Path) -> io::Result<Mount> {
+    const MNT_LOCAL: u32 = 0x0000_1000;
+    const MNT_DONTBROWSE: u32 = 0x0010_0000;
+    let stat = statfs(path)?;
     let name: Vec<u8> = stat
         .f_fstypename
         .iter()
@@ -126,13 +154,23 @@ pub fn can_write(path: &Path) -> bool {
 pub fn on_interrupt(handler: extern "C" fn(libc::c_int)) -> io::Result<()> {
     for signal in [libc::SIGINT, libc::SIGTERM] {
         // SAFETY: `handler` is a plain function that lives as long as the
-        // process and only stores to an atomic, which is signal-safe.
+        // process and only swaps an atomic and calls `exit_now`, both
+        // signal-safe.
         let previous = unsafe { libc::signal(signal, handler as libc::sighandler_t) };
         if previous == libc::SIG_ERR {
             return Err(io::Error::last_os_error());
         }
     }
     Ok(())
+}
+
+/// Ends the program at once with `code`, running nothing more (no flushing
+/// of output, no exit handlers): the only safe way out of a signal handler,
+/// which may have interrupted the program in the middle of any of those.
+pub fn exit_now(code: i32) -> ! {
+    // SAFETY: _exit takes a plain integer, never returns, and is
+    // async-signal-safe.
+    unsafe { libc::_exit(code) }
 }
 
 #[cfg(test)]
@@ -144,6 +182,28 @@ mod tests {
         let root = space(Path::new("/")).unwrap();
         assert!(root.total > 0 && root.free <= root.total);
         assert!(space(Path::new("/no/such/folder")).is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_sizes_keep_every_block_of_a_volume_over_16_tib() {
+        let mut stat = libc::statfs {
+            f_bsize: 4096,
+            f_blocks: 5 << 32,
+            f_bavail: (4 << 32) + 7,
+            ..Default::default()
+        };
+        let sizes = space_of(&stat);
+        assert_eq!(sizes.total, 80 << 40, "80 TiB");
+        assert_eq!(sizes.free, (64 << 40) + 7 * 4096);
+        assert!(!sizes.read_only);
+        stat.f_flags = MNT_RDONLY;
+        assert!(space_of(&stat).read_only);
+        // The real call agrees with statfs on the start-up volume (free
+        // space moves meanwhile).
+        let root = space(Path::new("/")).unwrap();
+        let again = space_of(&statfs(Path::new("/")).unwrap());
+        assert_eq!((root.total, root.read_only), (again.total, again.read_only));
     }
 
     #[cfg(target_os = "macos")]

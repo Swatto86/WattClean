@@ -16,6 +16,11 @@ libc = "0.2"
 [dev-dependencies]
 tempfile = { workspace = true }
 
+# Runs itself as a console program, one thread only, to press Ctrl+C at it.
+[[test]]
+name = "ctrl_c"
+harness = false
+
 # sys.rs is the one place that calls the C library directly (the effective
 # user, file system sizes, write access, Ctrl+C), so this crate cannot
 # inherit the workspace's `unsafe_code = "forbid"`. Every unsafe block

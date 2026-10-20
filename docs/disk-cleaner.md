@@ -24,8 +24,9 @@ crates/wcc-core             the engine; no Tauri, no OS API
   │                restart, finding and running maintenance programs)
 crates/wcc-windows          the real Windows PC (`unsafe`: Win32)
 crates/wcc-unix             the real Linux or macOS machine (`unsafe`
-                             only in sys.rs: geteuid, statvfs, access,
-                             and on macOS statfs and confstr)
+                             only in sys.rs: geteuid, getuid, access,
+                             signal, _exit; statvfs on Linux; statfs,
+                             whose sizes are 64-bit, and confstr on macOS)
 wcc-core::fake (feature)    a test machine over a sandbox folder
 crates/wcc-cmd              wattclean-cmd.exe disk, BleachBit-style console
                              options, on wcc-core and wcc-windows (no Tauri)
