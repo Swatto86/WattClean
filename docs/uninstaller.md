@@ -50,9 +50,10 @@ layer is `src-tauri/src/packages.rs` (`un_pkg_list`, `un_pkg_uninstall`,
 | Module | Responsibility |
 | --- | --- |
 | `packages` | `Package`, `Manager`, the `PackageSystem` port; `list` (applications first; applications only unless every package is asked for) |
-| `packages::linux` | dpkg, rpm, pacman, Flatpak, Snap, Homebrew, AppImages in `~/Applications` and the like; a system package is an application when it installed a visible launcher (`dpkg -S`, `rpm -qf`, `pacman -Qqo` on `/usr/share/applications`), whose name it takes |
+| `packages::linux` | dpkg, rpm, pacman, Flatpak, Snap, Homebrew, AppImages in `~/Applications` and the like |
+| `packages::launchers` | A system package is an application when it installed a visible launcher in `/usr/share/applications`, whose name it takes; owners from `dpkg -S`, `pacman -Qo` (both name the file) and `rpm -qf` (lines taken in order only when there is one per file, else asked file by file) |
 | `packages::macos` | App bundles in `/Applications` and `~/Applications` (Apple's own left out), Homebrew formulae and casks (a cask takes its app's place, bundle id, version and size, matched by the app it installs or its uninstall step deletes; fonts and plugins are not applications; a formula's size from the Cellar beside the `brew` found), MacPorts |
-| `packages::remove` | The removal for each manager: `apt-get remove`/`purge`, `dnf`/`zypper`/`rpm`, `pacman -R`/`-Rns`, `flatpak uninstall` (`--delete-data`), `snap remove` (`--purge`), `brew uninstall` (`--cask --zap`: Homebrew's whole zap list, which may remove files other apps share, outside the home folder too, as the box says), `port uninstall`; an AppImage or bundle goes to the Trash |
+| `packages::remove` | The removal for each manager: `apt-get remove`/`purge` (first simulated with `apt-get -s`), `dnf`/`zypper` (first tested with `rpm -e --test --allmatches`)/`rpm`, `pacman -R`/`-Rns`, `flatpak uninstall` (`--delete-data`), `snap remove` (`--purge`), `brew uninstall` (`--cask --zap`: Homebrew's whole zap list, which may remove files other apps share, outside the home folder too, as the box says), `port uninstall`; an AppImage or bundle goes to the Trash |
 | `packages::leftovers` | Folders and files named exactly after the program in `~/.config`, `~/.local/share`, `~/.cache`, `~/.local/state`, `~/.var/app`, `~/snap`, home dot-folders, launchers and autostart entries, and the `~/Library` folders on macOS (by bundle id and name, `<TeamID>.<bundle id>` and `group.<bundle id>` by the bundle id only, and `<bundle id>.<suffix>` entries such as updaters unless a longer installed id owns them); Apple's own `com.apple.…` entries never, unless the app is Apple's |
 | `packages::extra` | macOS leftovers names cannot reach: a cask's own zap list (only `~/Library/…`, at least two folders down; left out: entries another installed cask shares, entries named after another installed program's name or bundle id, and a vendor's entry straight under a Library folder such as `Application Support/Microsoft` while another app of that vendor stays, the vendor read from the bundle id or, once the app is gone, from the identifiers its zap list names) and the folder a lone app came in (`/Applications/World of Warcraft` once no app is left anywhere in it, four folders down, links not followed) |
 | `wu-unix` | The real machine: programs found and run through `wcc-unix::process` (polkit's `pkexec` or macOS's prompt for administrator rights; a removal run as administrator takes its program only from root's own folders, as the disk cleaner's tasks do), `Info.plist` through `plutil`, the freedesktop.org Trash on Linux and Finder's on macOS |
@@ -64,7 +65,17 @@ Decisions in force:
   must look like package names (no options, no shell characters).
 - **A removal is confirmed by the next listing**: when the program is still
   listed, the removal failed (or the prompt was refused) and nothing is
-  offered as left over.
+  offered as left over. A failure reports the package manager's error (its
+  last `Error:`/`E:` line on stderr, else its last line there), not the
+  progress it printed on stdout.
+- **A removal takes only the program chosen.** APT, dnf and zypper, told
+  yes, also remove every package that needs it (the desktop, for a
+  library), so they are asked first without administrator rights
+  (`apt-get -s`, `rpm -e --test`). When anything else would go, or the
+  answer cannot be read, nothing is removed and the message names the
+  others (five, then how many more): removing them all is left to the
+  package manager itself. dpkg, rpm and pacman refuse such a removal
+  themselves.
 - **Leftovers: exact names only, never another's.** A name another
   installed program goes by (Firefox from APT next to Firefox from Snap) is
   never offered, nor generic folder names (`fonts`, `autostart`, `cache`…).

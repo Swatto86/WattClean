@@ -6,6 +6,7 @@
 //! registry instead (the rest of this crate).
 
 mod extra;
+mod launchers;
 mod leftovers;
 mod linux;
 mod macos;
@@ -119,6 +120,21 @@ pub struct Output {
     pub stderr: String,
 }
 
+impl Output {
+    /// What the program said last, for a message: its last error line on
+    /// stderr (`Error: …`, `E: …`), else its last line there, else its last
+    /// line on stdout, where package managers print their progress.
+    pub fn last_words(&self) -> Option<&str> {
+        fn said(text: &str) -> impl DoubleEndedIterator<Item = &str> {
+            text.lines().map(str::trim).filter(|line| !line.is_empty())
+        }
+        said(&self.stderr)
+            .rfind(|line| line.starts_with("Error:") || line.starts_with("E:"))
+            .or_else(|| said(&self.stderr).next_back())
+            .or_else(|| said(&self.stdout).next_back())
+    }
+}
+
 /// An application bundle's own description (its `Info.plist`).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BundleInfo {
@@ -229,6 +245,49 @@ pub(crate) mod testing;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Package managers print progress on stdout and their error on
+    /// stderr; the error is what a failure reports.
+    #[test]
+    fn a_programs_last_words_are_its_error_not_its_progress() {
+        let said = |stdout: &str, stderr: &str| Output {
+            success: false,
+            stdout: stdout.into(),
+            stderr: stderr.into(),
+        };
+        let cases = [
+            (
+                said(
+                    "==> Uninstalling Cask battle-net\n==> Removing files:\n/Applications/Battle.net.app\n",
+                    "Error: Failure while executing; `/usr/bin/sudo -u root -- /bin/rm -f -r -- /Applications/Battle.net.app` exited with 1. Here's the output:\nsudo: a terminal is required to read the password\nsudo: a password is required\n",
+                ),
+                Some(
+                    "Error: Failure while executing; `/usr/bin/sudo -u root -- /bin/rm -f -r -- /Applications/Battle.net.app` exited with 1. Here's the output:",
+                ),
+            ),
+            (
+                said(
+                    "Reading package lists...\nBuilding dependency tree...\nReading state information...\n",
+                    "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 4242 (unattended-upgr)\nN: Be aware that removing the lock file is not a solution and may break your system.\nE: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), is another process using it?\n",
+                ),
+                Some(
+                    "E: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), is another process using it?",
+                ),
+            ),
+            (
+                said(
+                    "checking dependencies...\n",
+                    "error: failed to prepare transaction (could not satisfy dependencies)\n:: removing python breaks dependency 'python' required by meson\n\n",
+                ),
+                Some(":: removing python breaks dependency 'python' required by meson"),
+            ),
+            (said("Removing vlc...\n  done\n", "  \n"), Some("done")),
+            (said("", ""), None),
+        ];
+        for (output, expected) in cases {
+            assert_eq!(output.last_words(), expected, "{output:?}");
+        }
+    }
 
     #[test]
     fn sizes_are_read_in_every_unit_package_managers_print() {

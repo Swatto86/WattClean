@@ -133,7 +133,8 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   apt/dpkg, dnf/zypper/rpm, pacman, Flatpak, Snap, Homebrew (formulae and
   casks), MacPorts, AppImages and app bundles installed, shows applications
   (those with a launcher, or bundles) unless asked for every package, and
-  removes with the package manager's command. Leftovers are matched by
+  removes with the package manager's command, refusing a removal that
+  would take other packages with it. Leftovers are matched by
   exact name only, never offered when another installed program goes by
   the name, never pre-ticked, and moved to the Trash (freedesktop.org Trash
   on Linux, Finder on macOS) rather than backed up: the Trash is how these

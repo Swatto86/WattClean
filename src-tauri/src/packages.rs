@@ -186,13 +186,8 @@ fn remove(
             admin,
         } => {
             let output = system.run(&program, &args, admin)?;
-            let said = output
-                .stderr
-                .lines()
-                .chain(output.stdout.lines())
-                .map(str::trim)
-                .rfind(|line| !line.is_empty())
-                .map(str::to_string);
+            // Its error, not the progress it printed before failing.
+            let said = output.last_words().map(str::to_string);
             if output.success {
                 Ok(said)
             } else {
@@ -254,4 +249,64 @@ pub async fn un_pkg_trash_leftovers(state: App<'_>, numbers: Vec<usize>) -> Comm
         Ok(Trashed { moved, failed })
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use std::path::{Path, PathBuf};
+
+    use wu_core::packages::{BundleInfo, Manager, Output};
+
+    use super::*;
+
+    /// A Mac whose Homebrew fails a cask's removal at its sudo step: the
+    /// progress on stdout, the error on stderr.
+    struct SudoFails;
+
+    impl PackageSystem for SudoFails {
+        fn is_macos(&self) -> bool {
+            true
+        }
+        fn home(&self) -> Option<PathBuf> {
+            None
+        }
+        fn find_program(&self, name: &str) -> Option<PathBuf> {
+            Some(Path::new("/opt/homebrew/bin").join(name))
+        }
+        fn find_admin_program(&self, _name: &str) -> Option<PathBuf> {
+            None
+        }
+        fn run(&self, _program: &Path, _args: &[String], _admin: bool) -> io::Result<Output> {
+            Ok(Output {
+                success: false,
+                stdout: "==> Uninstalling Cask battle-net\n==> Removing files:\n/Applications/Battle.net.app\n".into(),
+                stderr: "Error: Failure while executing; `/usr/bin/sudo -u root -- /bin/rm -f -r -- /Applications/Battle.net.app` exited with 1. Here's the output:\nsudo: a terminal is required to read the password\nsudo: a password is required\n".into(),
+            })
+        }
+        fn bundle_info(&self, _bundle: &Path) -> Option<BundleInfo> {
+            None
+        }
+        fn trash(&self, paths: &[PathBuf]) -> Vec<io::Result<()>> {
+            paths
+                .iter()
+                .map(|_| Err(io::Error::other("not here")))
+                .collect()
+        }
+    }
+
+    #[test]
+    fn a_failed_removal_reports_the_package_managers_error_not_its_progress() {
+        let cask = Package::new(Manager::HomebrewCask, "battle-net", "Blizzard Battle.net");
+        let Err(error) = remove(&SudoFails, &cask, false) else {
+            panic!("the removal should have failed");
+        };
+        assert!(
+            error.message.starts_with(
+                "Blizzard Battle.net could not be removed: Error: Failure while executing;"
+            ),
+            "{}",
+            error.message
+        );
+    }
 }

@@ -14,6 +14,8 @@ pub struct Machine {
     macos: bool,
     /// Program name → what it prints, whatever its arguments.
     pub prints: Mutex<BTreeMap<String, String>>,
+    /// A whole command (`rpm -e --test vlc`) → its answer, before `prints`.
+    pub replies: Mutex<BTreeMap<String, Output>>,
     /// Every command run, `admin ` first when it asked for rights.
     pub ran: Mutex<Vec<String>>,
     pub bundles: BTreeMap<PathBuf, BundleInfo>,
@@ -37,6 +39,7 @@ impl Machine {
                     .map(|p| ((*p).to_string(), String::new()))
                     .collect(),
             ),
+            replies: Mutex::new(BTreeMap::new()),
             ran: Mutex::new(Vec::new()),
             bundles: BTreeMap::new(),
             untrusted: BTreeSet::new(),
@@ -56,6 +59,19 @@ impl Machine {
             .lock()
             .unwrap()
             .insert(program.to_string(), text.to_string());
+    }
+
+    /// What one whole command answers, as a real program would: `success`
+    /// false when `stderr` holds an error.
+    pub fn replies(&self, command: &str, success: bool, stdout: &str, stderr: &str) {
+        self.replies.lock().unwrap().insert(
+            command.to_string(),
+            Output {
+                success,
+                stdout: stdout.to_string(),
+                stderr: stderr.to_string(),
+            },
+        );
     }
 
     pub fn ran(&self) -> Vec<String> {
@@ -102,17 +118,23 @@ impl PackageSystem for Machine {
             .get(&name)
             .cloned()
             .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
-        let mut line = if admin { format!("admin {name}") } else { name };
+        let mut command = name;
         for arg in args {
-            line.push(' ');
-            line.push_str(arg);
+            command.push(' ');
+            command.push_str(arg);
         }
+        let reply = self.replies.lock().unwrap().get(&command).cloned();
+        let line = if admin {
+            format!("admin {command}")
+        } else {
+            command
+        };
         self.ran.lock().unwrap().push(line);
-        Ok(Output {
+        Ok(reply.unwrap_or(Output {
             success: true,
             stdout,
             stderr: String::new(),
-        })
+        }))
     }
 
     fn bundle_info(&self, bundle: &Path) -> Option<BundleInfo> {

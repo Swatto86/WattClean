@@ -143,12 +143,20 @@ export const programsPage = (_ctx: Context): Page => {
   let packages: PackageView[] = [];
   let selected: string | null = null;
   let query = "";
+  /** A list is being loaded. */
   let busy = false;
+  /** A removal is running; only the removal itself clears this. */
+  let removing = false;
+  /** The latest list load; an older one's answer is dropped. */
+  let loading = 0;
 
   const selectedPackage = () => packages.find((p) => p.key === selected);
   const sync = () => {
-    uninstall.disabled = busy || !selectedPackage();
-    refresh.disabled = busy;
+    const idle = !busy && !removing;
+    uninstall.disabled = !idle || !selectedPackage();
+    refresh.disabled = !idle;
+    all.disabled = !idle;
+    source.disabled = !idle;
   };
 
   const draw = () => {
@@ -201,11 +209,13 @@ export const programsPage = (_ctx: Context): Page => {
   };
 
   const load = async () => {
+    const ticket = ++loading;
     busy = true;
     sync();
     status.textContent = "Asking the package managers…";
     try {
       const list = await packagesApi.list(all.checked);
+      if (ticket !== loading) return;
       packages = list.packages;
       const sources = [...new Set(packages.map((p) => p.source))].sort();
       const chosen = source.value;
@@ -217,10 +227,12 @@ export const programsPage = (_ctx: Context): Page => {
       if (!packages.some((p) => p.key === selected)) selected = null;
       for (const problem of list.problems) notice(problem, true);
     } catch (error) {
-      notice(String(error), true);
+      if (ticket === loading) notice(String(error), true);
     } finally {
-      busy = false;
-      draw();
+      if (ticket === loading) {
+        busy = false;
+        draw();
+      }
     }
   };
 
@@ -242,7 +254,7 @@ export const programsPage = (_ctx: Context): Page => {
       ...(purge ? { checkbox: purge } : {}),
     });
     if (!answer) return;
-    busy = true;
+    removing = true;
     sync();
     status.textContent = `Removing ${target.name}…`;
     try {
@@ -274,7 +286,7 @@ export const programsPage = (_ctx: Context): Page => {
     } catch (error) {
       notice(String(error), true);
     } finally {
-      busy = false;
+      removing = false;
       await load();
     }
   };

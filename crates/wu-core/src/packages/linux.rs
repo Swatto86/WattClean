@@ -3,10 +3,7 @@
 //! is an application when it installed a launcher (`.desktop` file); the
 //! launcher's name is the name people know.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-
-use super::{Manager, Package, PackageSystem, macos, parse_size, query};
+use super::{Manager, Package, PackageSystem, launchers, macos, parse_size, query};
 
 pub fn list(system: &dyn PackageSystem) -> (Vec<Package>, Vec<String>) {
     let mut packages = Vec::new();
@@ -32,7 +29,7 @@ pub fn list(system: &dyn PackageSystem) -> (Vec<Package>, Vec<String>) {
         add(macos::homebrew(system), "Homebrew");
     }
     packages.extend(appimages(system));
-    mark_apps(system, &mut packages);
+    launchers::mark_apps(system, &mut packages);
     (packages, problems)
 }
 
@@ -243,123 +240,6 @@ fn app_name(stem: &str) -> String {
     } else {
         name.join(" ")
     }
-}
-
-/// The launchers (`.desktop` files) the system's packages installed, by
-/// package, with the name each launcher shows.
-fn mark_apps(system: &dyn PackageSystem, packages: &mut [Package]) {
-    let folder = system.at("/usr/share/applications");
-    let launchers: Vec<PathBuf> = std::fs::read_dir(&folder)
-        .map(|entries| {
-            entries
-                .flatten()
-                .map(|e| e.path())
-                .filter(|p| p.extension().is_some_and(|ext| ext == "desktop"))
-                .collect()
-        })
-        .unwrap_or_default();
-    if launchers.is_empty() {
-        return;
-    }
-    let owners = owners(system, &launchers, &folder);
-    for package in packages
-        .iter_mut()
-        .filter(|p| matches!(p.manager, Manager::Apt | Manager::Rpm | Manager::Pacman))
-    {
-        // A hidden launcher (a helper the menu does not show) is no app.
-        if let Some(name) = owners.get(&package.id).and_then(|l| launcher_name(l)) {
-            package.app = true;
-            package.name = name;
-        }
-    }
-}
-
-/// Which package owns each launcher, asked of the system's package manager
-/// in one call; a launcher no package owns is left out.
-fn owners(
-    system: &dyn PackageSystem,
-    launchers: &[PathBuf],
-    folder: &Path,
-) -> HashMap<String, PathBuf> {
-    // The package manager knows the real paths, not the sandbox's.
-    let real: Vec<String> = launchers
-        .iter()
-        .filter_map(|p| p.file_name())
-        .map(|name| format!("/usr/share/applications/{}", name.to_string_lossy()))
-        .collect();
-    let mut args: Vec<&str> = Vec::new();
-    let program = if system.find_program("dpkg-query").is_some() {
-        args.push("-S");
-        "dpkg-query"
-    } else if system.find_program("rpm").is_some() {
-        args.extend(["-qf", "--queryformat", r"%{NAME}\n"]);
-        "rpm"
-    } else if system.find_program("pacman").is_some() {
-        args.push("-Qqo");
-        "pacman"
-    } else {
-        return HashMap::new();
-    };
-    args.extend(real.iter().map(String::as_str));
-    let Some(program_path) = system.find_program(program) else {
-        return HashMap::new();
-    };
-    let args: Vec<String> = args.iter().map(ToString::to_string).collect();
-    // dpkg and rpm print what they know even when one file is unowned.
-    let text = system
-        .run(&program_path, &args, false)
-        .map(|output| output.stdout)
-        .unwrap_or_default();
-    let mut out = HashMap::new();
-    let lines: Vec<&str> = text.lines().collect();
-    if program == "dpkg-query" {
-        // `package[, other]: /usr/share/applications/x.desktop`
-        for line in lines {
-            let Some((names, path)) = line.split_once(": ") else {
-                continue;
-            };
-            let Some(file) = Path::new(path.trim()).file_name() else {
-                continue;
-            };
-            for name in names.split(", ") {
-                let name = name.split(':').next().unwrap_or(name).trim();
-                out.insert(name.to_string(), folder.join(file));
-            }
-        }
-    } else {
-        // One line per file asked about, in order.
-        for (line, launcher) in lines.iter().zip(launchers) {
-            let name = line.trim();
-            if !name.is_empty() && !name.contains(' ') {
-                out.entry(name.to_string())
-                    .or_insert_with(|| launcher.clone());
-            }
-        }
-    }
-    out
-}
-
-/// A launcher's `Name=` in its main section, unless it is hidden.
-fn launcher_name(path: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(path).ok()?;
-    let mut in_entry = false;
-    let mut name = None;
-    for line in text.lines().map(str::trim) {
-        if line.starts_with('[') {
-            in_entry = line == "[Desktop Entry]";
-            continue;
-        }
-        if !in_entry {
-            continue;
-        }
-        if line == "NoDisplay=true" || line == "Hidden=true" {
-            return None;
-        }
-        if let Some(value) = line.strip_prefix("Name=") {
-            name.get_or_insert_with(|| value.trim().to_string());
-        }
-    }
-    name.filter(|n| !n.is_empty())
 }
 
 #[cfg(test)]
