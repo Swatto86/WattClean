@@ -100,8 +100,8 @@ actions = [{ op = "sqlite", search = "glob", path = '{profile}\Web Data', sql = 
 [[template.option]]
 id = "passwords"
 name = "Saved passwords"
-description = "Passwords the browser saved on this PC"
-warning = "Saved passwords are deleted from this PC. Passwords synced to an account may come back."
+description = "Passwords the browser saved on this computer"
+warning = "Saved passwords are deleted from this computer. Passwords synced to an account may come back."
 actions = [
   { op = "delete", search = "glob", path = '{profile}\Login Data', kind = "file" },
   { op = "delete", search = "glob", path = '{profile}\Login Data-journal', kind = "file" },
@@ -112,7 +112,7 @@ actions = [
 [[template.option]]
 id = "site_storage"
 name = "Site storage"
-description = "Data sites keep on your PC: local storage, IndexedDB and file systems"
+description = "Data sites keep on your computer: local storage, IndexedDB and file systems"
 warning = "Sites forget data they keep locally, such as offline mail, game progress and settings."
 actions = [
   { op = "delete", search = "walk.all", path = '{profile}\Local Storage' },
@@ -220,8 +220,8 @@ actions = [{ op = "delete", search = "glob", path = '{root}\*\formhistory.sqlite
 [[template.option]]
 id = "passwords"
 name = "Saved passwords"
-description = "Passwords saved on this PC"
-warning = "Saved passwords are deleted from this PC. Passwords synced to an account may come back."
+description = "Passwords saved on this computer"
+warning = "Saved passwords are deleted from this computer. Passwords synced to an account may come back."
 actions = [
   { op = "delete", search = "glob", path = '{root}\*\logins.json', kind = "file" },
   { op = "delete", search = "glob", path = '{root}\*\logins-backup.json', kind = "file" },
@@ -231,7 +231,7 @@ actions = [
 [[template.option]]
 id = "site_storage"
 name = "Site storage"
-description = "Data sites keep on your PC: local storage and IndexedDB"
+description = "Data sites keep on your computer: local storage and IndexedDB"
 warning = "Sites forget data they keep locally, such as offline mail, game progress and settings."
 actions = [
   { op = "delete", search = "walk.all", path = '{root}\*\storage\default', exclude = ['{root}\*\storage\default\moz-extension+++*'] },

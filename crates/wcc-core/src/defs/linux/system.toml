@@ -64,8 +64,12 @@ id = "cache"
 name = "Application caches"
 description = "Everything in your cache folder unchanged for a week; programs fill it again"
 warning = "Programs may start slower while they rebuild their caches. Close them first for the most space."
+# The AUR helpers' records of -git packages (yay's, and paru's before it
+# moved its own to the state folder) live here but are not caches.
 actions = [
-  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%', older_than_days = 7 },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%', older_than_days = 7, exclude = [
+    '%XDG_CACHE_HOME%/yay/vcs.json', '%XDG_CACHE_HOME%/paru/devel.json',
+  ] },
 ]
 
 [[cleaner.option]]

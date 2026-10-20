@@ -313,3 +313,26 @@ fn apples_own_entries_are_offered_only_for_apples_own_app() {
         ["Library/Caches/com.apple.SFSymbols"]
     );
 }
+
+/// Nautilus shows as "Files", and `~/.files` is often someone's dotfiles:
+/// a home dot-folder goes by the package's own name only, while its other
+/// folders go by either name.
+#[test]
+fn a_dot_folder_goes_by_the_packages_own_name_not_its_launchers() {
+    let machine = Machine::new(&[]);
+    let home = machine.home().unwrap();
+    for folder in [
+        ".files",
+        ".nautilus",
+        ".local/share/nautilus",
+        ".config/files",
+    ] {
+        std::fs::create_dir_all(home.join(folder)).unwrap();
+    }
+    let mut nautilus = Package::new(Manager::Pacman, "nautilus", "Files");
+    nautilus.app = true;
+    assert_eq!(
+        offered(&machine, &nautilus, &[]),
+        [".config/files", ".local/share/nautilus", ".nautilus"]
+    );
+}

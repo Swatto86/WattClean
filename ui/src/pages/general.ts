@@ -187,9 +187,11 @@ export const general = (
           { class: "setting-text" },
           el("span", { text: `Keep running in the ${trayName()}` }),
           note(
-            isWindows()
-              ? "Closing the window hides it to the icon by the clock, so the Registry Watcher keeps watching. Quit from the icon's menu or below."
-              : `Closing the window hides it to the icon in the ${trayName()}. Quit from the icon's menu or below.`,
+            !ctx.info.trayShown
+              ? `This desktop shows no ${trayName()}, so closing the window quits WattClean.`
+              : isWindows()
+                ? "Closing the window hides it to the icon by the clock, so the Registry Watcher keeps watching. Quit from the icon's menu or below."
+                : `Closing the window hides it to the icon in the ${trayName()}. Quit from the icon's menu or below.`,
           ),
         ),
       ),

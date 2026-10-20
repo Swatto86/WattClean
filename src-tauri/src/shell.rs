@@ -108,6 +108,9 @@ pub struct AppInfo {
     started_hidden: bool,
     /// What could not be copied from the earlier apps at this start.
     adopt_problems: Vec<String>,
+    /// The desktop shows the tray icon: closing the window can keep the
+    /// app running there.
+    tray_shown: bool,
 }
 
 #[tauri::command]
@@ -122,6 +125,7 @@ pub fn app_info(app: AppHandle, shell: ShellState<'_>, disk: Disk<'_>) -> AppInf
         windows_build: windows_build(&app),
         started_hidden: shell.started_hidden,
         adopt_problems: shell.adopt_problems.clone(),
+        tray_shown: crate::tray::shown(),
     }
 }
 

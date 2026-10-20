@@ -4314,6 +4314,7 @@ dependencies = [
  "wu-core",
  "wu-unix",
  "wu-windows",
+ "zbus",
 ]
 
 [[package]]

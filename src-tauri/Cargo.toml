@@ -38,9 +38,11 @@ wu-unix = { workspace = true }
 
 # The app's name where the desktop has no other: the system tray item's
 # title, which Linux trays show as its tooltip (GTK's, already in the tree
-# through Tauri).
+# through Tauri). zbus asks the session bus whether a tray is there to
+# show the icon (already in the tree through the single-instance plugin).
 [target.'cfg(target_os = "linux")'.dependencies]
 glib = "0.18"
+zbus = "5"
 
 [dev-dependencies]
 tempfile = { workspace = true }

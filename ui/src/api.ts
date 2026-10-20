@@ -52,6 +52,8 @@ export interface AppInfo {
   startedHidden: boolean;
   /** What could not be copied from the earlier apps at this start. */
   adoptProblems: string[];
+  /** The desktop shows the tray icon (a Linux desktop may show none). */
+  trayShown: boolean;
 }
 
 export const TEXT_SIZES = ["small", "normal", "large"] as const;

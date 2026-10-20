@@ -50,12 +50,15 @@ const password = (leftovers: LeftoverView[]): string =>
     ? " Items for every account ask for an administrator's password when they move."
     : "";
 
-/** The leftovers dialog's words after `name` was removed. */
+/** The leftovers dialog's words after `name` was removed. Background
+ *  jobs are looked for on macOS only. */
 export const leftoversIntro = (
   name: string,
   leftovers: LeftoverView[],
 ): string =>
-  `Tick what to move to the ${trashName()}. Only items named after ${name}, and background jobs that start it, are listed; check each one, since another program may share a name. A background job is stopped before it moves.${password(leftovers)}`;
+  platform() === "macos"
+    ? `Tick what to move to the ${trashName()}. Only items named after ${name}, and background jobs that start it, are listed; check each one, since another program may share a name. A background job is stopped before it moves.${password(leftovers)}`
+    : `Tick what to move to the ${trashName()}. Only items named after ${name} are listed; check each one, since another program may share a name.`;
 
 /** The words for the background jobs of apps already gone (macOS). */
 export const orphansIntro = (leftovers: LeftoverView[]): string =>

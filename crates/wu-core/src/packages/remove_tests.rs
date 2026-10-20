@@ -26,7 +26,6 @@ fn each_manager_removes_with_its_own_command() {
         [
             "uninstall",
             "-y",
-            "--noninteractive",
             "--user",
             "--delete-data",
             "org.gimp.GIMP"

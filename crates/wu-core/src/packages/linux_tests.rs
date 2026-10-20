@@ -44,6 +44,51 @@ fn rpm_pacman_flatpak_and_snap_listings_are_read() {
     assert_eq!(names, ["firefox"]);
 }
 
+/// Runtime and theme snaps export no launcher, so only snaps that do are
+/// applications; every package lists them all.
+#[test]
+fn only_snaps_with_a_launcher_are_applications() {
+    let machine = Machine::new(&["snap"]);
+    machine.prints(
+        "snap",
+        "Name               Version   Rev    Tracking       Publisher   Notes\n\
+         firefox            131.0     4793   latest/stable  mozilla✓    -\n\
+         gnome-42-2204      0+git     176    latest/stable  canonical✓  -\n\
+         gtk-common-themes  0.1-81    1535   latest/stable  canonical✓  -\n",
+    );
+    let exported = machine.at("/var/lib/snapd/desktop/applications");
+    std::fs::create_dir_all(&exported).unwrap();
+    std::fs::write(
+        exported.join("firefox_firefox.desktop"),
+        "[Desktop Entry]\nName=Firefox\n",
+    )
+    .unwrap();
+    let (apps, _) = crate::packages::list(&machine, false);
+    let names: Vec<&str> = apps.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(names, ["firefox"]);
+    let (all, _) = crate::packages::list(&machine, true);
+    assert_eq!(all.len(), 3);
+}
+
+/// One Flatpak app may be installed for the account and for everyone:
+/// both are listed, each removable on its own.
+#[test]
+fn a_flatpak_installed_twice_is_listed_twice() {
+    let machine = Machine::new(&["flatpak"]);
+    machine.prints(
+        "flatpak",
+        "org.gimp.GIMP\tGNU Image Manipulation Program\t2.10.38\t1.1 GB\tsystem\n\
+         org.gimp.GIMP\tGNU Image Manipulation Program\t2.10.38\t1.1 GB\tuser\n",
+    );
+    let (packages, problems) = crate::packages::list(&machine, false);
+    assert!(problems.is_empty(), "{problems:?}");
+    let keys: Vec<String> = packages.iter().map(Package::key).collect();
+    assert_eq!(
+        keys,
+        ["Flatpak:system:org.gimp.GIMP", "Flatpak:user:org.gimp.GIMP"]
+    );
+}
+
 #[test]
 fn appimage_names_lose_their_versions() {
     assert_eq!(app_name("Krita-5.2.2-x86_64"), "Krita");

@@ -17,7 +17,7 @@ use crate::wildcard::{Wildcard, WildcardSet};
 pub enum SpecError {
     #[error("invalid regular expression {0:?}: {1}")]
     Regex(String, String),
-    #[error("skipped: the exclusion {0:?} uses a variable this PC does not know")]
+    #[error("skipped: the exclusion {0:?} uses a variable this computer does not know")]
     Exclusion(String),
 }
 

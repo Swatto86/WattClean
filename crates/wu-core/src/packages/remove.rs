@@ -101,7 +101,10 @@ pub fn removal(
             true,
         ),
         Manager::Flatpak => {
-            let mut args = vec!["uninstall", "-y", "--noninteractive"];
+            // Not --noninteractive: its quiet mode tells polkit not to ask
+            // for a password, so a system-wide app could not be removed by
+            // an account polkit does not let through without one.
+            let mut args = vec!["uninstall", "-y"];
             match package.installation.as_deref() {
                 Some("user") => args.push("--user"),
                 Some("system") => args.push("--system"),

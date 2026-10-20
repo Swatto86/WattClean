@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use super::keys::{Keys, keys_for};
 use super::launchd::Job;
 use super::{Manager, Package, PackageSystem, extra, launchd, tree_size};
 
@@ -34,100 +35,6 @@ pub struct Leftover {
     /// In `/Library`, for every account: macOS asks for an administrator's
     /// password to move it.
     pub system_wide: bool,
-}
-
-/// Folder names shared by many programs or by the desktop itself.
-const GENERIC: &[&str] = &[
-    "applications",
-    "autostart",
-    "bin",
-    "cache",
-    "common",
-    "config",
-    "data",
-    "dbus-1",
-    "dconf",
-    "doc",
-    "environment.d",
-    "fonts",
-    "gnupg",
-    "gtk-2.0",
-    "gtk-3.0",
-    "gtk-4.0",
-    "icons",
-    "keyrings",
-    "lib",
-    "local",
-    "man",
-    "menus",
-    "mime",
-    "pulse",
-    "share",
-    "ssh",
-    "systemd",
-    "themes",
-    "trash",
-    "user-dirs",
-    "app",
-    "apps",
-    "desktop",
-    "user",
-    "default",
-    "tmp",
-    "temp",
-    "logs",
-    "log",
-    "help",
-];
-
-/// Suffixes packages add to a program's own name.
-const SUFFIXES: &[&str] = &[
-    "-stable",
-    "-beta",
-    "-dev",
-    "-unstable",
-    "-nightly",
-    "-bin",
-    "-git",
-    "-desktop",
-    "-browser",
-];
-
-/// The lower-case names a package's leftovers may carry.
-pub fn keys_for(package: &Package) -> Vec<String> {
-    let mut keys: Vec<String> = Vec::new();
-    // A package manager's own id may be two letters (`gh`); a name is three.
-    let mut add = |key: String, shortest: usize| {
-        if key.len() >= shortest && !GENERIC.contains(&key.as_str()) && !keys.contains(&key) {
-            keys.push(key);
-        }
-    };
-    let id = package.id.to_lowercase();
-    match package.manager {
-        Manager::AppImage | Manager::MacApp => {}
-        Manager::Flatpak => {
-            add(id.clone(), 3);
-            add(id.rsplit('.').next().unwrap_or(&id).to_string(), 3);
-        }
-        _ => {
-            for suffix in SUFFIXES {
-                if let Some(base) = id.strip_suffix(suffix) {
-                    add(base.to_string(), 3);
-                }
-            }
-            add(id.clone(), 2);
-        }
-    }
-    for name in std::iter::once(&package.name).chain(&package.known_as) {
-        let name = name.trim().to_lowercase();
-        add(name.replace(' ', "-"), 3);
-        add(name.replace(' ', ""), 3);
-        add(name.clone(), 3);
-    }
-    if let Some(bundle) = &package.bundle_id {
-        add(bundle.to_lowercase(), 3);
-    }
-    keys
 }
 
 /// Where programs keep their own files, under the home folder, and how an
@@ -162,10 +69,6 @@ const MACOS: &[(&str, &[&str])] = &[
     ("Library/Application Scripts", &["{}", "*.{}", "group.{}"]),
     ("", &[".{}"]),
 ];
-
-/// Where command-line tools keep their files: never offered while a
-/// program of that name is still installed.
-const TOOL_FOLDERS: &[&str] = &["", ".config", ".local/share", ".local/state", ".cache"];
 
 /// Where macOS apps keep entries named after their bundle identifier plus a
 /// suffix (`.ShipIt` updates, `.FinderSyncExt` extensions).
@@ -225,16 +128,9 @@ pub fn find_leftovers(
         return Vec::new();
     }
     let theirs: HashSet<String> = others.iter().flat_map(|other| keys_for(other)).collect();
-    let mine: Vec<String> = keys_for(removed)
-        .into_iter()
-        .filter(|key| !theirs.contains(key))
-        .collect();
+    let keys_by = Keys::new(system, removed, &theirs);
+    let mine = &keys_by.mine;
     let theirs: Vec<String> = theirs.into_iter().collect();
-    let tools: Vec<String> = mine
-        .iter()
-        .filter(|key| system.find_program(key).is_none())
-        .cloned()
-        .collect();
     // `~/.name` is a command-line tool's: an app's name or a cask's token is
     // shared with other tools, and apps keep their files elsewhere.
     let gui = matches!(
@@ -261,11 +157,7 @@ pub fn find_leftovers(
         if folder.is_empty() && gui {
             continue;
         }
-        let keys = if TOOL_FOLDERS.contains(folder) {
-            &tools
-        } else {
-            &mine
-        };
+        let keys = keys_by.for_folder(folder);
         let suffixed = bundle.as_deref().filter(|_| SUFFIXED.contains(folder));
         if keys.is_empty() && suffixed.is_none() {
             continue;
@@ -299,7 +191,7 @@ pub fn find_leftovers(
         system,
         &home,
         removed,
-        &mine,
+        mine,
         &theirs,
         bundle.as_deref(),
         &other_bundles,

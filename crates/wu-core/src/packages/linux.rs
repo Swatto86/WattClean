@@ -49,7 +49,8 @@ fn native(system: &dyn PackageSystem) -> (Vec<Package>, Option<Manager>, Vec<Str
         let found = match manager {
             Manager::Apt => dpkg(system),
             Manager::Rpm => rpm(system),
-            _ => pacman(system),
+            Manager::Pacman => pacman(system),
+            _ => continue,
         };
         match found {
             Some(found) if !found.is_empty() => return (found, Some(manager), Vec::new()),
@@ -184,7 +185,23 @@ pub(crate) fn parse_flatpak(text: &str) -> Vec<Package> {
 fn snap(system: &dyn PackageSystem) -> Option<Vec<Package>> {
     let text = query(system, "snap", &["list"])?;
     let mut packages = parse_snap(&text);
+    // A snap is an application when snapd exported a launcher for it
+    // (`<snap>_<app>.desktop`): runtimes and themes (gnome-42-2204,
+    // gtk-common-themes, mesa-2404) export none.
+    let launchers: Vec<String> =
+        std::fs::read_dir(system.at("/var/lib/snapd/desktop/applications"))
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .filter(|name| name.ends_with(".desktop"))
+                    .collect()
+            })
+            .unwrap_or_default();
     for package in &mut packages {
+        package.app = launchers
+            .iter()
+            .any(|launcher| launcher.starts_with(&format!("{}_", package.id)));
         package.size = std::fs::read_dir(system.at("/var/lib/snapd/snaps"))
             .ok()
             .and_then(|entries| {
@@ -201,7 +218,8 @@ fn snap(system: &dyn PackageSystem) -> Option<Vec<Package>> {
     Some(packages)
 }
 
-/// `snap list`: the system's own snaps (bases, snapd, kernels) are left out.
+/// `snap list`: the system's own snaps (bases, snapd, kernels) are left
+/// out; the rest are applications until their launchers say otherwise.
 pub(crate) fn parse_snap(text: &str) -> Vec<Package> {
     text.lines()
         .skip(1)

@@ -1,8 +1,10 @@
 //! The notification-area icon, present while the app runs. A left click
-//! opens the window (on macOS, where a menu-bar icon's click shows its
-//! menu, the menu's first item does); its menu opens a module's page or
-//! quits. Closing the window hides it here when "keep running" is on, so
-//! the Registry Watcher goes on watching.
+//! opens the window on Windows; on macOS (a menu-bar icon's click shows
+//! its menu) and Linux (where AppIndicator trays report no clicks, only
+//! show the menu) the menu's first item does. The menu opens a module's
+//! page or quits. Closing the window hides it here when "keep running" is
+//! on and the desktop shows the icon, so the Registry Watcher goes on
+//! watching.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -26,6 +28,41 @@ const PAGES: &[(&str, &str, &str)] = &[
     ("tray-cleaner", "&Disk cleaner", "cleaner"),
     ("tray-programs", "&Uninstall programs", "programs"),
 ];
+
+/// The StatusNotifier host's bus name, which Linux's trays own (KDE,
+/// Omarchy's bar, GNOME only with the AppIndicator extension).
+#[cfg(target_os = "linux")]
+const WATCHER: &str = "org.kde.StatusNotifierWatcher";
+
+/// Whether the desktop shows the icon, so a hidden window can be found
+/// again. A Wayland session shows it only through a StatusNotifier host;
+/// an X11 one may also have an older tray of its own, which cannot be
+/// asked. When it cannot be told, the icon is taken to show.
+#[cfg(target_os = "linux")]
+pub fn shown() -> bool {
+    shown_on(std::env::var_os("WAYLAND_DISPLAY").is_some(), || {
+        let bus = zbus::blocking::Connection::session().ok()?;
+        let name = zbus::names::BusName::try_from(WATCHER).ok()?;
+        zbus::blocking::fdo::DBusProxy::new(&bus)
+            .ok()?
+            .name_has_owner(name)
+            .ok()
+    })
+}
+
+/// Whether the icon shows on a Wayland session or not, given what the
+/// session bus says about a StatusNotifier host (`None`: it could not be
+/// asked).
+#[cfg(any(test, target_os = "linux"))]
+fn shown_on(wayland: bool, host: impl FnOnce() -> Option<bool>) -> bool {
+    !wayland || host().unwrap_or(true)
+}
+
+/// Windows' notification area and macOS's menu bar are always there.
+#[cfg(not(target_os = "linux"))]
+pub fn shown() -> bool {
+    true
+}
 
 /// Show and focus the main window.
 pub fn show_main(app: &AppHandle) {
@@ -83,8 +120,9 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let mut tray = TrayIconBuilder::with_id(TRAY)
         .tooltip("WattClean")
         .menu(&menu)
-        // A click on a menu-bar icon shows its menu on macOS; elsewhere a
+        // A click on a menu-bar icon shows its menu on macOS; on Windows a
         // left click opens the window and the menu is a right-click away.
+        // Linux's trays show the menu on any click.
         .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
@@ -127,4 +165,20 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     }
     tray.build(app)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// GNOME on Wayland without the AppIndicator extension shows no tray:
+    /// the window must not hide there. X11 may have a tray the bus does
+    /// not know of, and a bus that cannot be asked proves nothing.
+    #[test]
+    fn the_icon_is_taken_to_show_unless_a_wayland_session_has_no_tray() {
+        assert!(!shown_on(true, || Some(false)));
+        assert!(shown_on(true, || Some(true)));
+        assert!(shown_on(true, || None));
+        assert!(shown_on(false, || Some(false)));
+    }
 }

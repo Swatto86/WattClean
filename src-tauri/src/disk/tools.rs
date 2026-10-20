@@ -133,7 +133,15 @@ pub async fn disk_wipe_free_space(
             .system
             .drives()
             .into_iter()
-            .find(|d| d.root.eq_ignore_ascii_case(&root))
+            // Linux's mount points differ by letter case; Windows' and
+            // macOS's drive names do not.
+            .find(|d| {
+                if cfg!(target_os = "linux") {
+                    d.root == root
+                } else {
+                    d.root.eq_ignore_ascii_case(&root)
+                }
+            })
             .ok_or_else(|| {
                 CommandError::from(format!("{root} is not a drive WattClean can wipe."))
             })?;

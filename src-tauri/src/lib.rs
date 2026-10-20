@@ -102,9 +102,11 @@ pub fn run() {
                 // Taken over before anything that could fail: the window is
                 // only ever hidden here, and the app exits through `quit`.
                 api.prevent_close();
+                // With no tray to open it from, a hidden window would be lost.
                 if app
                     .try_state::<Arc<Shell>>()
                     .is_some_and(|shell| shell.keeps_running())
+                    && tray::shown()
                 {
                     tray::hide_main(app);
                 } else {

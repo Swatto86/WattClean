@@ -111,8 +111,10 @@ detect = ['%XDG_CACHE_HOME%/yay', '%XDG_CACHE_HOME%/paru']
 id = "cache"
 name = "Build cache"
 description = "Downloaded sources and built packages of AUR software"
+# vcs.json is yay's record of each -git package's last commit, which its
+# --devel updates compare against: not a cache.
 actions = [
-  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/yay' },
+  { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/yay', exclude = ['%XDG_CACHE_HOME%/yay/vcs.json'] },
   { op = "delete", search = "walk.all", path = '%XDG_CACHE_HOME%/paru/clone' },
 ]
 

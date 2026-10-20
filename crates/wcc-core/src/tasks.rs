@@ -187,10 +187,12 @@ pub const TASKS: &[Task] = &[
         },
     ),
     // Universal formats.
+    // Not --noninteractive, whose quiet mode keeps polkit from asking for
+    // the password a system-wide runtime's removal may need.
     task(
         "flatpak-unused",
         "flatpak",
-        &["uninstall", "--unused", "-y", "--noninteractive"],
+        &["uninstall", "--unused", "-y"],
     ),
     listed(
         admin(task("snap-disabled", "snap", &["remove"])),

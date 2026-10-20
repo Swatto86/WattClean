@@ -27,15 +27,37 @@ pub(super) fn mark_apps(system: &dyn PackageSystem, native: Manager, packages: &
     }
     let owners = owners(system, native, &launchers, &folder);
     for package in packages.iter_mut().filter(|p| p.manager == native) {
-        // A hidden launcher (a helper the menu does not show) is no app.
-        if let Some(name) = owners.get(&package.id).and_then(|l| launcher_name(l)) {
+        if let Some(name) = owners
+            .get(&package.id)
+            .and_then(|l| shown_name(&package.id, l))
+        {
             package.app = true;
             package.name = name;
         }
     }
 }
 
-/// Which package owns each launcher, asked of the system's package manager;
+/// The name a package shows in the menu, from the launchers it installed:
+/// hidden ones (helpers the menu does not show, such as URL handlers) are
+/// passed over, whatever order the folder lists them in. Of the rest, the
+/// launcher named after the package (`kitty.desktop`,
+/// `org.gnome.Nautilus.desktop` for nautilus), else the shortest name
+/// (LibreOffice rather than LibreOffice Calc). `None` when none shows.
+fn shown_name(id: &str, launchers: &[PathBuf]) -> Option<String> {
+    let id = id.to_lowercase();
+    launchers
+        .iter()
+        .filter_map(|path| {
+            let name = launcher_name(path)?;
+            let stem = path.file_stem()?.to_string_lossy().to_lowercase();
+            let own = stem == id || stem.rsplit('.').next() == Some(id.as_str());
+            Some((!own, name.chars().count(), name))
+        })
+        .min()
+        .map(|(_, _, name)| name)
+}
+
+/// The launchers each package owns, asked of the system's package manager;
 /// a launcher no package owns is left out. Each answer is matched to the
 /// launcher it names, never to the line it is on: pacman prints nothing for
 /// an unowned file and rpm a line for each of a file's owners.
@@ -44,7 +66,7 @@ fn owners(
     native: Manager,
     launchers: &[PathBuf],
     folder: &Path,
-) -> HashMap<String, PathBuf> {
+) -> HashMap<String, Vec<PathBuf>> {
     // The package manager knows the real paths, not the sandbox's.
     let real: Vec<String> = launchers
         .iter()
@@ -66,7 +88,8 @@ fn owners(
     let program = match native {
         Manager::Apt => "dpkg-query",
         Manager::Rpm => "rpm",
-        _ => "pacman",
+        Manager::Pacman => "pacman",
+        _ => return HashMap::new(),
     };
     let Some(path) = system.find_program(program) else {
         return HashMap::new();
@@ -78,10 +101,14 @@ fn owners(
         }),
         _ => parse_pacman_owners(&ask(&path, &["-Qo"], &real)),
     };
-    let mut out = HashMap::new();
+    let mut out: HashMap<String, Vec<PathBuf>> = HashMap::new();
     for (name, path) in owned {
         if let Some(file) = Path::new(&path).file_name() {
-            out.entry(name).or_insert_with(|| folder.join(file));
+            let launchers = out.entry(name).or_default();
+            let launcher = folder.join(file);
+            if !launchers.contains(&launcher) {
+                launchers.push(launcher);
+            }
         }
     }
     out
@@ -237,10 +264,10 @@ mod tests {
         );
         let found = owners(&machine, Manager::Pacman, &asked, &folder);
         assert_eq!(found.len(), 2, "{found:?}");
-        assert_eq!(found["gimp"], folder.join("gimp.desktop"));
+        assert_eq!(found["gimp"], [folder.join("gimp.desktop")]);
         assert_eq!(
             found["inkscape"],
-            folder.join("org.inkscape.Inkscape.desktop")
+            [folder.join("org.inkscape.Inkscape.desktop")]
         );
     }
 
@@ -280,11 +307,11 @@ mod tests {
         }
         let found = owners(&machine, Manager::Rpm, &asked, &folder);
         assert_eq!(found.len(), 3, "{found:?}");
-        assert_eq!(found["wine-desktop"], folder.join("wine.desktop"));
-        assert_eq!(found["gimp"], folder.join("gimp.desktop"));
+        assert_eq!(found["wine-desktop"], [folder.join("wine.desktop")]);
+        assert_eq!(found["gimp"], [folder.join("gimp.desktop")]);
         assert_eq!(
             found["inkscape"],
-            folder.join("org.inkscape.Inkscape.desktop")
+            [folder.join("org.inkscape.Inkscape.desktop")]
         );
         assert_eq!(
             machine.ran().len(),
@@ -306,7 +333,39 @@ mod tests {
         );
         let found = owners(&machine, Manager::Rpm, &asked, &folder);
         assert_eq!(found.len(), 1, "{found:?}");
-        assert_eq!(found["gimp"], folder.join("gimp.desktop"));
+        assert_eq!(found["gimp"], [folder.join("gimp.desktop")]);
         assert_eq!(machine.ran().len(), 1);
+    }
+
+    /// A package's helper launchers are hidden and may be listed first
+    /// (`-` sorts before `.`): its menu entry decides, by its own name.
+    #[test]
+    fn a_package_is_named_by_its_visible_launcher_whatever_the_order() {
+        let machine = Machine::new(&["pacman"]);
+        let (_, folder) = launchers(&machine, &[]);
+        std::fs::create_dir_all(&folder).unwrap();
+        let write = |file: &str, body: &str| {
+            std::fs::write(folder.join(file), format!("[Desktop Entry]\n{body}")).unwrap();
+            folder.join(file)
+        };
+        let nautilus = [
+            write(
+                "nautilus-autorun-software.desktop",
+                "Name=Run Software\nNoDisplay=true\n",
+            ),
+            write("org.gnome.Nautilus.desktop", "Name=Files\n"),
+        ];
+        assert_eq!(shown_name("nautilus", &nautilus).as_deref(), Some("Files"));
+        let office = [
+            write("libreoffice-base.desktop", "Name=LibreOffice Base\n"),
+            write("libreoffice-calc.desktop", "Name=LibreOffice Calc\n"),
+            write("libreoffice-startcenter.desktop", "Name=LibreOffice\n"),
+        ];
+        assert_eq!(
+            shown_name("libreoffice-fresh", &office).as_deref(),
+            Some("LibreOffice")
+        );
+        let helper = [write("helper.desktop", "Name=Helper\nHidden=true\n")];
+        assert_eq!(shown_name("helper", &helper), None);
     }
 }

@@ -10,7 +10,8 @@ use crate::sys;
 
 /// File systems that hold a person's files on Linux. Not ZFS: a dataset
 /// is usually compressed, and stores the zeros a wipe writes as nothing, so
-/// the wipe would never fill it.
+/// the wipe would never fill it (nor a Btrfs or bcachefs mount that
+/// compresses, see [`compresses`]).
 #[cfg(any(test, not(target_os = "macos")))]
 const REAL: &[&str] = &[
     "ext2", "ext3", "ext4", "btrfs", "xfs", "f2fs", "jfs", "reiserfs", "bcachefs", "vfat", "exfat",
@@ -19,7 +20,7 @@ const REAL: &[&str] = &[
 
 /// One line of `/proc/self/mounts`: the device, where it is mounted, the
 /// file system, with `\040`-style escapes undone, and whether it is
-/// mounted read-only.
+/// mounted read-only or compresses what is written.
 #[cfg(any(test, not(target_os = "macos")))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Mount {
@@ -27,6 +28,7 @@ pub struct Mount {
     pub point: String,
     pub file_system: String,
     pub read_only: bool,
+    pub compressed: bool,
 }
 
 #[cfg(any(test, not(target_os = "macos")))]
@@ -34,16 +36,32 @@ pub fn parse_mounts(text: &str) -> Vec<Mount> {
     text.lines()
         .filter_map(|line| {
             let mut fields = line.split_whitespace();
+            let device = unescape(fields.next()?);
+            let point = unescape(fields.next()?);
+            let file_system = fields.next()?.to_string();
+            let options = fields.next().unwrap_or_default();
             Some(Mount {
-                device: unescape(fields.next()?),
-                point: unescape(fields.next()?),
-                file_system: fields.next()?.to_string(),
-                read_only: fields
-                    .next()
-                    .is_some_and(|options| options.split(',').any(|option| option == "ro")),
+                device,
+                point,
+                file_system,
+                read_only: options.split(',').any(|option| option == "ro"),
+                compressed: compresses(options),
             })
         })
         .collect()
+}
+
+/// Whether mount options turn compression on: Btrfs's `compress` and
+/// `compress-force` (as Fedora and Arch installers mount it), bcachefs's
+/// `compression`. A wipe's zeros would take a sliver of their size there,
+/// so the disk would fill only after many times its free space.
+#[cfg(any(test, not(target_os = "macos")))]
+fn compresses(options: &str) -> bool {
+    options.split(',').any(|option| {
+        let (name, value) = option.split_once('=').unwrap_or((option, ""));
+        matches!(name, "compress" | "compress-force" | "compression")
+            && !matches!(value, "no" | "none")
+    })
 }
 
 #[cfg(any(test, not(target_os = "macos")))]
@@ -82,8 +100,12 @@ pub fn wipeable(mounts: &[Mount]) -> Vec<&Mount> {
         let system = ["/boot", "/efi", "/snap", "/var/lib/snapd"]
             .iter()
             .any(|top| mount.point == *top || mount.point.starts_with(&format!("{top}/")));
-        if real && !system && !mount.read_only && !seen.contains(&mount.device.as_str()) {
-            seen.push(&mount.device);
+        if !real || system || mount.read_only || seen.contains(&mount.device.as_str()) {
+            continue;
+        }
+        // Compression is the file system's, whichever mount shows it.
+        seen.push(&mount.device);
+        if !mount.compressed {
             out.push(mount);
         }
     }
@@ -224,130 +246,5 @@ fn mount_of<'a>(mounts: &'a [Mount], path: &Path) -> Option<&'a Mount> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const MOUNTS: &str = "\
-/dev/nvme0n1p2 / btrfs rw,subvol=/@ 0 0
-proc /proc proc rw 0 0
-tmpfs /tmp tmpfs rw 0 0
-/dev/nvme0n1p2 /home btrfs rw,subvol=/@home 0 0
-/dev/nvme0n1p1 /boot/efi vfat rw 0 0
-/dev/loop3 /snap/core/16928 squashfs ro 0 0
-/dev/sdb1 /media/t/USB\\040Stick exfat rw 0 0
-";
-
-    #[test]
-    fn real_drives_are_listed_once_with_their_names_unescaped() {
-        let mounts = parse_mounts(MOUNTS);
-        let points: Vec<&str> = wipeable(&mounts).iter().map(|m| m.point.as_str()).collect();
-        assert_eq!(points, ["/", "/media/t/USB Stick"]);
-        assert_eq!(unescape(r"a\134b\x"), r"a\b\x");
-    }
-
-    /// ostree systems mount the root device read-only at /sysroot first;
-    /// ZFS datasets are never wiped (a zero fill never fills a compressed
-    /// one).
-    #[test]
-    fn a_read_only_first_mount_does_not_hide_the_writable_one() {
-        let mounts = parse_mounts(
-            "/dev/vda3 /sysroot xfs ro,relatime 0 0\n\
-             /dev/vda3 /var xfs rw,relatime 0 0\n\
-             rpool/ROOT/ubuntu /srv/pool zfs rw,xattr 0 0\n",
-        );
-        let points: Vec<&str> = wipeable(&mounts).iter().map(|m| m.point.as_str()).collect();
-        assert_eq!(points, ["/var"]);
-    }
-
-    /// openSUSE's layout: `/`, `/home` and `/var` are subvolumes of one
-    /// Btrfs device, `/tmp` is in memory.
-    #[test]
-    fn a_wipe_folder_counts_on_any_mount_of_the_drives_device() {
-        let mounts = parse_mounts(
-            "/dev/nvme0n1p2 / btrfs rw,subvol=/@/.snapshots/1/snapshot 0 0\n\
-             tmpfs /tmp tmpfs rw 0 0\n\
-             /dev/nvme0n1p2 /home btrfs rw,subvol=/@/home 0 0\n\
-             /dev/nvme0n1p2 /var btrfs rw,subvol=/@/var 0 0\n\
-             /dev/sdb1 /media/t/USB exfat rw 0 0\n\
-             tmpfs /media/t/USB tmpfs rw 0 0\n",
-        );
-        let on_root = |folder: &str| same_device(&mounts, Path::new("/"), Path::new(folder));
-        assert!(on_root("/home/t"));
-        assert!(on_root("/var/tmp"));
-        assert!(on_root("/homework"));
-        assert!(!on_root("/tmp"));
-        assert!(!on_root("/tmp/sub"));
-        assert!(!on_root("/media/t/USB/folder"));
-        let hidden = mount_of(&mounts, Path::new("/media/t/USB/folder")).unwrap();
-        assert_eq!(
-            hidden.file_system, "tmpfs",
-            "the later mount hides the disk"
-        );
-        assert!(!same_device(
-            &mounts,
-            Path::new("/media/t/USB"),
-            Path::new("/home/t")
-        ));
-        assert_eq!(
-            mount_of(&mounts, Path::new("/home/t")).unwrap().point,
-            "/home"
-        );
-        assert_eq!(
-            mount_of(&mounts, Path::new("/homework")).unwrap().point,
-            "/"
-        );
-    }
-
-    #[test]
-    fn a_wipe_writes_on_the_drive_itself() {
-        let dir = tempfile::tempdir().unwrap();
-        let space = sys::space(dir.path()).unwrap();
-        let drive = Drive {
-            root: dir.path().to_string_lossy().into_owned(),
-            label: String::new(),
-            file_system: String::new(),
-            free: space.free,
-            total: space.total,
-            removable: false,
-        };
-        let inside = dir.path().join("inside");
-        std::fs::create_dir(&inside).unwrap();
-        // A folder on another file system, even to an administrator: macOS's
-        // read-only system volume, Linux's /proc (its `/` may share the
-        // temporary folder's device).
-        let elsewhere = PathBuf::from(if cfg!(target_os = "macos") {
-            "/"
-        } else {
-            "/proc"
-        });
-        assert_eq!(wipe_folder(&drive, &[elsewhere, inside.clone()]), inside);
-        assert_eq!(wipe_folder(&drive, &[]), dir.path());
-    }
-
-    /// macOS: the data volume's folders are not below its mount point.
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn a_wipe_writes_on_the_same_volume_wherever_its_path_points() {
-        let root = tempfile::tempdir().unwrap();
-        let elsewhere = tempfile::tempdir().unwrap();
-        let space = sys::space(root.path()).unwrap();
-        let drive = Drive {
-            root: root.path().to_string_lossy().into_owned(),
-            label: String::new(),
-            file_system: String::new(),
-            free: space.free,
-            total: space.total,
-            removable: false,
-        };
-        let candidate = elsewhere.path().to_path_buf();
-        assert_eq!(
-            wipe_folder(&drive, std::slice::from_ref(&candidate)),
-            candidate
-        );
-    }
-
-    #[test]
-    fn this_machine_has_a_drive_to_wipe() {
-        assert!(!drives().is_empty());
-    }
-}
+#[path = "drives_tests.rs"]
+mod tests;

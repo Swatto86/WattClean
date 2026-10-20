@@ -101,6 +101,14 @@ export const testBuild = (): { label: string; title: string } =>
         title: `This test build cleans a sandboxed test disk, but Uninstall programs acts on this ${machineName()}'s real programs.`,
       };
 
+/** Why Wipe free space lists no drive. Linux leaves out file systems that
+ *  compress (ZFS, Btrfs mounted with compression), where a wipe's zeros
+ *  would take almost no space. */
+export const noDriveToWipe = (): string =>
+  current === "linux"
+    ? "No drive here can be wiped: WattClean offers only local drives this account can write to, and none that compresses what is written (ZFS, or Btrfs as most systems mount it), where a wipe's zeros would take almost no space."
+    : "No drive here can be wiped: WattClean offers only local drives this account can write to.";
+
 /** Shown instead of the pages when the system's web engine has no
  *  <dialog>, which every confirmation uses (Safari 15.4, macOS 12.3). */
 export const webEngineTooOld = (): string => {

@@ -6,7 +6,7 @@ import type { Context, Page } from "../context.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, duration, percent } from "../format.ts";
-import { wipeCaveat } from "../platform.ts";
+import { noDriveToWipe, wipeCaveat } from "../platform.ts";
 
 export const wipePage = (_ctx: Context): Page => {
   let running = false;
@@ -22,7 +22,7 @@ export const wipePage = (_ctx: Context): Page => {
   const none = el("p", {
     class: "muted",
     id: "wipe-none",
-    text: "No drive here can be wiped: WattClean offers only local drives this account can write to.",
+    text: noDriveToWipe(),
     hidden: true,
   });
   const progress = el("div", { id: "wipe-progress" });

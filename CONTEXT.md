@@ -33,7 +33,10 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
 - **The tray icon is always there**, and closing the window hides to it by
   default, so the Registry Watcher keeps watching (WattRegClean's reason)
   and the suite feels like one background tool; Quit is in the icon's menu
-  and in Settings. Switching "keep running" off makes closing quit.
+  and in Settings. Switching "keep running" off makes closing quit, and so
+  does a Linux Wayland session with no StatusNotifier host (GNOME without
+  the AppIndicator extension), where a hidden window could not be found
+  again (2026-10-20; Settings says so).
 - **Per-machine install** (`Program Files\WattClean`, one UAC prompt), as
   WattRegClean was: starting elevated at sign-in through Task Scheduler must
   run an executable an ordinary process cannot replace. Data stays per user.
@@ -144,8 +147,12 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   `wl-paste --list-types`), never by reading it; with only xsel, which
   cannot list them, the clear is always offered. Linux free-space wipes
   skip ZFS (a compressed dataset stores the zeros as nothing, so the wipe
-  would never fill it) and read-only mounts, and write in a folder on any
-  mount of the drive's device (Btrfs subvolumes).
+  would never fill it), any Btrfs or bcachefs whose mounts compress
+  (`compress`, `compress-force`, `compression`: Fedora's and Omarchy's
+  default, 2026-10-20) and read-only mounts, and write in a folder on any
+  mount of the drive's device (Btrfs subvolumes). The AUR helpers' records
+  of `-git` packages (yay's `vcs.json`, paru's old `devel.json`) are kept
+  when their caches are cleaned.
 - **The uninstaller on Linux and macOS is a package engine**
   (`wu-core/src/packages`, `wu-unix`), not the registry one: it lists what
   apt/dpkg, dnf/zypper/rpm, pacman, Flatpak, Snap, Homebrew (formulae and

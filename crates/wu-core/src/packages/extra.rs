@@ -6,7 +6,8 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use super::leftovers::{Leftover, keys_for, leftover};
+use super::keys::keys_for;
+use super::leftovers::{Leftover, leftover};
 use super::{Manager, Package, PackageSystem};
 
 /// `their_keys` are the names every other installed package goes by and

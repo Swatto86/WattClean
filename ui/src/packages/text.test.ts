@@ -74,3 +74,14 @@ test("the password for items in /Library is promised only when one is listed", (
   assert.ok(orphansIntro(both).endsWith(asks));
   assert.ok(orphansIntro(home).includes("apps that are no longer on this Mac"));
 });
+
+test("only macOS's leftovers are said to include background jobs", () => {
+  setPlatform("linux");
+  const intro = leftoversIntro("VLC", [leftover(false, false, 1)]);
+  assert.equal(
+    intro,
+    "Tick what to move to the Trash. Only items named after VLC are listed; check each one, since another program may share a name.",
+  );
+  setPlatform("macos");
+  assert.ok(leftoversIntro("Tea", []).includes("background jobs"));
+});

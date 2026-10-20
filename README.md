@@ -85,8 +85,10 @@ tools are Windows-only, as only Windows has a registry.
   winapp2.ini, deleting in-use files at restart and starting with the
   system are Windows-only.
 
-Linux packages: `.deb`, `.rpm` and AppImage (WebKitGTK 4.1; the icon by
-the clock needs an AppIndicator-capable desktop). macOS: an app in a
+Linux packages: `.deb`, `.rpm` and AppImage (WebKitGTK 4.1; the AppImage
+is the one for Arch Linux and Arch-based systems such as Omarchy; the icon
+by the clock needs an AppIndicator-capable desktop, and without one
+closing the window quits). macOS: an app in a
 `.dmg` (macOS 11 or later); some folders (the Trash, Safari's) need Full
 Disk Access in System Settings › Privacy & Security. Data:
 `~/.local/share/WattClean` on Linux, `~/Library/Application

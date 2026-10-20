@@ -131,3 +131,31 @@ fn macos_free_space_wipe_warns_of_lost_local_snapshots() {
         "{warning:?}"
     );
 }
+
+/// yay keeps its record of each -git package's last commit in its cache
+/// folder (`vcs.json`), and paru did before moving it: cleaning the cache
+/// must leave them, or `--devel` updates stop seeing those packages.
+#[test]
+fn the_aur_helpers_records_of_git_packages_are_kept() {
+    let excluded = |option: &CleanerOption| -> Vec<String> {
+        option
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                Action::Delete(spec) => Some(spec.exclude.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    };
+    let aur = cleaner(Platform::Linux, "aur_helpers");
+    assert!(excluded(option(&aur, "cache")).contains(&"%XDG_CACHE_HOME%/yay/vcs.json".to_string()));
+    let system = cleaner(Platform::Linux, "system");
+    let caches = excluded(option(&system, "cache"));
+    for record in ["yay/vcs.json", "paru/devel.json"] {
+        assert!(
+            caches.contains(&format!("%XDG_CACHE_HOME%/{record}")),
+            "{caches:?}"
+        );
+    }
+}
