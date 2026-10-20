@@ -15,6 +15,7 @@ import {
   type ShellSettings,
 } from "./api.ts";
 import { type Context, type Page, type SettingsSection } from "./context.ts";
+import { failure } from "./decode.ts";
 import { dialogsWork, inform } from "./dialog.ts";
 import { el, glyph, notice, setText } from "./dom.ts";
 import { unixPages, windowsPages } from "./pagelist.ts";
@@ -80,7 +81,7 @@ const boot = async (): Promise<void> => {
   }
 
   const restartAsAdmin = () => {
-    api.restartAsAdmin().catch((e: unknown) => notice(String(e), true));
+    api.restartAsAdmin().catch((e: unknown) => notice(failure(e), true));
   };
   const host = { restartAsAdmin, reveal };
   const modules = isWindows()
@@ -238,7 +239,7 @@ const boot = async (): Promise<void> => {
     collapse(collapsed);
     ctx
       .updateShell({ navCollapsed: collapsed })
-      .catch((e: unknown) => notice(String(e), true));
+      .catch((e: unknown) => notice(failure(e), true));
   });
 
   // The notification-area icon's menu opens a page.
@@ -275,6 +276,6 @@ const statusBar = (info: AppInfo, restartAsAdmin: () => void): void => {
 };
 
 boot().catch(async (error: unknown) => {
-  document.body.textContent = `WattClean could not start: ${String(error)}`;
+  document.body.textContent = `WattClean could not start: ${failure(error)}`;
   await getCurrentWindow().show();
 });

@@ -2,6 +2,7 @@
 
 import { api, type ShredReport } from "../api.ts";
 import type { Context, Page } from "../context.ts";
+import { failure } from "../decode.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, count, plural } from "../format.ts";
@@ -81,7 +82,7 @@ export const shredPage = (_ctx: Context): Page => {
       }
       draw();
     } catch (error) {
-      notice(String(error), true);
+      notice(failure(error), true);
     }
   };
 
@@ -135,7 +136,7 @@ export const shredPage = (_ctx: Context): Page => {
       queue.splice(0, queue.length, ...left);
       show(report);
     } catch (error) {
-      notice(String(error), true);
+      notice(failure(error), true);
     } finally {
       running = false;
       stop.hidden = true;
@@ -152,7 +153,7 @@ export const shredPage = (_ctx: Context): Page => {
   });
   start.addEventListener("click", () => void shred());
   stop.addEventListener("click", () => {
-    api.cancelJob().catch((e: unknown) => notice(String(e), true));
+    api.cancelJob().catch((e: unknown) => notice(failure(e), true));
   });
 
   const element = el(

@@ -3,6 +3,7 @@
 
 import { api, type Drive } from "../api.ts";
 import type { Context, Page } from "../context.ts";
+import { failure } from "../decode.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, duration, percent } from "../format.ts";
@@ -71,7 +72,7 @@ export const wipePage = (_ctx: Context): Page => {
       drives.replaceChildren(...list.map(driveCard));
       none.hidden = list.length > 0;
     } catch (error) {
-      notice(String(error), true);
+      notice(failure(error), true);
     }
   };
 
@@ -120,7 +121,7 @@ export const wipePage = (_ctx: Context): Page => {
         el(
           "div",
           { class: "banner danger" },
-          el("span", { class: "banner-text", text: String(error) }),
+          el("span", { class: "banner-text", text: failure(error) }),
         ),
       );
     } finally {
@@ -133,7 +134,7 @@ export const wipePage = (_ctx: Context): Page => {
 
   refresh.addEventListener("click", () => void load());
   stop.addEventListener("click", () => {
-    api.cancelJob().catch((e: unknown) => notice(String(e), true));
+    api.cancelJob().catch((e: unknown) => notice(failure(e), true));
   });
 
   const element = el(

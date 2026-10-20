@@ -3,6 +3,7 @@
 
 import { api, type PathEntry, type SettingsPatch } from "../api.ts";
 import type { Context } from "../context.ts";
+import { failure } from "../decode.ts";
 import { el, glyph, notice } from "../dom.ts";
 
 export const pathList = (
@@ -51,7 +52,7 @@ export const pathList = (
       if (path)
         await save({ [field]: [...ctx.settings()[field], { path, folder }] });
     } catch (error) {
-      notice(String(error), true);
+      notice(failure(error), true);
     }
   };
   const addFile = el(

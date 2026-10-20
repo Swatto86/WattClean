@@ -5,6 +5,7 @@
 
 import { api, type Settings, type SettingsPatch } from "../api.ts";
 import type { Context, Page } from "../context.ts";
+import { failure } from "../decode.ts";
 import { confirm } from "../dialog.ts";
 import { el, notice } from "../dom.ts";
 import { plural } from "../format.ts";
@@ -48,7 +49,7 @@ export const settingsPage = (ctx: Context): Page => {
       .then(() => {
         status.textContent = "Saved.";
       })
-      .catch((e: unknown) => notice(String(e), true));
+      .catch((e: unknown) => notice(failure(e), true));
 
   const shell = general(ctx, group, note);
 
@@ -151,7 +152,7 @@ export const settingsPage = (ctx: Context): Page => {
       );
       problems.hidden = catalog.problems.length === 0;
     } catch (error) {
-      notice(String(error), true);
+      notice(failure(error), true);
     }
   };
   const busyButton = (
@@ -169,7 +170,7 @@ export const settingsPage = (ctx: Context): Page => {
       button.disabled = true;
       work()
         .then(refreshCommunity)
-        .catch((e: unknown) => notice(String(e), true))
+        .catch((e: unknown) => notice(failure(e), true))
         .finally(() => {
           button.disabled = false;
         });

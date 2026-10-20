@@ -2,6 +2,7 @@
 
 import { api, type HistoryEntry } from "../api.ts";
 import type { Context, Page } from "../context.ts";
+import { failure } from "../decode.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, count, when } from "../format.ts";
@@ -113,7 +114,7 @@ export const historyPage = (_ctx: Context): Page => {
         ),
       );
     } catch (error) {
-      notice(String(error), true);
+      notice(failure(error), true);
     }
   };
 
@@ -129,7 +130,7 @@ export const historyPage = (_ctx: Context): Page => {
         await api.clearHistory();
         await load();
       } catch (error) {
-        notice(String(error), true);
+        notice(failure(error), true);
       }
     })();
   });

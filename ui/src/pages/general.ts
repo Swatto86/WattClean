@@ -5,6 +5,7 @@
 
 import { api, TEXT_SIZES, THEMES, type ShellSettings } from "../api.ts";
 import type { Context } from "../context.ts";
+import { failure } from "../decode.ts";
 import { el, notice } from "../dom.ts";
 import {
   isWindows,
@@ -45,7 +46,7 @@ export const general = (
   group: Group,
   note: (text: string) => HTMLElement,
 ): General => {
-  const fail = (e: unknown) => notice(String(e), true);
+  const fail = (e: unknown) => notice(failure(e), true);
 
   const theme = select("set-theme", "Theme", [
     ["system", `Same as ${osName()}`],

@@ -3,6 +3,7 @@
 
 import { api, type Catalog, type Mode, type Report } from "../api.ts";
 import type { Context, Page } from "../context.ts";
+import { failure } from "../decode.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { plural } from "../format.ts";
@@ -99,7 +100,7 @@ export const cleanerPage = (ctx: Context): Page => {
     saveTimer = window.setTimeout(() => {
       ctx
         .update({ selection: [...ticked] })
-        .catch((e: unknown) => notice(String(e), true));
+        .catch((e: unknown) => notice(failure(e), true));
     }, 400);
   };
 
@@ -136,7 +137,7 @@ export const cleanerPage = (ctx: Context): Page => {
       redraw();
       if (!running && !results.querySelector("#report-tiles")) idle();
     } catch (error) {
-      notice(`The cleaner list could not be read: ${String(error)}`, true);
+      notice(`The cleaner list could not be read: ${failure(error)}`, true);
     }
   };
 
@@ -197,7 +198,7 @@ export const cleanerPage = (ctx: Context): Page => {
       await ctx
         .update({ confirm: false })
         .catch((e: unknown) =>
-          notice(`"Don't ask again" could not be saved: ${String(e)}`, true),
+          notice(`"Don't ask again" could not be saved: ${failure(e)}`, true),
         );
     return true;
   };
@@ -220,11 +221,13 @@ export const cleanerPage = (ctx: Context): Page => {
       results.replaceChildren(
         ...renderReport(report, ctx.info.elevated, {
           restartAsAdmin: () =>
-            api.restartAsAdmin().catch((e: unknown) => notice(String(e), true)),
+            api
+              .restartAsAdmin()
+              .catch((e: unknown) => notice(failure(e), true)),
           openPrivacySettings: () =>
             api
               .openPrivacySettings()
-              .catch((e: unknown) => notice(String(e), true)),
+              .catch((e: unknown) => notice(failure(e), true)),
         }),
       );
       if (mode === "clean") {
@@ -239,7 +242,7 @@ export const cleanerPage = (ctx: Context): Page => {
         el(
           "div",
           { class: "banner danger" },
-          el("span", { class: "banner-text", text: String(error) }),
+          el("span", { class: "banner-text", text: failure(error) }),
         ),
       );
     } finally {
@@ -252,7 +255,7 @@ export const cleanerPage = (ctx: Context): Page => {
   preview.addEventListener("click", () => void run("preview"));
   clean.addEventListener("click", () => void run("clean"));
   stop.addEventListener("click", () => {
-    api.cancelJob().catch((e: unknown) => notice(String(e), true));
+    api.cancelJob().catch((e: unknown) => notice(failure(e), true));
   });
   selectAll.addEventListener("click", () => void tickAll());
   selectDefaults.addEventListener("click", () => {
@@ -267,7 +270,7 @@ export const cleanerPage = (ctx: Context): Page => {
     ctx
       .update({ hideIrrelevant: !showAll.checked })
       .then(redraw)
-      .catch((e: unknown) => notice(String(e), true));
+      .catch((e: unknown) => notice(failure(e), true));
   });
   ctx.onSettings(() => redraw());
 

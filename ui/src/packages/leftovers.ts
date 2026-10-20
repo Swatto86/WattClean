@@ -2,6 +2,7 @@
 // (macOS): a dialog lists them, nothing ticked, each can be shown in the
 // file manager first, and the ticked ones go to the Trash.
 
+import { failure } from "../decode.ts";
 import { inform } from "../dialog.ts";
 import { el, notice } from "../dom.ts";
 import { plural } from "../format.ts";
@@ -40,7 +41,7 @@ const chooseLeftovers = (
       button.addEventListener("click", () => {
         shown.textContent = "";
         packagesApi.reveal(leftover.number).catch((error: unknown) => {
-          shown.textContent = String(error);
+          shown.textContent = failure(error);
         });
       });
       return button;

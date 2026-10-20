@@ -154,11 +154,20 @@ impl Output {
     /// line on stdout, where package managers print their progress. When
     /// Homebrew's error only introduces the output of a step that failed
     /// ("… Here's the output:"), the first line of that output is the cause.
+    /// pacman's `error:` on stderr is general ("could not satisfy
+    /// dependencies"); the reason is its last `:: ` line on stdout.
     pub fn last_words(&self) -> Option<&str> {
         fn said(text: &str) -> impl DoubleEndedIterator<Item = &str> {
             text.lines().map(str::trim).filter(|line| !line.is_empty())
         }
         let errors: Vec<&str> = said(&self.stderr).collect();
+        if errors.iter().any(|line| line.starts_with("error:"))
+            && let Some(reason) = said(&self.stdout)
+                .rev()
+                .find_map(|line| line.strip_prefix(":: "))
+        {
+            return Some(reason);
+        }
         let error = errors
             .iter()
             .rposition(|line| line.starts_with("Error:") || line.starts_with("E:"));

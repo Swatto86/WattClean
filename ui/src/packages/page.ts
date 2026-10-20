@@ -6,6 +6,7 @@
 // background jobs of apps already gone the same way.
 
 import type { Context, Page } from "../context.ts";
+import { failure } from "../decode.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, count, plural } from "../format.ts";
@@ -169,7 +170,7 @@ export const programsPage = (_ctx: Context): Page => {
       );
       problems.hidden = list.problems.length === 0;
     } catch (error) {
-      if (ticket === loading) notice(String(error), true);
+      if (ticket === loading) notice(failure(error), true);
     } finally {
       if (ticket === loading) {
         busy = false;
@@ -209,7 +210,7 @@ export const programsPage = (_ctx: Context): Page => {
         );
       }
     } catch (error) {
-      notice(String(error), true);
+      notice(failure(error), true);
     } finally {
       removing = false;
       await load();
@@ -239,7 +240,7 @@ export const programsPage = (_ctx: Context): Page => {
         );
       }
     } catch (error) {
-      notice(String(error), true);
+      notice(failure(error), true);
     } finally {
       removing = false;
       draw();

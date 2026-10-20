@@ -93,7 +93,7 @@ export class ProgramList {
       this.render();
     } catch (error: unknown) {
       if (ticket === this.loading)
-        this.count.textContent = `Could not read the program list: ${String(error)}`;
+        this.count.textContent = `Could not read the program list: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 

@@ -27,11 +27,17 @@ fn a_programs_last_words_are_its_error_not_its_progress() {
             ),
         ),
         (
+            // pacman 7, as it printed on Arch Linux.
             said(
-                "checking dependencies...\n",
-                "error: failed to prepare transaction (could not satisfy dependencies)\n:: removing python breaks dependency 'python' required by meson\n\n",
+                "checking dependencies...\n:: removing testlib breaks dependency 'testlib' required by needer\n",
+                "warning: database file for 'core' does not exist (use '-Sy' to download)\n\
+                 error: failed to prepare transaction (could not satisfy dependencies)\n",
             ),
-            Some(":: removing python breaks dependency 'python' required by meson"),
+            Some("removing testlib breaks dependency 'testlib' required by needer"),
+        ),
+        (
+            said("", "error: target not found: nosuchthing\n"),
+            Some("error: target not found: nosuchthing"),
         ),
         (said("Removing vlc...\n  done\n", "  \n"), Some("done")),
         (said("", ""), None),
