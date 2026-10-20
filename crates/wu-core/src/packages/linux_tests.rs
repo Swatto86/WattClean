@@ -54,20 +54,28 @@ fn only_snaps_with_a_launcher_are_applications() {
         "Name               Version   Rev    Tracking       Publisher   Notes\n\
          firefox            131.0     4793   latest/stable  mozilla✓    -\n\
          gnome-42-2204      0+git     176    latest/stable  canonical✓  -\n\
-         gtk-common-themes  0.1-81    1535   latest/stable  canonical✓  -\n",
+         gtk-common-themes  0.1-81    1535   latest/stable  canonical✓  -\n\
+         firefox_beta       132.0b1   4801   latest/beta    mozilla✓    -\n\
+         snapd-desktop-integration 0.9 178 latest/stable canonical✓ -\n",
     );
     let exported = machine.at("/var/lib/snapd/desktop/applications");
     std::fs::create_dir_all(&exported).unwrap();
-    std::fs::write(
-        exported.join("firefox_firefox.desktop"),
-        "[Desktop Entry]\nName=Firefox\n",
-    )
-    .unwrap();
+    for (file, body) in [
+        ("firefox_firefox.desktop", "Name=Firefox\n"),
+        ("firefox+beta_firefox.desktop", "Name=Firefox\n"),
+        (
+            "snapd-desktop-integration_snapd-desktop-integration.desktop",
+            "Name=Desktop integration\nNoDisplay=true\n",
+        ),
+    ] {
+        std::fs::write(exported.join(file), format!("[Desktop Entry]\n{body}")).unwrap();
+    }
     let (apps, _) = crate::packages::list(&machine, false);
-    let names: Vec<&str> = apps.iter().map(|p| p.id.as_str()).collect();
-    assert_eq!(names, ["firefox"]);
+    let mut names: Vec<&str> = apps.iter().map(|p| p.id.as_str()).collect();
+    names.sort_unstable();
+    assert_eq!(names, ["firefox", "firefox_beta"]);
     let (all, _) = crate::packages::list(&machine, true);
-    assert_eq!(all.len(), 3);
+    assert_eq!(all.len(), 5);
 }
 
 /// One Flatpak app may be installed for the account and for everyone:
@@ -86,6 +94,14 @@ fn a_flatpak_installed_twice_is_listed_twice() {
     assert_eq!(
         keys,
         ["Flatpak:system:org.gimp.GIMP", "Flatpak:user:org.gimp.GIMP"]
+    );
+    let said: Vec<Option<&str>> = packages.iter().map(|p| p.summary.as_deref()).collect();
+    assert_eq!(
+        said,
+        [
+            Some("Installed for every account"),
+            Some("Installed for this account")
+        ]
     );
 }
 

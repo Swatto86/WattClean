@@ -218,6 +218,11 @@ impl System for UnixSystem {
             .collect()
     }
 
+    #[cfg(not(target_os = "macos"))]
+    fn compresses(&self, drive: &Drive) -> bool {
+        drives::compresses(&drive.root)
+    }
+
     /// The drive with the same device as `path`; else by path (a
     /// memory-backed `/tmp` belongs to the root's drive, where the wipe then
     /// picks a folder on the real disk).

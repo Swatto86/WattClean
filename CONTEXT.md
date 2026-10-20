@@ -149,8 +149,13 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   skip ZFS (a compressed dataset stores the zeros as nothing, so the wipe
   would never fill it), any Btrfs or bcachefs whose mounts compress
   (`compress`, `compress-force`, `compression`: Fedora's and Omarchy's
-  default, 2026-10-20) and read-only mounts, and write in a folder on any
-  mount of the drive's device (Btrfs subvolumes). The AUR helpers' records
+  default, 2026-10-20; `background_compression` alone writes the zeros at
+  full size, so it is wiped) and read-only mounts, and
+  write in a folder on any mount of the drive's device (Btrfs subvolumes).
+  A compressing drive stays a drive (its Trash is counted and emptied, a
+  wipe's leftovers on it are removed); only the Wipe page leaves it out,
+  and the "Free disk space" option reports it as a problem
+  (`System::compresses`). The AUR helpers' records
   of `-git` packages (yay's `vcs.json`, paru's old `devel.json`) are kept
   when their caches are cleaned.
 - **The uninstaller on Linux and macOS is a package engine**

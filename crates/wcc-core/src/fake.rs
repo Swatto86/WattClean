@@ -46,6 +46,8 @@ pub struct FakeSystem {
     /// The system the engine is told it runs on: Windows unless a test
     /// says otherwise (`posing_as`).
     platform: Platform,
+    /// Its drive compresses what is written (`compressing`).
+    compressing: bool,
 }
 
 /// A key as the test machine files it: short hive, the rest lower case.
@@ -70,6 +72,7 @@ impl FakeSystem {
             root,
             state: Mutex::new(state),
             platform: Platform::Windows,
+            compressing: false,
         })
     }
 
@@ -78,6 +81,14 @@ impl FakeSystem {
     #[must_use]
     pub fn posing_as(mut self, platform: Platform) -> Self {
         self.platform = platform;
+        self
+    }
+
+    /// Makes its drive one that compresses what is written, as a Btrfs
+    /// mounted with compression does.
+    #[must_use]
+    pub fn compressing(mut self) -> Self {
+        self.compressing = true;
         self
     }
 
@@ -295,6 +306,10 @@ impl System for FakeSystem {
             total: 64 << 20,
             removable: false,
         }]
+    }
+
+    fn compresses(&self, _drive: &Drive) -> bool {
+        self.compressing
     }
 
     fn free_space(&self, _path: &Path) -> io::Result<u64> {

@@ -323,6 +323,7 @@ export const settingsPage = (ctx: Context): Page => {
     commands: [],
     onShow: () => {
       void refreshCommunity();
+      shell.refreshTray();
       for (const section of ctx.sections) section.onShow?.();
     },
   };

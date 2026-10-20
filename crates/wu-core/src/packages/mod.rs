@@ -154,14 +154,18 @@ impl Output {
     /// line on stdout, where package managers print their progress. When
     /// Homebrew's error only introduces the output of a step that failed
     /// ("… Here's the output:"), the first line of that output is the cause.
-    /// pacman's `error:` on stderr is general ("could not satisfy
-    /// dependencies"); the reason is its last `:: ` line on stdout.
+    /// When pacman's dependency check fails, its `error:` on stderr is
+    /// general ("could not satisfy dependencies") and the reasons are its
+    /// `:: ` lines on stdout; the last is given. Its other `:: ` lines are
+    /// progress (hooks, prompts), printed only once that check passed.
     pub fn last_words(&self) -> Option<&str> {
         fn said(text: &str) -> impl DoubleEndedIterator<Item = &str> {
             text.lines().map(str::trim).filter(|line| !line.is_empty())
         }
         let errors: Vec<&str> = said(&self.stderr).collect();
-        if errors.iter().any(|line| line.starts_with("error:"))
+        if errors
+            .iter()
+            .any(|line| line.starts_with("error: failed to prepare transaction"))
             && let Some(reason) = said(&self.stdout)
                 .rev()
                 .find_map(|line| line.strip_prefix(":: "))

@@ -28,7 +28,18 @@ export interface General {
   about: HTMLFieldSetElement;
   /** Shows the shell's settings as saved now. */
   apply: (shell: ShellSettings) => void;
+  /** Says again whether the desktop shows the tray icon, which closing
+   *  the window checks each time (a tray may start after WattClean). */
+  refreshTray: () => void;
 }
+
+/** What closing the window does, as the tray setting's note says it. */
+const trayNote = (shown: boolean): string =>
+  !shown
+    ? `This desktop shows no ${trayName()}, so closing the window quits WattClean.`
+    : isWindows()
+      ? "Closing the window hides it to the icon by the clock, so the Registry Watcher keeps watching. Quit from the icon's menu or below."
+      : `Closing the window hides it to the icon in the ${trayName()}. Quit from the icon's menu or below.`;
 
 const select = (
   id: string,
@@ -151,6 +162,16 @@ export const general = (
     }, fail);
   }
 
+  const trayText = note(trayNote(ctx.info.trayShown));
+  const refreshTray = () => {
+    api
+      .appInfo()
+      .then((info) => {
+        trayText.textContent = trayNote(info.trayShown);
+      })
+      .catch(fail);
+  };
+
   const apply = (shell: ShellSettings) => {
     theme.value = shell.theme;
     size.value = shell.textSize;
@@ -187,13 +208,7 @@ export const general = (
           "span",
           { class: "setting-text" },
           el("span", { text: `Keep running in the ${trayName()}` }),
-          note(
-            !ctx.info.trayShown
-              ? `This desktop shows no ${trayName()}, so closing the window quits WattClean.`
-              : isWindows()
-                ? "Closing the window hides it to the icon by the clock, so the Registry Watcher keeps watching. Quit from the icon's menu or below."
-                : `Closing the window hides it to the icon in the ${trayName()}. Quit from the icon's menu or below.`,
-          ),
+          trayText,
         ),
       ),
       start,
@@ -215,5 +230,6 @@ export const general = (
       el("div", { class: "row-buttons" }, openData, privacy, restart),
     ),
     apply,
+    refreshTray,
   };
 };

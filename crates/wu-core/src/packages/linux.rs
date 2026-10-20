@@ -176,6 +176,13 @@ pub(crate) fn parse_flatpak(text: &str) -> Vec<Package> {
             package.version = Some((*version).to_string()).filter(|v| !v.is_empty());
             package.size = parse_size(size);
             package.app = true;
+            // One app may be installed for the account and for everyone:
+            // the two rows say which is which.
+            package.summary = match *installation {
+                "user" => Some("Installed for this account".to_string()),
+                "system" => Some("Installed for every account".to_string()),
+                _ => None,
+            };
             package.installation = Some((*installation).to_string());
             Some(package)
         })
@@ -185,23 +192,25 @@ pub(crate) fn parse_flatpak(text: &str) -> Vec<Package> {
 fn snap(system: &dyn PackageSystem) -> Option<Vec<Package>> {
     let text = query(system, "snap", &["list"])?;
     let mut packages = parse_snap(&text);
-    // A snap is an application when snapd exported a launcher for it
-    // (`<snap>_<app>.desktop`): runtimes and themes (gnome-42-2204,
-    // gtk-common-themes, mesa-2404) export none.
-    let launchers: Vec<String> =
-        std::fs::read_dir(system.at("/var/lib/snapd/desktop/applications"))
-            .map(|entries| {
-                entries
-                    .flatten()
-                    .map(|e| e.file_name().to_string_lossy().into_owned())
-                    .filter(|name| name.ends_with(".desktop"))
-                    .collect()
-            })
-            .unwrap_or_default();
+    // A snap is an application when snapd exported a launcher the menu
+    // shows (`<snap>_<app>.desktop`, `<snap>+<instance>_<app>.desktop` for
+    // a parallel install listed as `<snap>_<instance>`): runtimes and
+    // themes (gnome-42-2204, gtk-common-themes, mesa-2404) export none.
+    let exported = system.at("/var/lib/snapd/desktop/applications");
+    let launchers: Vec<(String, std::path::PathBuf)> = std::fs::read_dir(&exported)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+                .filter(|(name, _)| name.ends_with(".desktop"))
+                .collect()
+        })
+        .unwrap_or_default();
     for package in &mut packages {
-        package.app = launchers
-            .iter()
-            .any(|launcher| launcher.starts_with(&format!("{}_", package.id)));
+        let prefix = format!("{}_", package.id.replacen('_', "+", 1));
+        package.app = launchers.iter().any(|(name, path)| {
+            name.starts_with(&prefix) && launchers::launcher_name(path).is_some()
+        });
         package.size = std::fs::read_dir(system.at("/var/lib/snapd/snaps"))
             .ok()
             .and_then(|entries| {

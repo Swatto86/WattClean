@@ -389,3 +389,20 @@ fn free_disk_space_runs_after_everything_else_and_cleans_up() {
         .count();
     assert_eq!(leftovers, 0);
 }
+
+/// Btrfs mounted with compression stores a wipe's zeros as almost nothing:
+/// the option says why it wipes nothing rather than quietly doing nothing.
+#[test]
+fn free_disk_space_on_a_compressing_drive_is_a_problem_not_a_wipe() {
+    let mut m = machine();
+    m.system = FakeSystem::open(m._dir.path()).unwrap().compressing();
+    let report = m.run(
+        &["system.free_disk_space"],
+        Mode::Preview,
+        &RunSettings::default(),
+    );
+    let wipe = &report.options[0];
+    assert_eq!(wipe.counts.other, 0, "{wipe:#?}");
+    assert_eq!(wipe.problems.len(), 1, "{wipe:#?}");
+    assert!(wipe.problems[0].message.contains("compresses"), "{wipe:#?}");
+}

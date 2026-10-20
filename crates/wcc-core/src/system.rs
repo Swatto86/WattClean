@@ -86,6 +86,12 @@ pub trait System: Send + Sync {
     fn is_elevated(&self) -> bool;
     /// Fixed and removable drives, for wiping free space.
     fn drives(&self) -> Vec<Drive>;
+    /// Whether the drive's file system compresses what is written (Btrfs
+    /// or bcachefs mounted with compression, on Linux): a wipe's zeros
+    /// would take a sliver of their size there, so it is never wiped.
+    fn compresses(&self, _drive: &Drive) -> bool {
+        false
+    }
     /// Bytes free to this user on the drive holding `path`.
     fn free_space(&self, path: &Path) -> io::Result<u64>;
     /// Asks Windows to delete a file in use at the next restart.
@@ -186,6 +192,9 @@ pub struct Drive {
     pub total: u64,
     pub removable: bool,
 }
+
+/// Why a drive that compresses is not wiped.
+pub const COMPRESSES: &str = "this drive compresses what is written, so a wipe's zeros would take almost no space and could not overwrite its free space";
 
 /// The first drive whose root holds `path`, by the text of their paths.
 pub fn drive_holding(drives: Vec<Drive>, path: &Path) -> Option<Drive> {

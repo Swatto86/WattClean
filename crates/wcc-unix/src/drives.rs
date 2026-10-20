@@ -10,8 +10,8 @@ use crate::sys;
 
 /// File systems that hold a person's files on Linux. Not ZFS: a dataset
 /// is usually compressed, and stores the zeros a wipe writes as nothing, so
-/// the wipe would never fill it (nor a Btrfs or bcachefs mount that
-/// compresses, see [`compresses`]).
+/// the wipe would never fill it (a Btrfs or bcachefs mount that compresses
+/// is listed, for its Trash, but never wiped: see [`compresses_in`]).
 #[cfg(any(test, not(target_os = "macos")))]
 const REAL: &[&str] = &[
     "ext2", "ext3", "ext4", "btrfs", "xfs", "f2fs", "jfs", "reiserfs", "bcachefs", "vfat", "exfat",
@@ -45,18 +45,20 @@ pub fn parse_mounts(text: &str) -> Vec<Mount> {
                 point,
                 file_system,
                 read_only: options.split(',').any(|option| option == "ro"),
-                compressed: compresses(options),
+                compressed: compressing_options(options),
             })
         })
         .collect()
 }
 
-/// Whether mount options turn compression on: Btrfs's `compress` and
-/// `compress-force` (as Fedora and Arch installers mount it), bcachefs's
-/// `compression`. A wipe's zeros would take a sliver of their size there,
-/// so the disk would fill only after many times its free space.
+/// Whether mount options compress what is written: Btrfs's `compress`
+/// and `compress-force` (as Fedora and Arch installers mount it),
+/// bcachefs's `compression`. A wipe's zeros would take a sliver of their
+/// size there, so the disk would fill only after many times its free
+/// space. bcachefs's `background_compression` alone writes them at full
+/// size, so the wipe still overwrites the free space.
 #[cfg(any(test, not(target_os = "macos")))]
-fn compresses(options: &str) -> bool {
+fn compressing_options(options: &str) -> bool {
     options.split(',').any(|option| {
         let (name, value) = option.split_once('=').unwrap_or((option, ""));
         matches!(name, "compress" | "compress-force" | "compression")
@@ -100,16 +102,36 @@ pub fn wipeable(mounts: &[Mount]) -> Vec<&Mount> {
         let system = ["/boot", "/efi", "/snap", "/var/lib/snapd"]
             .iter()
             .any(|top| mount.point == *top || mount.point.starts_with(&format!("{top}/")));
-        if !real || system || mount.read_only || seen.contains(&mount.device.as_str()) {
-            continue;
-        }
-        // Compression is the file system's, whichever mount shows it.
-        seen.push(&mount.device);
-        if !mount.compressed {
+        if real && !system && !mount.read_only && !seen.contains(&mount.device.as_str()) {
+            seen.push(&mount.device);
             out.push(mount);
         }
     }
     out
+}
+
+/// Whether the drive mounted at `root` compresses what is written: any
+/// mount of its device says so, since Btrfs applies the first mount's
+/// compression to every subvolume of the file system.
+#[cfg(any(test, not(target_os = "macos")))]
+pub fn compresses_in(mounts: &[Mount], root: &str) -> bool {
+    // A later mount at the same place hides an earlier one.
+    let Some(device) = mounts
+        .iter()
+        .rev()
+        .find(|m| m.point == root)
+        .map(|m| &m.device)
+    else {
+        return false;
+    };
+    mounts.iter().any(|m| &m.device == device && m.compressed)
+}
+
+/// [`compresses_in`] for this machine's mounts.
+#[cfg(not(target_os = "macos"))]
+pub fn compresses(root: &str) -> bool {
+    let text = std::fs::read_to_string("/proc/self/mounts").unwrap_or_default();
+    compresses_in(&parse_mounts(&text), root)
 }
 
 fn drive(root: &str, label: String, file_system: String, removable: bool) -> Option<Drive> {

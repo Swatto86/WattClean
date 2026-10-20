@@ -107,10 +107,20 @@ pub async fn disk_shred(
     .await
 }
 
+/// The drives a free-space wipe may fill: never one that compresses what
+/// is written.
 #[tauri::command]
 pub async fn disk_get_drives(state: App<'_>) -> CommandResult<Vec<Drive>> {
     let app = Arc::clone(&state);
-    blocking(move || Ok(app.system.drives())).await
+    blocking(move || {
+        Ok(app
+            .system
+            .drives()
+            .into_iter()
+            .filter(|drive| !app.system.compresses(drive))
+            .collect())
+    })
+    .await
 }
 
 #[derive(Clone, Serialize)]
@@ -145,6 +155,12 @@ pub async fn disk_wipe_free_space(
             .ok_or_else(|| {
                 CommandError::from(format!("{root} is not a drive WattClean can wipe."))
             })?;
+        if app.system.compresses(&drive) {
+            return Err(CommandError::from(format!(
+                "{root} is not wiped: {}.",
+                wcc_core::system::COMPRESSES
+            )));
+        }
         let _job = app.start_job()?;
         let folder = app.system.wipe_folder(&drive);
         let limit = app.system.wipe_limit();

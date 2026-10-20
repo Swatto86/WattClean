@@ -19,19 +19,41 @@ fn real_drives_are_listed_once_with_their_names_unescaped() {
 }
 
 /// Omarchy's and Fedora's Btrfs compresses (`compress=zstd`), where a
-/// zero fill takes a sliver of its size: no mount of it is wiped.
+/// zero fill takes a sliver of its size: every mount of it is a drive (its
+/// Trash is cleaned), and every one says it compresses, so none is wiped.
 #[test]
-fn a_compressing_file_system_is_never_wiped() {
+fn a_compressing_file_system_is_listed_but_known_to_compress() {
     let mounts = parse_mounts(
         "/dev/nvme0n1p2 / btrfs rw,relatime,compress=zstd:3,ssd,subvol=/@ 0 0\n\
          /dev/nvme0n1p2 /home btrfs rw,relatime,compress=zstd:3,ssd,subvol=/@home 0 0\n\
          /dev/sda1 /data btrfs rw,compress=no 0 0\n\
          /dev/sdb1 /backup btrfs rw,compress-force=zstd:1 0 0\n\
          /dev/sdc1 /media/t/bcache bcachefs rw,compression=lz4 0 0\n\
+         /dev/sde1 /media/t/later bcachefs rw,background_compression=zstd 0 0\n\
          /dev/sdd1 /media/t/plain bcachefs rw,compression=none 0 0\n",
     );
     let points: Vec<&str> = wipeable(&mounts).iter().map(|m| m.point.as_str()).collect();
-    assert_eq!(points, ["/data", "/media/t/plain"]);
+    assert_eq!(
+        points,
+        [
+            "/",
+            "/data",
+            "/backup",
+            "/media/t/bcache",
+            "/media/t/later",
+            "/media/t/plain"
+        ]
+    );
+    let compressed: Vec<&str> = points
+        .iter()
+        .copied()
+        .filter(|root| compresses_in(&mounts, root))
+        .collect();
+    // Background compression writes the zeros at full size first.
+    assert_eq!(compressed, ["/", "/backup", "/media/t/bcache"]);
+    // The home subvolume is the root's file system, which compresses.
+    assert!(compresses_in(&mounts, "/home"));
+    assert!(!compresses_in(&mounts, "/nowhere"));
 }
 
 /// ostree systems mount the root device read-only at /sysroot first;
@@ -135,21 +157,7 @@ fn a_wipe_writes_on_the_same_volume_wherever_its_path_points() {
     );
 }
 
-#[cfg(target_os = "macos")]
 #[test]
 fn this_machine_has_a_drive_to_wipe() {
     assert!(!drives().is_empty());
-}
-
-/// A Linux machine whose disks all compress (Btrfs as Fedora and
-/// Omarchy mount it) has none to wipe; any other has.
-#[cfg(not(target_os = "macos"))]
-#[test]
-fn this_machines_drives_are_its_wipeable_mounts() {
-    let text = std::fs::read_to_string("/proc/self/mounts").unwrap();
-    let mounts = parse_mounts(&text);
-    let wipeable: Vec<&str> = wipeable(&mounts).iter().map(|m| m.point.as_str()).collect();
-    let offered: Vec<String> = drives().into_iter().map(|drive| drive.root).collect();
-    assert!(offered.iter().all(|root| wipeable.contains(&root.as_str())));
-    assert_eq!(offered.is_empty(), wipeable.is_empty(), "{offered:?}");
 }

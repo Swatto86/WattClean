@@ -35,6 +35,15 @@ fn a_programs_last_words_are_its_error_not_its_progress() {
             ),
             Some("removing testlib breaks dependency 'testlib' required by needer"),
         ),
+        // A removal that fails once the check passed: its progress is no
+        // reason.
+        (
+            said(
+                "checking dependencies...\n:: Do you want to remove these packages? [Y/n]\n:: Running pre-transaction hooks...\n",
+                "error: command failed to execute correctly\nerror: failed to commit transaction (failed to run transaction hooks)\n",
+            ),
+            Some("error: failed to commit transaction (failed to run transaction hooks)"),
+        ),
         (
             said("", "error: target not found: nosuchthing\n"),
             Some("error: target not found: nosuchthing"),

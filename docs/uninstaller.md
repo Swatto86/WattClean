@@ -186,8 +186,10 @@ Decisions in force:
   the folder holding it with `xdg-open` (left running, reaped when it
   ends).
 - **Apps are what people start**: packages with a visible launcher, Flatpak
-  applications, snaps snapd exported a launcher for (not runtimes, themes
-  or base snaps; 2026-10-20), AppImages, bundles,
+  applications (each copy, for the account or for everyone, says which),
+  snaps snapd exported a visible launcher for (`<snap>_<app>.desktop`, or
+  `<snap>+<instance>_…` for a parallel install; not runtimes, themes or
+  base snaps; 2026-10-20), AppImages, bundles,
   casks, formulae and ports asked for by name. "Show every package" lists
   libraries too.
 

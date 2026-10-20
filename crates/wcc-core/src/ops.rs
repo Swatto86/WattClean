@@ -262,11 +262,11 @@ impl Planner<'_> {
                     ops.push(Op::Clipboard);
                 }
             }
-            Action::FreeDiskSpace => {
-                if let Some(op) = self.free_space() {
-                    ops.push(op);
-                }
-            }
+            Action::FreeDiskSpace => match self.free_space() {
+                Ok(Some(op)) => ops.push(op),
+                Ok(None) => {}
+                Err(problem) => problems.push(problem),
+            },
             Action::Command(task) => match self.command(task) {
                 Ok(Some(op)) => ops.push(op),
                 Ok(None) => {}
@@ -307,13 +307,24 @@ impl Planner<'_> {
         }
     }
 
-    /// The free space of the drive holding the temporary folder.
-    fn free_space(&self) -> Option<Op> {
-        let temp = self.system.var("TEMP").into_iter().next()?;
-        let drive = self.system.drive_of(Path::new(&temp))?;
+    /// The free space of the drive holding the temporary folder; a drive
+    /// that compresses what is written is a problem, not a wipe.
+    fn free_space(&self) -> Result<Option<Op>, Problem> {
+        let Some(temp) = self.system.var("TEMP").into_iter().next() else {
+            return Ok(None);
+        };
+        let Some(drive) = self.system.drive_of(Path::new(&temp)) else {
+            return Ok(None);
+        };
+        if self.system.compresses(&drive) {
+            return Err(Problem {
+                path: PathBuf::from(&drive.root),
+                message: crate::system::COMPRESSES.to_string(),
+            });
+        }
         let folder = self.system.wipe_folder(&drive);
         let free = self.system.free_space(&folder).unwrap_or(drive.free);
-        Some(Op::FreeSpace { folder, free })
+        Ok(Some(Op::FreeSpace { folder, free }))
     }
 
     fn files(

@@ -172,7 +172,7 @@ fn rpm_owners(files: &[String], ask: impl Fn(&[String]) -> String) -> Vec<(Strin
 }
 
 /// A launcher's `Name=` in its main section, unless it is hidden.
-fn launcher_name(path: &Path) -> Option<String> {
+pub(super) fn launcher_name(path: &Path) -> Option<String> {
     let text = std::fs::read_to_string(path).ok()?;
     let mut in_entry = false;
     let mut name = None;
