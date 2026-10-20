@@ -37,3 +37,8 @@ export const diskEncryption = (): string =>
     : current === "linux"
       ? "full-disk encryption (LUKS)"
       : "Windows' own BitLocker encryption";
+
+/** Whether two paths name one file: Windows and macOS (on its default
+ *  disks) ignore case in names, Linux does not. */
+export const samePath = (a: string, b: string): boolean =>
+  current === "linux" ? a === b : a.toLowerCase() === b.toLowerCase();

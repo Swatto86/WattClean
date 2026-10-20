@@ -12,6 +12,7 @@ use serde_json::Value;
 use crate::model::OptionKey;
 use crate::ops::CustomPath;
 use crate::store;
+use crate::vars;
 
 /// More entries than anyone keeps by hand; stops a runaway list.
 const LIST_LIMIT: usize = 2_000;
@@ -93,21 +94,39 @@ pub struct SettingsPatch {
 
 const ACCENTS: &[&str] = &["sky", "violet", "pink", "teal", "green", "amber", "red"];
 
-/// A path a person typed or picked: absolute, on a drive or share, sane length.
-pub fn check_path(path: &str) -> Result<(), String> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() || trimmed.len() > PATH_LIMIT || trimmed.contains('\0') {
+/// What a full path looks like on this system, for messages.
+const FULL_PATH_EXAMPLE: &str = if cfg!(windows) {
+    r"C:\Folder"
+} else if cfg!(target_os = "macos") {
+    "/Users/you/Folder"
+} else {
+    "/home/you/Folder"
+};
+
+/// A path a person picked, taken exactly as given (Shred): absolute, on a
+/// drive or share, sane length. It may hold `%`, which nothing expands.
+pub fn check_full_path(path: &str) -> Result<(), String> {
+    if path.trim().is_empty() || path.len() > PATH_LIMIT || path.contains('\0') {
         return Err(format!("{path:?} is not a usable path"));
     }
-    let p = Path::new(trimmed);
-    let absolute = p.is_absolute() || (cfg!(not(windows)) && trimmed.starts_with('/'));
-    if !absolute || trimmed.contains('%') {
-        let example = if cfg!(windows) {
-            r"C:\Folder"
-        } else {
-            "/home/you/Folder"
-        };
-        return Err(format!("{trimmed:?} must be a full path such as {example}"));
+    if !Path::new(path).is_absolute() {
+        return Err(format!(
+            "{path:?} must be a full path such as {FULL_PATH_EXAMPLE}"
+        ));
+    }
+    Ok(())
+}
+
+/// A path for the keep list or Custom paths, without surrounding spaces. A
+/// `%NAME%` in it is refused: nothing expands these lists, so it would
+/// stand for a folder of that name, not the one it seems to mean.
+pub fn check_path(path: &str) -> Result<(), String> {
+    let trimmed = path.trim();
+    check_full_path(trimmed)?;
+    if vars::has_variable(trimmed) {
+        return Err(format!(
+            "{trimmed:?} holds a variable (%NAME%): give the full path itself, such as {FULL_PATH_EXAMPLE}"
+        ));
     }
     Ok(())
 }
@@ -257,127 +276,5 @@ impl Settings {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Windows paths: a Linux or macOS build rightly refuses them.
-    #[cfg(windows)]
-    #[test]
-    fn loading_keeps_every_field_that_parses() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("settings.json");
-        std::fs::write(
-            &path,
-            r#"{"theme":"dark","shred":"yes","accent":"mauve","keep":[{"path":"C:\\Keep","folder":true}],"future":1}"#,
-        )
-        .unwrap();
-        let settings = Settings::load(&path);
-        assert_eq!(settings.theme, Theme::Dark);
-        assert!(!settings.shred, "a bad value keeps the default");
-        assert_eq!(settings.accent, "sky");
-        assert_eq!(settings.keep.len(), 1);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn unix_paths_are_full_paths_and_drive_paths_are_not() {
-        let mut settings = Settings::default();
-        let entry = |p: &str| CustomPath {
-            path: p.into(),
-            folder: false,
-        };
-        settings
-            .apply(SettingsPatch {
-                keep: Some(vec![entry(" /home/t/b.txt "), entry("/home/t/b.txt")]),
-                ..SettingsPatch::default()
-            })
-            .unwrap();
-        assert_eq!(settings.keep, vec![entry("/home/t/b.txt")]);
-        let drive = SettingsPatch {
-            keep: Some(vec![entry(r"C:\A")]),
-            ..SettingsPatch::default()
-        };
-        assert!(settings.apply(drive).is_err());
-    }
-
-    #[test]
-    fn patches_are_validated() {
-        let mut settings = Settings::default();
-        let relative = SettingsPatch {
-            keep: Some(vec![CustomPath {
-                path: r"relative\folder".into(),
-                folder: true,
-            }]),
-            ..SettingsPatch::default()
-        };
-        assert!(settings.apply(relative).is_err());
-        let variable = SettingsPatch {
-            custom_paths: Some(vec![CustomPath {
-                path: r"%TEMP%\x".into(),
-                folder: false,
-            }]),
-            ..SettingsPatch::default()
-        };
-        assert!(settings.apply(variable).is_err());
-        let selection = SettingsPatch {
-            selection: Some(vec!["nodot".into()]),
-            ..SettingsPatch::default()
-        };
-        assert!(settings.apply(selection).is_err());
-        assert!(serde_json::from_str::<SettingsPatch>(r#"{"unknown":true}"#).is_err());
-    }
-
-    // Windows paths: a Linux or macOS build rightly refuses them.
-    #[cfg(windows)]
-    #[test]
-    fn keep_entries_cannot_hold_wildcards() {
-        let wildcard = SettingsPatch {
-            keep: Some(vec![CustomPath {
-                path: r"C:\Docs\*.docx".into(),
-                folder: false,
-            }]),
-            ..SettingsPatch::default()
-        };
-        let error = Settings::default().apply(wildcard).unwrap_err();
-        assert!(error.contains("wildcard"), "{error}");
-
-        // An old file with one such entry keeps the others.
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("settings.json");
-        std::fs::write(
-            &path,
-            r#"{"keep":[{"path":"C:\\A","folder":true},{"path":"C:\\B\\?.txt","folder":false}]}"#,
-        )
-        .unwrap();
-        let loaded = Settings::load(&path);
-        assert_eq!(loaded.keep.len(), 1);
-        assert_eq!(loaded.keep[0].path, r"C:\A");
-    }
-
-    // Windows paths: a Linux or macOS build rightly refuses them.
-    #[cfg(windows)]
-    #[test]
-    fn lists_are_trimmed_and_deduplicated() {
-        let mut settings = Settings::default();
-        let entry = |p: &str| CustomPath {
-            path: p.into(),
-            folder: false,
-        };
-        settings
-            .apply(SettingsPatch {
-                keep: Some(vec![entry(r" C:\A\b.txt "), entry(r"c:\a\B.TXT")]),
-                ..SettingsPatch::default()
-            })
-            .unwrap();
-        assert_eq!(settings.keep, vec![entry(r"C:\A\b.txt")]);
-    }
-
-    #[test]
-    fn the_selection_falls_back_to_defaults() {
-        let defaults = vec![OptionKey::new("a", "b")];
-        let mut settings = Settings::default();
-        assert_eq!(settings.selected(&defaults), defaults);
-        settings.selection = Some(vec!["c.d".into()]);
-        assert_eq!(settings.selected(&defaults), vec![OptionKey::new("c", "d")]);
-    }
-}
+#[path = "settings_tests.rs"]
+mod tests;

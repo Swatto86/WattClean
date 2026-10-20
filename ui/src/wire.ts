@@ -221,6 +221,7 @@ export const shredReport = (v: unknown): ShredReport => {
     bytes: num(o["bytes"], "bytes"),
     problems: arr(o["problems"], "problems", problemLine),
     cancelled: bool(o["cancelled"], "cancelled"),
+    left: strings(o["left"], "left"),
   };
 };
 

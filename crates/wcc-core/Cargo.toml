@@ -19,6 +19,11 @@ roxmltree = "0.21"
 # bundled build means no system SQLite is needed.
 rusqlite = { version = "0.37", features = ["bundled"] }
 
+[target.'cfg(unix)'.dependencies]
+# O_NOFOLLOW, so emptying or shredding a file never writes through a link
+# (a constant only: no unsafe code). Already in the tree through wcc-unix.
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

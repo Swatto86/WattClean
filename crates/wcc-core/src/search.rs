@@ -46,6 +46,10 @@ pub struct Searcher<'a> {
 impl Searcher<'_> {
     /// Everything `spec` names, after its filters and the guard.
     pub fn find(&self, spec: &FileSpec, filter: &Filter, vars: &dyn Vars, out: &mut Findings) {
+        if spec.literal {
+            self.find_literal(Path::new(&spec.path), spec.search, filter, out);
+            return;
+        }
         for pattern in vars::expand(&spec.path, vars) {
             let roots = match spec.search {
                 Search::File => vec![PathBuf::from(paths::native(&pattern))],
@@ -65,6 +69,16 @@ impl Searcher<'_> {
                 }
                 self.search_root(&root, spec.search, filter, out);
             }
+        }
+    }
+
+    /// What a path a person chose names, taken exactly as written: no
+    /// variables, wildcards or separator changes, so only the file or
+    /// folder they picked is found (on Linux and macOS a name may hold `%`,
+    /// `*`, `?` and `\`). A link is still only the link (`paths::chosen`).
+    pub fn find_literal(&self, path: &Path, search: Search, filter: &Filter, out: &mut Findings) {
+        if !(self.cancelled)() {
+            self.search_root(&paths::chosen(path), search, filter, out);
         }
     }
 
@@ -93,12 +107,13 @@ impl Searcher<'_> {
                 {
                     return;
                 }
-                self.push(
-                    out,
-                    root,
-                    kind,
-                    if kind == Kind::File { meta.len() } else { 0 },
-                );
+                // A link's size is its own text, nothing that would be freed.
+                let size = if kind == Kind::File && !meta.file_type().is_symlink() {
+                    meta.len()
+                } else {
+                    0
+                };
+                self.push(out, root, kind, size);
             }
             Search::WalkFiles | Search::WalkAll | Search::WalkTop if is_dir => {
                 let files_only = search == Search::WalkFiles;

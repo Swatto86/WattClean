@@ -5,7 +5,7 @@
 //! nothing. On SSDs wear-levelling may keep old copies whatever any program
 //! writes, which the window says beside the tool.
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,7 +15,7 @@ use serde::Serialize;
 
 use crate::exec as ops;
 use crate::model::{FileSpec, Kind, Search};
-use crate::paths::Guard;
+use crate::paths::{self, Guard};
 use crate::report::{PROBLEM_CAP, ProblemLine};
 use crate::search::{Filter, Findings, Searcher, describe};
 
@@ -41,11 +41,21 @@ fn random_name() -> String {
 /// How many names a file's data has (hard links); `System::link_count`.
 pub type LinkCount<'a> = &'a dyn Fn(&Path) -> io::Result<u32>;
 
-/// Overwrites a file with zeros, empties it, renames it and deletes it.
-/// A link is only unlinked: its target is not this file to destroy. A file
-/// whose data has other names (hard links, as Windows' own files have) is
-/// refused: overwriting it would destroy the data under every name.
+/// Renames a file to a random name, so its name does not stay on the disk
+/// either, overwrites it with zeros, empties it and deletes it. A link is
+/// only unlinked: its target is not this file to destroy. A file whose data
+/// has other names (hard links, as Windows' own files have) is refused:
+/// overwriting it would destroy the data under every name.
 pub fn shred_file(path: &Path, links: LinkCount<'_>) -> io::Result<()> {
+    shred_with(path, links, &|path| fs::remove_file(path))
+}
+
+/// [`shred_file`], deleting with `remove` (the tests' way of refusing).
+fn shred_with(
+    path: &Path,
+    links: LinkCount<'_>,
+    remove: &dyn Fn(&Path) -> io::Result<()>,
+) -> io::Result<()> {
     let meta = fs::symlink_metadata(path)?;
     if meta.file_type().is_symlink() {
         return ops::remove_file(path);
@@ -55,48 +65,83 @@ pub fn shred_file(path: &Path, links: LinkCount<'_>) -> io::Result<()> {
             "not shredded: other hard links share this file's data",
         ));
     }
-    if meta.permissions().readonly() {
-        let mut permissions = meta.permissions();
-        #[allow(clippy::permissions_set_readonly_false)]
-        permissions.set_readonly(false);
-        fs::set_permissions(path, permissions)?;
-    }
-    {
-        let mut file = OpenOptions::new().write(true).open(path)?;
-        // Round up to whole 4 KiB clusters so the file's last cluster goes too.
-        let length = meta.len().div_ceil(4096) * 4096;
-        let zeros = vec![0u8; CHUNK];
-        let mut left = length;
-        while left > 0 {
-            let n = usize::try_from(left.min(CHUNK as u64)).unwrap_or(CHUNK);
-            file.write_all(&zeros[..n])?;
-            left -= n as u64;
-        }
-        file.sync_all()?;
-        file.set_len(0)?;
-        file.sync_all()?;
-    }
-    unlink_renamed(path, &|path| fs::remove_file(path))
-}
-
-/// Renames the emptied file to a random name, so its name does not stay
-/// on the disk either, and removes it. When the removal fails the file
-/// gets its own name back, so the problem names a file the person knows.
-fn unlink_renamed(path: &Path, remove: &dyn Fn(&Path) -> io::Result<()>) -> io::Result<()> {
+    // Renamed first: a folder that will not let the file be renamed will
+    // not let it be deleted either, and then it is left exactly as it was
+    // rather than emptied in place.
     let renamed = path.with_file_name(random_name());
-    if fs::rename(path, &renamed).is_err() {
-        return remove(path);
-    }
-    let Err(error) = remove(&renamed) else {
+    fs::rename(path, &renamed)?;
+    let mut changed = None;
+    let result = open_writable(&renamed, &meta.permissions(), &mut changed)
+        .and_then(|file| overwrite(file, meta.len()))
+        .and_then(|()| remove(&renamed));
+    let Err(error) = result else {
         return Ok(());
     };
+    // Its own name and permissions back, so the problem names a file the
+    // person knows, as it was apart from what was overwritten.
+    if let Some(permissions) = changed {
+        let _restored = fs::set_permissions(&renamed, permissions);
+    }
     match fs::rename(&renamed, path) {
         Ok(()) => Err(error),
         Err(_) => Err(io::Error::new(
             error.kind(),
-            format!("{error}; the emptied file is left as {}", renamed.display()),
+            format!("{error}; the file is left as {}", renamed.display()),
         )),
     }
+}
+
+/// Opens a file to overwrite it. One this account may not write is made
+/// writable first, and `changed` keeps the permissions it had.
+fn open_writable(
+    path: &Path,
+    permissions: &fs::Permissions,
+    changed: &mut Option<fs::Permissions>,
+) -> io::Result<File> {
+    match ops::open_to_overwrite(path) {
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            let Some(writable) = writable(permissions) else {
+                return Err(error);
+            };
+            fs::set_permissions(path, writable)?;
+            *changed = Some(permissions.clone());
+            ops::open_to_overwrite(path)
+        }
+        other => other,
+    }
+}
+
+/// The permissions that let the owner write the file, when it cannot. On
+/// Linux and macOS only the owner's write bit is added: clearing
+/// "read-only" would let every account write it.
+#[cfg(unix)]
+fn writable(permissions: &fs::Permissions) -> Option<fs::Permissions> {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = permissions.mode() & 0o7777;
+    (mode & 0o200 == 0).then(|| fs::Permissions::from_mode(mode | 0o200))
+}
+
+#[cfg(not(unix))]
+fn writable(permissions: &fs::Permissions) -> Option<fs::Permissions> {
+    let mut writable = permissions.clone();
+    #[allow(clippy::permissions_set_readonly_false)]
+    writable.set_readonly(false);
+    permissions.readonly().then_some(writable)
+}
+
+/// Writes zeros over the file's length, then empties it.
+fn overwrite(mut file: File, length: u64) -> io::Result<()> {
+    // Round up to whole 4 KiB clusters so the file's last cluster goes too.
+    let mut left = length.div_ceil(4096) * 4096;
+    let zeros = vec![0u8; CHUNK];
+    while left > 0 {
+        let n = usize::try_from(left.min(CHUNK as u64)).unwrap_or(CHUNK);
+        file.write_all(&zeros[..n])?;
+        left -= n as u64;
+    }
+    file.sync_all()?;
+    file.set_len(0)?;
+    file.sync_all()
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -107,9 +152,14 @@ pub struct ShredReport {
     pub bytes: u64,
     pub problems: Vec<ProblemLine>,
     pub cancelled: bool,
+    /// The chosen files and folders still there afterwards (something in
+    /// them was kept, refused or not reached), as they were given, so the
+    /// window can keep them queued without rebuilding that from problems.
+    pub left: Vec<String>,
 }
 
-/// Shreds files and folders (with everything in them) chosen by a person.
+/// Shreds files and folders (with everything in them) chosen by a person,
+/// each taken exactly as given (`Searcher::find_literal`).
 pub fn shred_paths(
     paths: &[PathBuf],
     guard: &Guard,
@@ -119,13 +169,13 @@ pub fn shred_paths(
 ) -> ShredReport {
     let mut report = ShredReport::default();
     let searcher = Searcher { guard, cancelled };
-    for path in paths {
-        let spec = FileSpec::new(path.to_string_lossy(), Search::WalkTop);
+    for (index, path) in paths.iter().enumerate() {
+        let spec = FileSpec::chosen(path.to_string_lossy(), Search::WalkTop);
         let Ok(filter) = Filter::new(&spec, &|_: &str| Vec::new(), SystemTime::now()) else {
             continue;
         };
         let mut findings = Findings::default();
-        searcher.find(&spec, &filter, &|_: &str| Vec::new(), &mut findings);
+        searcher.find_literal(path, spec.search, &filter, &mut findings);
         for problem in findings.problems {
             push_problem(&mut report, &problem.path, problem.message);
         }
@@ -139,6 +189,7 @@ pub fn shred_paths(
         for found in findings.found {
             if cancelled() {
                 report.cancelled = true;
+                report.left.extend(still_there(&paths[index..]));
                 return report;
             }
             let result = match found.kind {
@@ -155,9 +206,21 @@ pub fn shred_paths(
             }
             progress(&report, &found.path);
         }
+        report.left.extend(still_there(std::slice::from_ref(path)));
     }
     report.cancelled = cancelled();
     report
+}
+
+/// The paths that still name something, as they were given.
+fn still_there(paths: &[PathBuf]) -> impl Iterator<Item = String> + '_ {
+    paths
+        .iter()
+        .filter(|path| {
+            fs::symlink_metadata(paths::chosen(path))
+                .map_or_else(|e| e.kind() != io::ErrorKind::NotFound, |_| true)
+        })
+        .map(|path| path.to_string_lossy().to_string())
 }
 
 fn push_problem(report: &mut ShredReport, path: &Path, message: String) {

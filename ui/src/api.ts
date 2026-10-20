@@ -177,6 +177,8 @@ export interface ShredReport {
   bytes: number;
   problems: ProblemLine[];
   cancelled: boolean;
+  /** The chosen paths still there afterwards, exactly as they were sent. */
+  left: string[];
 }
 
 export interface ShredProgress {

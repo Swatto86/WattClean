@@ -8,7 +8,7 @@ use tauri::AppHandle;
 use tauri::ipc::Channel;
 use wcc_core::history::{self, Activity, Entry};
 use wcc_core::paths::Guard;
-use wcc_core::settings::check_path;
+use wcc_core::settings::check_full_path;
 use wcc_core::shred::{self, ShredReport, WipeReport};
 use wcc_core::system::Drive;
 
@@ -62,7 +62,7 @@ pub async fn disk_shred(
             return Err(CommandError::from("Add files or folders to shred first."));
         }
         for path in &paths {
-            check_path(path).map_err(CommandError::from)?;
+            check_full_path(path).map_err(CommandError::from)?;
         }
         let _job = app.start_job()?;
         let settings = app.run_settings();

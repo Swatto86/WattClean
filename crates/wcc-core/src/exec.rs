@@ -45,13 +45,9 @@ impl Executor<'_> {
         let result: io::Result<bool> = match op {
             Op::DeleteFile { path, .. } => self.delete_file(path, &mut item),
             Op::DeleteDir { path } => self.delete_dir(path),
-            Op::Truncate { path, .. } => self.guarded(path).and_then(|()| {
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open(path)?
-                    .set_len(0)
-                    .map(|()| true)
-            }),
+            Op::Truncate { path, .. } => self
+                .guarded(path)
+                .and_then(|()| open_to_overwrite(path)?.set_len(0).map(|()| true)),
             Op::Sqlite { path, op, .. } => self.guarded(path).and_then(|()| {
                 sqlite::run(path, *op).map(|saved| {
                     item.size = saved;
@@ -149,6 +145,17 @@ impl Executor<'_> {
     }
 }
 
+/// Opens a file to empty or overwrite it. On Linux and macOS a link put in
+/// the file's place after it was looked at is refused (`O_NOFOLLOW`), so
+/// its target, which the guard never saw, is left alone.
+pub(crate) fn open_to_overwrite(path: &Path) -> io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NOFOLLOW);
+    options.open(path)
+}
+
 /// Removes a file, clearing the read-only attribute if that stops it.
 pub fn remove_file(path: &Path) -> io::Result<()> {
     match fs::remove_file(path) {
@@ -190,3 +197,7 @@ fn clear_read_only(path: &Path) -> io::Result<()> {
     permissions.set_readonly(false);
     fs::set_permissions(path, permissions)
 }
+
+#[cfg(test)]
+#[path = "exec_tests.rs"]
+mod tests;

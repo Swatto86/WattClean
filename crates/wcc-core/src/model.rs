@@ -137,7 +137,7 @@ pub enum Kind {
 /// Which files an action applies to.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FileSpec {
-    /// May hold `%VARIABLES%` and wildcards.
+    /// May hold `%VARIABLES%` and wildcards (unless `literal`).
     pub path: String,
     pub search: Search,
     /// Keep only names matching (case-insensitive regular expression).
@@ -158,6 +158,10 @@ pub struct FileSpec {
     pub older_than_days: Option<u32>,
     /// Never touch items at or below these paths (variables and wildcards).
     pub exclude: Vec<String>,
+    /// `path` is a file or folder a person chose, taken exactly as written:
+    /// no variables, wildcards or separator changes (on Linux and macOS a
+    /// name may hold `%`, `*`, `?` and `\`).
+    pub literal: bool,
 }
 
 impl FileSpec {
@@ -166,6 +170,14 @@ impl FileSpec {
             path: path.into(),
             search,
             ..Self::default()
+        }
+    }
+
+    /// A file or folder a person chose (see `literal`).
+    pub fn chosen(path: impl Into<String>, search: Search) -> Self {
+        Self {
+            literal: true,
+            ..Self::new(path, search)
         }
     }
 }

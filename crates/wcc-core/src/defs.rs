@@ -280,6 +280,7 @@ fn build_action(def: &ActionDef, fill: &dyn Fn(&str) -> String) -> Result<Action
             kind: def.kind,
             older_than_days: def.older_than_days,
             exclude: def.exclude.iter().map(|e| fill(e)).collect(),
+            literal: false,
         })
     };
     Ok(match def.op {

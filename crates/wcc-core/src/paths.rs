@@ -13,8 +13,9 @@ use crate::model::Kind;
 
 /// A path as the guard compares it: case-insensitive, either separator,
 /// `.` and `..` resolved, no trailing separator, no `\\?\` prefix. Keys
-/// always use `\` (the Unix path `/home/a` is `\home\a`). On macOS a
-/// folder's other spellings fold into its short one (`fold_mac_aliases`).
+/// always use `\` (the Unix path `/home/a` is `\home\a`). Unix has no
+/// shares, so there `//home/a` is `/home/a` too. On macOS a folder's other
+/// spellings fold into its short one (`fold_mac_aliases`).
 pub fn key(path: &Path) -> String {
     let text = path.to_string_lossy().replace('/', "\\");
     let text = text
@@ -22,6 +23,11 @@ pub fn key(path: &Path) -> String {
         .map(|rest| format!(r"\\{rest}"))
         .or_else(|| text.strip_prefix(r"\\?\").map(str::to_string))
         .unwrap_or(text);
+    let text = if cfg!(windows) || !text.starts_with(r"\\") {
+        text
+    } else {
+        format!(r"\{}", text.trim_start_matches('\\'))
+    };
     let (prefix, rooted, rest) = split_prefix(&text);
     let mut out = prefix.to_lowercase();
     if rooted {
@@ -65,26 +71,43 @@ fn split_prefix(text: &str) -> (&str, bool, &str) {
 /// macOS reaches one folder by several paths: the data volume's firmlinks
 /// (`/System/Volumes/Data/Users/a` is `/Users/a`), `/private` (`/private/var`
 /// is `/var`) and the start-up disk's link in `/Volumes` (`/Volumes/Macintosh
-/// HD/Users` is `/Users`). The short spelling stands for all of them, so the
-/// guard sees one folder however a path names it.
+/// HD/Users` is `/Users`), and the `/.nofollow/` and `/.resolve/<flags>/`
+/// prefixes that reach any path. The short spelling stands for all of them,
+/// so the guard sees one folder however a path names it. They nest
+/// (`/System/Volumes/Data/Volumes/Macintosh HD/Users`), so folding repeats
+/// until nothing changes.
 fn fold_mac_aliases<'a>(mut parts: Vec<&'a str>, boot_names: &[String]) -> Vec<&'a str> {
     let is = |part: Option<&&str>, name: &str| part.is_some_and(|p| p.eq_ignore_ascii_case(name));
-    if is(parts.first(), "volumes")
-        && parts
-            .get(1)
-            .is_some_and(|name| boot_names.iter().any(|b| b.eq_ignore_ascii_case(name)))
-    {
-        parts.drain(..2);
+    let flags = |part: Option<&&str>| {
+        part.is_some_and(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+    };
+    loop {
+        let before = parts.len();
+        if is(parts.first(), ".nofollow") {
+            parts.remove(0);
+        }
+        if is(parts.first(), ".resolve") && flags(parts.get(1)) {
+            parts.drain(..2);
+        }
+        if is(parts.first(), "volumes")
+            && parts
+                .get(1)
+                .is_some_and(|name| boot_names.iter().any(|b| b.eq_ignore_ascii_case(name)))
+        {
+            parts.drain(..2);
+        }
+        if is(parts.first(), "system") && is(parts.get(1), "volumes") && is(parts.get(2), "data") {
+            parts.drain(..3);
+        }
+        if is(parts.first(), "private")
+            && (is(parts.get(1), "var") || is(parts.get(1), "tmp") || is(parts.get(1), "etc"))
+        {
+            parts.remove(0);
+        }
+        if parts.len() == before {
+            return parts;
+        }
     }
-    if is(parts.first(), "system") && is(parts.get(1), "volumes") && is(parts.get(2), "data") {
-        parts.drain(..3);
-    }
-    if is(parts.first(), "private")
-        && (is(parts.get(1), "var") || is(parts.get(1), "tmp") || is(parts.get(1), "etc"))
-    {
-        parts.remove(0);
-    }
-    parts
 }
 
 /// The names in `/Volumes` that are links to `/`: the start-up disk.
@@ -122,6 +145,14 @@ fn normal_parts(rest: &str) -> Vec<&str> {
         }
     }
     parts
+}
+
+/// A path a person chose, as the system should look it up: its own parts
+/// without a trailing separator or `.`, either of which would make the
+/// system follow a link the path names. Nothing else changes: on Linux and
+/// macOS `\`, `%`, `*` and `?` stay part of a name.
+pub fn chosen(path: &Path) -> PathBuf {
+    path.components().collect()
 }
 
 /// A definition's path in this platform's own spelling. Definitions may use
@@ -255,107 +286,5 @@ impl Guard {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn p(text: &str) -> PathBuf {
-        PathBuf::from(text)
-    }
-
-    #[test]
-    fn keys_ignore_case_separators_and_dots() {
-        assert_eq!(
-            key(&p(r"C:/Users/Tester/./AppData/x/../Temp/")),
-            r"c:\users\tester\appdata\temp"
-        );
-        assert_eq!(key(&p(r"\\?\C:\Temp")), r"c:\temp");
-        assert_eq!(key(&p(r"C:\")), r"c:\");
-    }
-
-    #[test]
-    fn macos_spellings_of_one_folder_fold_into_one() {
-        let boot = vec!["Macintosh HD".to_string()];
-        let fold = |text: &str| {
-            fold_mac_aliases(text.split('/').filter(|p| !p.is_empty()).collect(), &boot).join("/")
-        };
-        assert_eq!(
-            fold("/System/Volumes/Data/Users/x/Documents"),
-            "Users/x/Documents"
-        );
-        assert_eq!(fold("/System/Volumes/Data"), "");
-        assert_eq!(fold("/private/var/folders/ab/T"), "var/folders/ab/T");
-        assert_eq!(fold("/System/Volumes/Data/private/tmp/x"), "tmp/x");
-        assert_eq!(fold("/Volumes/Macintosh HD/Users/x"), "Users/x");
-        assert_eq!(fold("/Volumes/USB/Users/x"), "Volumes/USB/Users/x");
-        assert_eq!(fold("/private/Users/x"), "private/Users/x");
-        assert_eq!(
-            fold("/Users/x/System/Volumes/Data"),
-            "Users/x/System/Volumes/Data"
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn the_guard_protects_a_folder_by_any_of_its_macos_spellings() {
-        let guard = Guard::new(&[p("/Users/t"), p("/var/folders/ab/T")], &[]);
-        assert_eq!(
-            guard.check(&p("/System/Volumes/Data/Users/t")),
-            Err(Refusal::Protected)
-        );
-        assert_eq!(
-            guard.check(&p("/private/var/folders/ab/T")),
-            Err(Refusal::Protected)
-        );
-        assert_eq!(
-            guard.check(&p("/System/Volumes/Data")),
-            Err(Refusal::Protected)
-        );
-        assert_eq!(guard.check(&p("/private/var/folders/ab/T/x.tmp")), Ok(()));
-    }
-
-    #[test]
-    fn containment_is_by_whole_component() {
-        assert!(is_within(r"c:\temp\a", r"c:\temp"));
-        assert!(is_within(r"c:\temp", r"c:\temp"));
-        assert!(!is_within(r"c:\temporary", r"c:\temp"));
-        assert!(is_within(r"c:\anything", r"c:\"));
-    }
-
-    #[test]
-    fn the_guard_refuses_roots_known_folders_and_their_parents() {
-        let guard = Guard::new(&[p(r"C:\Users\T\AppData\Local\Temp")], &[]);
-        assert_eq!(guard.check(&p(r"C:\")), Err(Refusal::Protected));
-        assert_eq!(guard.check(&p(r"C:\Windows")), Err(Refusal::Protected));
-        assert_eq!(
-            guard.check(&p(r"C:\Users\T\AppData\Local\Temp")),
-            Err(Refusal::Protected)
-        );
-        assert_eq!(
-            guard.check(&p(r"C:\Users\T\AppData")),
-            Err(Refusal::Protected)
-        );
-        assert_eq!(
-            guard.check(&p(r"C:\Users\T\AppData\Local\Temp\x.tmp")),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn the_keep_list_covers_its_contents_and_its_parents() {
-        let guard = Guard::new(&[], &[p(r"C:\Users\T\AppData\Local\App\Keep")]);
-        assert_eq!(
-            guard.check(&p(r"c:\users\t\appdata\local\app\keep\a.txt")),
-            Err(Refusal::Kept)
-        );
-        assert_eq!(
-            guard.check(&p(r"C:\Users\T\AppData\Local\App")),
-            Err(Refusal::Kept)
-        );
-        assert_eq!(
-            guard.check(&p(r"C:\Users\T\AppData\Local\App\Other")),
-            Ok(())
-        );
-        assert!(guard.is_kept(&p(r"C:\Users\T\AppData\Local\App\Keep\deep")));
-        assert!(!guard.is_kept(&p(r"C:\Users\T\AppData\Local\App")));
-    }
-}
+#[path = "paths_tests.rs"]
+mod tests;

@@ -30,6 +30,11 @@ describe("shredding", () => {
       { timeout: 30_000, timeoutMsg: "the shred never reported" },
     );
     assert.ok(!fs.existsSync(plan), "the file is gone");
+    assert.match(
+      await $("#shred-list").getText(),
+      /Nothing to shred yet/,
+      "what is gone leaves the queue",
+    );
     assert.deepEqual(
       fs.readdirSync(machinePath(SECRET)),
       [],

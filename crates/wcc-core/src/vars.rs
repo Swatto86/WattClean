@@ -127,6 +127,24 @@ fn unresolved(pattern: &str, vars: &dyn Vars) -> Vec<String> {
     missing
 }
 
+/// Whether `text` names a variable (`%NAME%`) as [`expand`] reads it; a
+/// lone `%` or `50% off%` does not.
+pub fn has_variable(text: &str) -> bool {
+    let mut rest = text;
+    while let Some(start) = rest.find('%') {
+        let after = &rest[start + 1..];
+        let Some(len) = after.find('%') else {
+            return false;
+        };
+        let name = &after[..len];
+        if !name.is_empty() && is_name(name) {
+            return true;
+        }
+        rest = after;
+    }
+    false
+}
+
 fn is_name(name: &str) -> bool {
     name.chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '(' | ')' | '-'))
@@ -209,6 +227,15 @@ mod tests {
             expand(r"C:\a b% c%\%TEMP%", &machine),
             vec![r"C:\a b% c%\C:\Users\T\AppData\Local\Temp".to_string()]
         );
+    }
+
+    #[test]
+    fn only_a_real_name_between_percent_signs_is_a_variable() {
+        assert!(has_variable(r"C:\Users\%USERNAME%\x"));
+        assert!(has_variable("/home/t/%HOME%"));
+        assert!(!has_variable("/home/t/100% done"));
+        assert!(!has_variable("/home/t/a b% c%"));
+        assert!(!has_variable("/home/t/%%"));
     }
 
     #[test]

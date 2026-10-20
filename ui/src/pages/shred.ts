@@ -5,7 +5,7 @@ import type { Context, Page } from "../context.ts";
 import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, count, plural } from "../format.ts";
-import { diskEncryption } from "../platform.ts";
+import { diskEncryption, samePath } from "../platform.ts";
 
 export const shredPage = (_ctx: Context): Page => {
   const queue: string[] = [];
@@ -77,8 +77,7 @@ export const shredPage = (_ctx: Context): Page => {
   const add = async (folder: boolean) => {
     try {
       for (const path of await api.pickToShred(folder)) {
-        if (!queue.some((p) => p.toLowerCase() === path.toLowerCase()))
-          queue.push(path);
+        if (!queue.some((p) => samePath(p, path))) queue.push(path);
       }
       draw();
     } catch (error) {
@@ -131,17 +130,8 @@ export const shredPage = (_ctx: Context): Page => {
       const report = await api.shred([...queue], (p) => {
         status.textContent = `${count(p.files)} files · ${bytes(p.bytes)} — ${p.current}`;
       });
-      // What was not shredded stays queued to try again: everything after
-      // a stop, else what a problem was reported in.
-      const inside = (path: string, item: string) => {
-        const [p, i] = [path.toLowerCase(), item.toLowerCase()];
-        return p === i || p.startsWith(`${i.replace(/\\$/, "")}\\`);
-      };
-      const left = report.cancelled
-        ? [...queue]
-        : queue.filter((item) =>
-            report.problems.some((problem) => inside(problem.path, item)),
-          );
+      // What is still there stays queued to try again.
+      const left = queue.filter((item) => report.left.includes(item));
       queue.splice(0, queue.length, ...left);
       show(report);
     } catch (error) {
@@ -177,7 +167,7 @@ export const shredPage = (_ctx: Context): Page => {
         el("h2", { text: "Delete files beyond recovery" }),
         el("p", {
           class: "muted",
-          text: `Each file is overwritten with zeros, emptied, renamed and then deleted, so recovery tools cannot bring it back. On SSDs and USB sticks the drive itself may keep old copies out of reach of any program; ${diskEncryption()} is the reliable answer there.`,
+          text: `Each file is renamed, overwritten with zeros, emptied and then deleted, so recovery tools cannot bring it back. On SSDs and USB sticks the drive itself may keep old copies out of reach of any program; ${diskEncryption()} is the reliable answer there.`,
         }),
       ),
       list,

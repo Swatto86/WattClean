@@ -107,7 +107,10 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   root, and there is no "restart as administrator" outside Windows.
 - **Unix safety rules**: sockets, pipes and devices are never listed (the
   temporary folder holds running sessions'); clearing "read-only" stays a
-  Windows-only fallback (on Unix it would make a file world-writable); the
+  Windows-only fallback (on Unix it would make a file world-writable;
+  shredding adds only the owner's write bit and puts it back on failure);
+  a chosen path (Shred, Custom paths) is taken literally, as names may hold
+  `%`, `*`, `?` and `\`; nothing is emptied or edited through a link; the
   temporary-folder option keeps hidden and session entries and anything
   touched in the last two days.
 - **The uninstaller on Linux and macOS is a package engine**
@@ -136,7 +139,9 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   WebDriver for WKWebView, so the window is checked by hand.
 - **macOS specifics** (from the first run on a Mac): one folder has several
   spellings (`/System/Volumes/Data/…`, `/private/var/…`,
-  `/Volumes/<startup disk>/…`), so the guard folds them into one key. What
+  `/Volumes/<startup disk>/…`, the `/.nofollow/` and `/.resolve/<n>/`
+  prefixes, and these nested), so the guard folds them, repeatedly, into
+  one key; on Linux and macOS a leading `//` is `/` (no shares). What
   macOS will not let WattClean read (Safari, Mail, other apps' containers)
   is reported with a Full Disk Access hint; WattClean never asks for that
   access itself. Free-space wipes are offered only for local, visible,

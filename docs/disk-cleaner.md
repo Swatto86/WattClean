@@ -113,9 +113,17 @@ have (other than `%ONEDRIVE%`) makes the action find nothing and report why,
 rather than run without it. `walk.all` with a name filter removes matching
 files only, never folders. A link to a folder is removed as a folder (the
 link only, never its target). Keep-list entries are exact paths: wildcards
-are refused. A winapp2 `REG` exclusion inside a `RegKey` drops that
-registry action. `find.dirs` looks through every folder below
-`path` for folders named by `names`, beside a file matching `beside`
+are refused. Custom paths and what is shredded (the tool and `--shred`) are
+the chosen file or folder exactly as written: no variables, wildcards or
+separator changes, since names on Linux and macOS may hold `%`, `*`, `?`
+and `\` (only a trailing separator or `.` is dropped: it would make the
+system follow a chosen link instead of removing it). The keep list and Custom paths refuse a `%NAME%` (nothing expands
+them) but take a lone `%`; shredding takes any. Emptying, SQLite, JSON and
+INI edits are never planned on a link (its target was never checked), and
+emptying opens with `O_NOFOLLOW` on Linux and macOS, so a link put in the
+file's place afterwards is refused. A winapp2 `REG` exclusion inside a
+`RegKey` drops that registry action. `find.dirs` looks through every folder
+below `path` for folders named by `names`, beside a file matching `beside`
 (wildcards, `;` between) when given, and takes each found folder whole
 (as walk.top) without looking further inside it. Variables: see `KNOWN_VARIABLES` in
 `defs_tests.rs`; `%PROGRAMFILES%` stands for both Program Files folders.
@@ -200,8 +208,15 @@ Left out on purpose, with reasons:
 - A clean always plans again; it never trusts an earlier preview.
 - Shredding refuses a file whose data has other names (hard links, as
   Windows' own files have): overwriting it would destroy the data under
-  every name. A shredded file that cannot be removed gets its own name
-  back, so nothing is left under a random one.
+  every name. It renames the file to a random name first: a folder that
+  refuses that would refuse the deletion too, so the file is left as it
+  was rather than emptied in place. A file the account may not write gets
+  only the owner's write bit on Linux and macOS (read-only cleared on
+  Windows), never opened to other accounts, and on Linux and macOS never
+  written through a link put in its place. One
+  that then cannot be removed gets its own name and permissions back, so
+  nothing is left under a random one. The report names the chosen items
+  still there, which the Shred page keeps queued.
 - A wipe's filler folder is removed with retries for a few seconds (a
   virus scanner may hold the files just written); one left behind is
   removed when the app starts and before the next console wipe. In the

@@ -2,13 +2,14 @@
 //! (what a preview lists) and carried out one by one (what a clean does).
 
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::edit;
 use crate::model::{Action, FileSpec, Kind, Search, SqliteOp};
 use crate::paths::{self, Guard};
 use crate::report::{Item, ItemKind};
-use crate::search::{Filter, Findings, Problem, Searcher};
+use crate::search::{Filter, Findings, Found, Problem, Searcher};
 use crate::sqlite;
 use crate::system::System;
 use crate::tasks::{Listed, Task};
@@ -165,6 +166,14 @@ impl Op {
     }
 }
 
+/// Whether an edit (emptying, SQLite, JSON, INI) may change this file in
+/// place. Never a link: writing through it would change its target, which
+/// the guard never saw. A link is only ever removed.
+fn editable(found: &Found) -> bool {
+    found.kind == Kind::File
+        && !fs::symlink_metadata(&found.path).is_ok_and(|meta| meta.file_type().is_symlink())
+}
+
 /// What the system calls the place deleted files wait.
 const TRASH: &str = if cfg!(windows) {
     "Recycle Bin"
@@ -202,7 +211,7 @@ impl Planner<'_> {
                 });
             }),
             Action::Truncate(spec) => self.files(spec, &lookup, &mut problems, |found| {
-                if found.kind == Kind::File && found.size > 0 {
+                if editable(&found) && found.size > 0 {
                     ops.push(Op::Truncate {
                         path: found.path,
                         size: found.size,
@@ -210,7 +219,7 @@ impl Planner<'_> {
                 }
             }),
             Action::Sqlite { files, op } => self.files(files, &lookup, &mut problems, |found| {
-                if found.kind == Kind::File && sqlite::is_database(&found.path) {
+                if editable(&found) && sqlite::is_database(&found.path) {
                     ops.push(Op::Sqlite {
                         path: found.path,
                         op: *op,
@@ -219,7 +228,7 @@ impl Planner<'_> {
                 }
             }),
             Action::Json { files, address } => self.files(files, &lookup, &mut problems, |found| {
-                if found.kind == Kind::File && edit::json_has(&found.path, address) {
+                if editable(&found) && edit::json_has(&found.path, address) {
                     ops.push(Op::Json {
                         path: found.path,
                         address: address.clone(),
@@ -231,9 +240,7 @@ impl Planner<'_> {
                 section,
                 parameter,
             } => self.files(files, &lookup, &mut problems, |found| {
-                if found.kind == Kind::File
-                    && edit::ini_has(&found.path, section, parameter.as_deref())
-                {
+                if editable(&found) && edit::ini_has(&found.path, section, parameter.as_deref()) {
                     ops.push(Op::Ini {
                         path: found.path,
                         section: section.clone(),
@@ -272,7 +279,7 @@ impl Planner<'_> {
                     } else {
                         Search::File
                     };
-                    let spec = FileSpec::new(custom.path.clone(), search);
+                    let spec = FileSpec::chosen(custom.path.clone(), search);
                     let (more, issues) = self.plan(&Action::Delete(spec), seen);
                     ops.extend(more);
                     problems.extend(issues);
@@ -314,7 +321,7 @@ impl Planner<'_> {
         spec: &FileSpec,
         vars: &dyn Vars,
         problems: &mut Vec<Problem>,
-        mut each: impl FnMut(crate::search::Found),
+        mut each: impl FnMut(Found),
     ) {
         let filter = match Filter::new(spec, vars, self.now) {
             Ok(filter) => filter,
@@ -336,3 +343,7 @@ impl Planner<'_> {
         findings.found.into_iter().for_each(&mut each);
     }
 }
+
+#[cfg(test)]
+#[path = "ops_tests.rs"]
+mod tests;

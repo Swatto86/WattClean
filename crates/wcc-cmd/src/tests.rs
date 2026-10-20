@@ -99,6 +99,16 @@ fn shredding_from_the_command_line() {
     assert!(!secret.exists());
 }
 
+#[test]
+fn a_chosen_name_with_a_percent_sign_is_shredded() {
+    let (dir, system) = machine();
+    let file = wcc_core::paths::join(&system.drive_c(), r"Users\Tester\Documents\100% done.txt");
+    std::fs::write(&file, b"x").unwrap();
+    let (code, text) = output(&Command::Shred(vec![file.clone()]), &system, dir.path());
+    assert_eq!(code, 0, "{text}");
+    assert!(!file.exists());
+}
+
 fn wipe_folders(folder: &Path) -> Vec<String> {
     std::fs::read_dir(folder)
         .unwrap()

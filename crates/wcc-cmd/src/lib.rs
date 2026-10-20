@@ -11,7 +11,7 @@ use wcc_core::model::OptionKey;
 use wcc_core::paths::Guard;
 use wcc_core::report::{Item, Mode, Report, Sink};
 use wcc_core::run::{self, RunSettings};
-use wcc_core::settings::{Settings, check_path};
+use wcc_core::settings::{Settings, check_full_path};
 use wcc_core::shred;
 use wcc_core::store;
 use wcc_core::system::System;
@@ -305,7 +305,7 @@ fn shred(
     out: &mut dyn Write,
 ) -> std::io::Result<i32> {
     for path in paths {
-        if let Err(message) = check_path(&path.to_string_lossy()) {
+        if let Err(message) = check_full_path(&path.to_string_lossy()) {
             writeln!(out, "{message}")?;
             return Ok(2);
         }

@@ -4337,6 +4337,7 @@ dependencies = [
 name = "wcc-core"
 version = "0.1.2"
 dependencies = [
+ "libc",
  "regex",
  "roxmltree",
  "rusqlite",
