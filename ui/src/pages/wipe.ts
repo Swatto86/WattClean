@@ -19,6 +19,12 @@ export const wipePage = (_ctx: Context): Page => {
   const stop = commandButton("wipe-stop", "Stop", "stop", "secondary");
   stop.hidden = true;
   const drives = el("div", { class: "drives", id: "drives" });
+  const none = el("p", {
+    class: "muted",
+    id: "wipe-none",
+    text: "No drive here can be wiped: WattClean offers only local drives this account can write to.",
+    hidden: true,
+  });
   const progress = el("div", { id: "wipe-progress" });
   const outcome = el("div", { id: "wipe-outcome" });
 
@@ -63,6 +69,7 @@ export const wipePage = (_ctx: Context): Page => {
     try {
       const list = await api.getDrives();
       drives.replaceChildren(...list.map(driveCard));
+      none.hidden = list.length > 0;
     } catch (error) {
       notice(String(error), true);
     }
@@ -145,6 +152,7 @@ export const wipePage = (_ctx: Context): Page => {
         }),
       ),
       drives,
+      none,
       progress,
       outcome,
     ),

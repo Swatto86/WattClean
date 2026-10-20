@@ -77,7 +77,30 @@ def check_preview(window):
     summary = window.wait("const s = document.getElementById('report-summary'); return s && s.textContent", "the preview", 180)
     window.js("document.querySelectorAll('.result-head[aria-expanded=\"false\"]').forEach(h => h.click())")
     kinds = window.js("return [...new Set([...document.querySelectorAll('.item-kind')].map(k => k.textContent))]")
+    tiles = window.js("return [...document.querySelectorAll('#report-tiles .tile-label')].map(t => t.textContent)")
+    assert "Registry entries" not in tiles, tiles
     print("preview OK:", summary, kinds)
+
+
+def check_programs(window):
+    """The system's own package manager lists its applications, with no
+    problem reported, under a filter row of its own and a search box that
+    finds programs."""
+    window.js("document.getElementById('nav-programs').click()")
+    status = window.wait(
+        "const s = document.getElementById('un-pkg-status').textContent; return /^[0-9,]+ (program|package)s?$/.test(s) && s",
+        "the programs",
+        180,
+    )
+    problems = window.js("const p = document.getElementById('un-pkg-problems'); return p.hidden ? '' : p.textContent")
+    assert problems == "", problems
+    sources = window.js("return [...document.querySelectorAll('#un-pkg-table tbody tr')].map(r => r.cells[1].textContent)")
+    assert any(source in ("APT", "RPM", "pacman") for source in sources), sources
+    height = window.js("return document.querySelector('#page-programs .filters').getBoundingClientRect().height")
+    assert height >= 28, f"the filter row is {height}px high"
+    hint = window.js("return document.getElementById('search').placeholder")
+    assert hint == "Find a program", hint
+    print("programs OK:", status)
 
 
 def check_settings(window):
@@ -146,6 +169,7 @@ def main():
             window = Window(session)
             check_shell(window)
             check_preview(window)
+            check_programs(window)
             check_uninstall(window, home)
             check_settings(window)
         finally:

@@ -48,6 +48,14 @@ export const programsPage = (_ctx: Context): Page => {
   const all = el("input", { type: "checkbox", id: "un-pkg-all" });
   const source = el("select", { id: "un-pkg-source", "aria-label": "Source" });
   const status = el("span", { class: "muted", id: "un-pkg-status" });
+  // A package manager that could not list what it installed is named for
+  // as long as the list lacks its programs.
+  const problems = el("div", {
+    class: "banner danger",
+    id: "un-pkg-problems",
+    role: "alert",
+    hidden: true,
+  });
   const body = el("tbody", {});
   const table = el(
     "table",
@@ -153,7 +161,13 @@ export const programsPage = (_ctx: Context): Page => {
       );
       source.value = sources.includes(chosen) ? chosen : "";
       if (!packages.some((p) => p.key === selected)) selected = null;
-      for (const problem of list.problems) notice(problem, true);
+      problems.replaceChildren(
+        el("span", {
+          class: "banner-text",
+          text: list.problems.map((problem) => `${problem}.`).join(" "),
+        }),
+      );
+      problems.hidden = list.problems.length === 0;
     } catch (error) {
       if (ticket === loading) notice(String(error), true);
     } finally {
@@ -246,7 +260,7 @@ export const programsPage = (_ctx: Context): Page => {
       { class: "scroll" },
       el(
         "div",
-        { class: "bar" },
+        { class: "filters" },
         el(
           "label",
           { class: "check", for: "un-pkg-all" },
@@ -256,6 +270,7 @@ export const programsPage = (_ctx: Context): Page => {
         source,
         status,
       ),
+      problems,
       table,
       el(
         "p",
@@ -275,9 +290,12 @@ export const programsPage = (_ctx: Context): Page => {
         void load();
       }
     },
-    onSearch: (text) => {
-      query = text.trim().toLowerCase();
-      draw();
+    search: {
+      placeholder: "Find a program",
+      run: (text) => {
+        query = text.trim().toLowerCase();
+        draw();
+      },
     },
   };
 };

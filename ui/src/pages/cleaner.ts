@@ -304,9 +304,12 @@ export const cleanerPage = (ctx: Context): Page => {
     onShow: () => {
       if (!running) void load();
     },
-    onSearch: (q) => {
-      query = q;
-      redraw();
+    search: {
+      placeholder: "Find a cleaner",
+      run: (q) => {
+        query = q;
+        redraw();
+      },
     },
   };
 };

@@ -1082,6 +1082,23 @@ button:disabled {
   gap: 8px;
 }
 
+/* A list's filters above it: Uninstall programs on Linux and macOS. */
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.filters select {
+  min-width: 160px;
+  height: 32px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0 8px;
+}
+
 /* Scroll bars take the accent's tint. */
 
 ::-webkit-scrollbar {

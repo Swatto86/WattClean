@@ -3,7 +3,7 @@
 
 import type { Category, CleanerView } from "../api.ts";
 import { el, glyph } from "../dom.ts";
-import { osName } from "../platform.ts";
+import { machineName, osName } from "../platform.ts";
 import { cleanerState, key, matches } from "../selection.ts";
 
 /** Each category's heading, in the tree's order. */
@@ -124,7 +124,7 @@ export class Tree {
         "data-cleaner": cleaner.id,
         title: cleaner.present
           ? cleaner.description
-          : `${cleaner.description} (not found on this PC)`,
+          : `${cleaner.description} (not found on this ${machineName()})`,
       },
       expander,
       box,

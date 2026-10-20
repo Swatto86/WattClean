@@ -8,7 +8,7 @@ import type { Context, Page } from "../context.ts";
 import { confirm } from "../dialog.ts";
 import { el, notice } from "../dom.ts";
 import { plural } from "../format.ts";
-import { isWindows, osName } from "../platform.ts";
+import { isWindows, machineName, osName } from "../platform.ts";
 import { general } from "./general.ts";
 import { pathList } from "./pathlist.ts";
 
@@ -81,7 +81,7 @@ export const settingsPage = (ctx: Context): Page => {
   };
   const hide = toggle(
     "set-hide",
-    "Hide cleaners for programs not on this PC",
+    `Hide cleaners for programs not on this ${machineName()}`,
     "BleachBit's “Hide irrelevant cleaners”.",
     "hideIrrelevant",
   );

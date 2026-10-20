@@ -42,5 +42,12 @@ export interface Page {
   /** Called each time the page is opened. */
   onShow?: () => void;
   /** Present when the page has a search box. */
-  onSearch?: (query: string) => void;
+  search?: PageSearch;
+}
+
+/** A page's search box: what it finds, and what typing in it does. */
+export interface PageSearch {
+  /** The box's hint, also its accessible name ("Find a cleaner"). */
+  placeholder: string;
+  run: (query: string) => void;
 }

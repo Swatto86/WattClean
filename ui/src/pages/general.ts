@@ -6,7 +6,13 @@
 import { api, TEXT_SIZES, THEMES, type ShellSettings } from "../api.ts";
 import type { Context } from "../context.ts";
 import { el, notice } from "../dom.ts";
-import { isWindows, osName, platform, trayName } from "../platform.ts";
+import {
+  isWindows,
+  noticesPlace,
+  osName,
+  platform,
+  trayName,
+} from "../platform.ts";
 import { ACCENTS } from "../theme.ts";
 
 type Group = (
@@ -200,7 +206,7 @@ export const general = (
         `Settings, history and backups are kept in ${ctx.info.dataDir}, one folder per tool.`,
       ),
       note(
-        "WattClean is MIT-licensed. The licences of the open-source packages it is built with are in THIRD-PARTY-NOTICES.txt in its program folder.",
+        `WattClean is MIT-licensed. The licences of the open-source packages it is built with are in THIRD-PARTY-NOTICES.txt ${noticesPlace()}.`,
       ),
       access,
       el("div", { class: "row-buttons" }, openData, privacy, restart),

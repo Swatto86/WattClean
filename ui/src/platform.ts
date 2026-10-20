@@ -19,6 +19,18 @@ export const isWindows = (): boolean => current === "windows";
 export const osName = (): string =>
   current === "macos" ? "macOS" : current === "linux" ? "Linux" : "Windows";
 
+/** What people call this machine: a PC, a Mac, a computer. */
+export const machineName = (): string =>
+  current === "windows" ? "PC" : current === "macos" ? "Mac" : "computer";
+
+/** Where THIRD-PARTY-NOTICES.txt is installed with the app. */
+export const noticesPlace = (): string =>
+  current === "windows"
+    ? "in its program folder"
+    : current === "macos"
+      ? "inside WattClean.app, in Contents/Resources"
+      : "in /usr/share/doc/wattclean (inside the AppImage, when run from one)";
+
 /** Where deleted files wait: the Recycle Bin or the Trash. */
 export const trashName = (): string =>
   current === "windows" ? "Recycle Bin" : "Trash";
@@ -86,7 +98,7 @@ export const testBuild = (): { label: string; title: string } =>
       }
     : {
         label: "Test disk",
-        title: `This test build cleans a sandboxed test disk, but Uninstall programs acts on this ${current === "macos" ? "Mac" : "computer"}'s real programs.`,
+        title: `This test build cleans a sandboxed test disk, but Uninstall programs acts on this ${machineName()}'s real programs.`,
       };
 
 /** Shown instead of the pages when the system's web engine has no

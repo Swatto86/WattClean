@@ -239,7 +239,8 @@ export const renderReport = (
       tile(cleaning ? "Freed" : "Space to free", bytes(t.bytes), "big"),
       tile("Files", count(t.files)),
       tile("Folders", count(t.folders)),
-      tile("Registry entries", count(t.registry)),
+      // Only Windows has a registry.
+      isWindows() ? tile("Registry entries", count(t.registry)) : null,
       tile("Other items", count(t.other)),
       tile(
         t.inUse ? `Problems (${count(t.inUse)} in use)` : "Problems",

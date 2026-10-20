@@ -139,6 +139,7 @@ const boot = async (): Promise<void> => {
   const searchBox = byId("search-box");
   const search = inputById("search");
   const made = new Map<string, Page>();
+  const queries = new Map<string, string>();
   const buttons = new Map<string, HTMLButtonElement>();
   let current = "";
 
@@ -160,7 +161,13 @@ const boot = async (): Promise<void> => {
     byId("status-selection").hidden = id !== "cleaner";
     title.textContent = entry.label;
     document.documentElement.style.setProperty("--page", `var(--page-${id})`);
-    searchBox.hidden = !page.onSearch;
+    // Each page keeps what was typed in its own search box.
+    searchBox.hidden = !page.search;
+    if (page.search) {
+      search.placeholder = page.search.placeholder;
+      search.setAttribute("aria-label", page.search.placeholder);
+      search.value = queries.get(id) ?? "";
+    }
     for (const [other, button] of buttons) {
       if (other === id) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
@@ -168,9 +175,10 @@ const boot = async (): Promise<void> => {
     page.onShow?.();
   };
 
-  search.addEventListener("input", () =>
-    made.get(current)?.onSearch?.(search.value),
-  );
+  search.addEventListener("input", () => {
+    queries.set(current, search.value);
+    made.get(current)?.search?.run(search.value);
+  });
 
   const navPages = byId("nav-pages");
   const navBottom = byId("nav-bottom");
@@ -186,7 +194,6 @@ const boot = async (): Promise<void> => {
         id: `nav-${entry.id}`,
         class: "nav-item",
         type: "button",
-        title: entry.label,
       },
       glyph(entry.glyph),
       el("span", { class: "nav-label", text: entry.label }),
@@ -217,6 +224,13 @@ const boot = async (): Promise<void> => {
   const collapse = (collapsed: boolean) => {
     app.classList.toggle("nav-collapsed", collapsed);
     toggle.setAttribute("aria-expanded", String(!collapsed));
+    // A page's name pops up only when the narrow navigation hides it; over
+    // a name already shown it would cover the next one.
+    for (const entry of pages) {
+      const button = buttons.get(entry.id);
+      if (collapsed) button?.setAttribute("title", entry.label);
+      else button?.removeAttribute("title");
+    }
   };
   collapse(shell.navCollapsed);
   toggle.addEventListener("click", () => {
