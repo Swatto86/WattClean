@@ -32,8 +32,8 @@ crates/wcc-cmd              wattclean-cmd.exe disk, BleachBit-style console
                              options, on wcc-core and wcc-windows (no Tauri)
 ```
 
-`wattclean-cmd.exe disk` is built by `beforeBundleCommand` and installed
-beside the app by `src-tauri/installer-hooks.nsh`.
+`wattclean-cmd disk` is built by `beforeBundleCommand` and installed
+beside the app as a `bundle.externalBin` (`ARCHITECTURE.md`).
 
 ## wcc-core modules
 

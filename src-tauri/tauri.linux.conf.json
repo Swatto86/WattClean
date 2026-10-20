@@ -22,7 +22,6 @@
           "libayatana-appindicator3-1"
         ],
         "files": {
-          "/usr/bin/wattclean-cmd": "../target/release/wattclean-cmd",
           "/usr/share/doc/wattclean/THIRD-PARTY-NOTICES.txt": "../THIRD-PARTY-NOTICES.txt"
         }
       },
@@ -31,7 +30,6 @@
           "libayatana-appindicator-gtk3"
         ],
         "files": {
-          "/usr/bin/wattclean-cmd": "../target/release/wattclean-cmd",
           "/usr/share/doc/wattclean/THIRD-PARTY-NOTICES.txt": "../THIRD-PARTY-NOTICES.txt"
         }
       }

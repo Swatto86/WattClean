@@ -34,8 +34,9 @@ crates/wattclean-cmd                      wattclean-cmd: `disk …` and
 Dependencies point inward: no engine knows Tauri, an OS API or another
 engine. `wu-unix` uses `wcc-unix::process` (finding and running programs,
 with administrator rights) so both modules ask for rights the same way.
-`wattclean-cmd.exe` is built by `beforeBundleCommand` and installed beside
-the app by `src-tauri/installer-hooks.nsh`.
+`wattclean-cmd` is a `bundle.externalBin`: `beforeBundleCommand`
+(`scripts/bundle-cmd.mjs`) builds it for the bundle's target into
+`src-tauri/binaries/`, and every bundle installs it beside the app.
 
 ## The app (`src-tauri/src`)
 

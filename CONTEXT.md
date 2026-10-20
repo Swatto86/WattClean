@@ -147,11 +147,18 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   CleanerML files are read for each platform's own parts, `~` being home.
 - **Data folders**: `~/.local/share/WattClean` (XDG) on Linux,
   `~/Library/Application Support/WattClean` on macOS.
-- **Bundles**: deb, rpm and AppImage on Linux; app and dmg on macOS, each
-  with `wattclean-cmd` (`tauri.linux.conf.json`, `tauri.macos.conf.json`).
-  The licence notices cover every shipped target; `deny.toml` allows ISC and
-  Apache-2.0 WITH LLVM-exception (Linux only) and records four
-  "unmaintained" advisories in Tauri's Linux stack, to review 2027-01-19.
+- **Bundles**: deb, rpm and AppImage on Linux; app and dmg on macOS; NSIS
+  on Windows. Each carries `wattclean-cmd` as a `bundle.externalBin`
+  (2026-10-20), built for the bundle's own target by `beforeBundleCommand`
+  (`scripts/bundle-cmd.mjs`, lipo joining both for a universal Mac) into
+  the gitignored `src-tauri/binaries/`, so Tauri installs it beside the app
+  (`/usr/bin`, `Contents/MacOS`, the install folder) and would sign it with
+  a signed Mac build (unsigned so far). The fixed `target/release` copy it
+  replaces was the host's architecture, unsigned, and missed under
+  `CARGO_TARGET_DIR`. The licence notices cover every shipped target;
+  `deny.toml` allows ISC and Apache-2.0 WITH LLVM-exception (Linux only)
+  and records four "unmaintained" advisories in Tauri's Linux stack, to
+  review 2027-01-19.
 - **Verification**: the full gate runs on Linux with `e2e/linux/smoke.py`
   (WebKitGTK through tauri-driver: real package managers, read only, and a
   throwaway AppImage uninstalled to the Trash, in a temporary home). On a

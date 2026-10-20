@@ -63,11 +63,19 @@ decisions; each engine's own structure and decisions are in
   from the session (seen from Claude desktop sessions), open the setup for
   Swatto through `explorer.exe` and run the script with `-AlreadyInstalled`.
   Installed at `C:\Program Files\WattClean`.
+- Every bundle carries `wattclean-cmd` as a `bundle.externalBin`:
+  `beforeBundleCommand` (`scripts/bundle-cmd.mjs`) builds it for the
+  bundle's target (`--target`, lipo for `universal-apple-darwin`) into
+  `src-tauri/binaries/wattclean-cmd-<triple>` (gitignored). Until then
+  `src-tauri/build.rs` leaves an empty stand-in there, which Tauri also
+  copies over `target/<profile>/wattclean-cmd`: use `cargo run -p
+  wattclean-cmd`, never that file.
 - Releases are published by hand (Actions off): bump every manifest, gate,
   commit, then `AGENT_RELEASE=1 npx tauri build`, tag `vX.Y.Z` on that
   commit and `gh release create` with the setup exe,
   `target/release/wattclean.exe` as `WattClean_X.Y.Z_x64-portable.exe`,
-  `target/release/wattclean-cmd.exe` as `WattClean_X.Y.Z_x64-cmd.exe`,
+  `src-tauri/binaries/wattclean-cmd-x86_64-pc-windows-msvc.exe` (the copy
+  the installer carries) as `WattClean_X.Y.Z_x64-cmd.exe`,
   `THIRD-PARTY-NOTICES.txt` and `SHA256SUMS.txt`; download them back and
   check the sums. First published: v0.1.0 (2026-10-18).
 - `THIRD-PARTY-NOTICES.txt` (the licences of every package built into the

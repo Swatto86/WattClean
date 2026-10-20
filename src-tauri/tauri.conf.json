@@ -8,7 +8,7 @@
     "devUrl": "http://localhost:5190",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "beforeBundleCommand": "cargo build --release --locked -p wattclean-cmd"
+    "beforeBundleCommand": "node scripts/bundle-cmd.mjs"
   },
   "app": {
     "windows": [
@@ -42,6 +42,9 @@
     "publisher": "Swatto",
     "copyright": "© 2026 Swatto",
     "license": "MIT",
+    "externalBin": [
+      "binaries/wattclean-cmd"
+    ],
     "category": "Utility",
     "shortDescription": "Clean disks and the registry, and uninstall programs completely",
     "longDescription": "WattClean frees disk space and removes traces of what you do (browser caches, cookies and history, temporary files, logs and more for Windows and dozens of applications), cleans registry entries left by removed programs with a backup of every change, tunes and watches the registry, and uninstalls programs together with the leftovers their uninstallers miss. Shred files, wipe free space, schedule cleans, and restore anything removed.",

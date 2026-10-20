@@ -27,8 +27,8 @@ crates/wrc-cmd                 wattclean-cmd.exe registry, the console program, 
                                wrc-core and wrc-windows (no Tauri)
 ```
 
-`wattclean-cmd.exe registry` is built by `beforeBundleCommand` (release bundles
-only) and installed beside the app by `installer-hooks.nsh`.
+`wattclean-cmd.exe registry` is built by `beforeBundleCommand` (bundles
+only) and installed beside the app as a `bundle.externalBin`.
 
 Dependencies point inward: `wrc-core` knows nothing of Tauri or Win32. Files
 named by registry data are checked in `wrc-core` with `std::fs`, so the fake

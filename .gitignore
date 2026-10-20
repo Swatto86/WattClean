@@ -9,6 +9,10 @@ tsconfig.tsbuildinfo
 # Tauri's generated schemas and per-build artifacts.
 /src-tauri/gen
 
+# wattclean-cmd for each target, written by scripts/bundle-cmd.mjs before
+# bundling (an empty stand-in until then; see src-tauri/build.rs).
+/src-tauri/binaries
+
 # Downloaded WebDriver binaries, version-matched to this machine's WebView2
 # runtime. Fetched by scripts/setup-e2e.ps1.
 /.webdriver
