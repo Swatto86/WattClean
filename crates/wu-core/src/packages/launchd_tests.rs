@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::*;
-use crate::packages::testing::{Machine, offered};
+use crate::packages::testing::{Machine, launchd_job, offered};
 use crate::packages::{Manager, Package, PackageSystem, find_leftovers};
 
 /// Puts a plist in the account's LaunchAgents folder, saying what is given.
@@ -11,11 +11,7 @@ fn agent(machine: &mut Machine, file: &str, job: Option<(&str, &str, &[&str])>) 
     let path = folder.join(file);
     std::fs::write(&path, b"plist").unwrap();
     if let Some((label, program, associated)) = job {
-        let job = LaunchdJob {
-            label: label.into(),
-            program: Some(program.into()),
-            associated: associated.iter().map(ToString::to_string).collect(),
-        };
+        let job = launchd_job(label, program, associated, &[]);
         machine.jobs.insert(path.clone(), job);
     }
     path
@@ -32,7 +28,7 @@ fn jobs(
         .into_iter()
         .map(|l| {
             let path = l.path.strip_prefix(&home).unwrap().to_string_lossy();
-            (path.replace('\\', "/"), l.job)
+            (path.replace('\\', "/"), l.job.map(|job| job.label))
         })
         .collect()
 }
@@ -56,6 +52,19 @@ fn a_plist_says_its_label_program_and_apps() {
         Some("/Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper")
     );
     assert_eq!(orbstack.associated, ["dev.kdrag0n.MacVirt"]);
+    // Every text it holds, keys too, however deep.
+    for text in [
+        "dev.orbstack.OrbStack.privhelper",
+        "/Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper",
+        "MachServices",
+        "x",
+    ] {
+        assert!(
+            orbstack.mentions.iter().any(|m| m == text),
+            "{text} in {:?}",
+            orbstack.mentions
+        );
+    }
     let tea = LaunchdJob::from_json(
         r#"{"Label":"Tea","ProgramArguments":["/Applications/Tea.app/Contents/MacOS/tea","--hidden"],"AssociatedBundleIdentifiers":"xyz.tea.Tea"}"#,
     )
@@ -221,7 +230,7 @@ fn a_formulas_service_plists_are_offered_by_their_exact_name() {
     let found: Vec<(PathBuf, Option<String>)> =
         find_leftovers(&machine, &tailscale, std::slice::from_ref(&tailscale))
             .into_iter()
-            .map(|l| (l.path, l.job))
+            .map(|l| (l.path, l.job.map(|job| job.label)))
             .collect();
     let home = machine.home().unwrap();
     assert_eq!(

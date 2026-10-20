@@ -1,7 +1,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use wu_core::packages::{BundleInfo, Manager, Output};
+use wu_core::packages::{BundleInfo, Domain, Job, Manager, Output};
 
 use super::*;
 
@@ -199,17 +199,24 @@ fn leftover(path: &str, job: Option<&str>) -> Leftover {
         path: path.into(),
         size: Some(1),
         folder: job.is_none(),
-        job: job.map(String::from),
+        job: job.map(|label| Job::new(label, Domain::Session)),
+        system_wide: false,
     }
 }
 
 /// A plist moved to the Trash leaves its job running until logout, so a
 /// loaded job is stopped first; one that cannot be stopped stays where it
-/// is, and WattClean's own is never stopped.
+/// is, and WattClean's own is never stopped. A daemon for every account is
+/// stopped as administrator before its plist and helper move.
 #[test]
 fn a_loaded_job_is_stopped_before_its_plist_goes_to_the_trash() {
-    let mac =
-        Mac::failing(&["launchctl bootout gui/501 /Users/t/Library/LaunchAgents/Stuck.plist"]);
+    let mac = Mac::failing(&["launchctl bootout gui/501/Stuck"]);
+    let orbstack = Job::new("dev.orbstack.OrbStack.privhelper", Domain::System);
+    let system = |path: &str| Leftover {
+        job: Some(orbstack.clone()),
+        system_wide: true,
+        ..leftover(path, None)
+    };
     let chosen = [
         leftover("/Users/t/Library/LaunchAgents/Tea.plist", Some("Tea")),
         leftover("/Users/t/Library/LaunchAgents/Stuck.plist", Some("Stuck")),
@@ -218,9 +225,11 @@ fn a_loaded_job_is_stopped_before_its_plist_goes_to_the_trash() {
             "/Users/t/Library/LaunchAgents/co.swatto.wattclean.plist",
             Some("co.swatto.wattclean"),
         ),
+        system("/Library/LaunchDaemons/dev.orbstack.OrbStack.privhelper.plist"),
+        system("/Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper"),
     ];
     let trashed = trash_chosen(&mac, &chosen);
-    assert_eq!(trashed.moved, 2);
+    assert_eq!(trashed.moved, 4);
     assert_eq!(trashed.failed.len(), 2, "{:?}", trashed.failed);
     assert!(
         trashed.failed[0].starts_with(
@@ -229,13 +238,19 @@ fn a_loaded_job_is_stopped_before_its_plist_goes_to_the_trash() {
         "{:?}",
         trashed.failed
     );
+    // This fake says every job is loaded, so the daemon is stopped for each
+    // of its two items; on a Mac the second finds it already stopped.
     assert_eq!(
         mac.ran(),
         [
             "launchctl print gui/501/Tea",
-            "launchctl bootout gui/501 /Users/t/Library/LaunchAgents/Tea.plist",
+            "launchctl bootout gui/501/Tea",
             "launchctl print gui/501/Stuck",
-            "launchctl bootout gui/501 /Users/t/Library/LaunchAgents/Stuck.plist",
+            "launchctl bootout gui/501/Stuck",
+            "launchctl print system/dev.orbstack.OrbStack.privhelper",
+            "admin launchctl bootout system/dev.orbstack.OrbStack.privhelper",
+            "launchctl print system/dev.orbstack.OrbStack.privhelper",
+            "admin launchctl bootout system/dev.orbstack.OrbStack.privhelper",
         ]
     );
     assert_eq!(
@@ -243,6 +258,8 @@ fn a_loaded_job_is_stopped_before_its_plist_goes_to_the_trash() {
         [
             PathBuf::from("/Users/t/Library/LaunchAgents/Tea.plist"),
             PathBuf::from("/Users/t/Library/Application Support/Tea"),
+            PathBuf::from("/Library/LaunchDaemons/dev.orbstack.OrbStack.privhelper.plist"),
+            PathBuf::from("/Library/PrivilegedHelperTools/dev.orbstack.OrbStack.privhelper"),
         ]
     );
 }

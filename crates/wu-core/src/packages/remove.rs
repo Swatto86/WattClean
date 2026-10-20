@@ -1,11 +1,11 @@
 //! How each package manager removes what it installed, and what stops a
 //! program's background jobs first. The program and its arguments are
 //! decided here; the only text from outside is the package's own name and
-//! a job's label, which must look like names, and the path of a plist
-//! WattClean found.
+//! a job's label, which must look like names.
 
 use std::path::{Path, PathBuf};
 
+use super::launchd::Domain;
 use super::others::takes_nothing_else;
 use super::{Leftover, Manager, Package, PackageSystem, launchd};
 
@@ -223,15 +223,18 @@ fn loaded(system: &dyn PackageSystem, launchctl: &Path, target: &str) -> bool {
         .is_ok_and(|output| output.success)
 }
 
-/// What stops a leftover's background job before its plist goes to the
-/// Trash (launchd runs a trashed plist's job on until logout): launchd's
-/// bootout from the account's own session, without administrator rights,
-/// and only while launchd has it loaded. `None` when there is nothing to
-/// stop. A label that could be an option, or WattClean's own, is refused.
+/// What stops a leftover's background job before its plist (or the helper
+/// a daemon starts) goes to the Trash: launchd runs a trashed plist's job
+/// on until logout or shutdown. launchd's bootout by label, and only while
+/// launchd has it loaded: from the account's own session without
+/// administrator rights, or a daemon for every account (`system`) with
+/// them. `None` when there is nothing to stop. A label that could be an
+/// option or a path, or WattClean's own, is refused.
 pub fn stop_job(system: &dyn PackageSystem, leftover: &Leftover) -> Result<Option<Step>, String> {
-    let Some(label) = &leftover.job else {
+    let Some(job) = &leftover.job else {
         return Ok(None);
     };
+    let label = &job.label;
     if !safe_name(label) || launchd::is_own(label) {
         return Err(format!(
             "its background job {label:?} is not one WattClean will stop"
@@ -240,20 +243,22 @@ pub fn stop_job(system: &dyn PackageSystem, leftover: &Leftover) -> Result<Optio
     let launchctl = system
         .find_admin_program("launchctl")
         .ok_or("launchctl is not found, so its background job cannot be stopped")?;
-    let uid = system
-        .uid()
-        .ok_or("this account's user id is unknown, so its background job cannot be stopped")?;
-    if !loaded(system, &launchctl, &format!("gui/{uid}/{label}")) {
+    let target = match job.domain {
+        Domain::Session => {
+            let uid = system.uid().ok_or(
+                "this account's user id is unknown, so its background job cannot be stopped",
+            )?;
+            format!("gui/{uid}/{label}")
+        }
+        Domain::System => format!("system/{label}"),
+    };
+    if !loaded(system, &launchctl, &target) {
         return Ok(None);
     }
     Ok(Some(Step {
         program: launchctl,
-        args: vec![
-            "bootout".into(),
-            format!("gui/{uid}"),
-            leftover.path.to_string_lossy().into_owned(),
-        ],
-        admin: false,
+        args: vec!["bootout".into(), target],
+        admin: job.domain == Domain::System,
     }))
 }
 

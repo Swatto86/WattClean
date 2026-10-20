@@ -44,9 +44,10 @@ the fake machine is just a temp folder plus a JSON registry.
 
 There is no uninstall registry outside Windows, so the registry engine above
 is Windows-only and Linux and macOS have a package engine instead. The app
-layer is `src-tauri/src/packages.rs` (`un_pkg_list`, `un_pkg_uninstall`,
-`un_pkg_trash_leftovers`, `un_pkg_reveal`) and the page `ui/src/packages/`
-(ids `un-pkg-`).
+layer is `src-tauri/src/packages.rs` (`un_pkg_list`, `un_pkg_uninstall`) and
+`packages/leftovers.rs` (`un_pkg_orphans`, `un_pkg_trash_leftovers`,
+`un_pkg_reveal`), and the page `ui/src/packages/` (ids `un-pkg-`; the
+leftovers dialog in `leftovers.ts`).
 
 | Module | Responsibility |
 | --- | --- |
@@ -54,9 +55,11 @@ layer is `src-tauri/src/packages.rs` (`un_pkg_list`, `un_pkg_uninstall`,
 | `packages::linux` | dpkg, rpm, pacman, Flatpak, Snap, Homebrew, AppImages in `~/Applications` and the like |
 | `packages::launchers` | A system package is an application when it installed a visible launcher in `/usr/share/applications`, whose name it takes; owners from `dpkg -S`, `pacman -Qo` (both name the file) and `rpm -qf` (lines taken in order only when there is one per file, else asked file by file) |
 | `packages::macos` | App bundles in `/Applications` and `~/Applications` (Apple's own left out), Homebrew formulae and casks (a cask takes its app's place, bundle id, version and size, matched by the app it installs or its uninstall step deletes; fonts and plugins are not applications; a formula's size from the Cellar beside the `brew` found), MacPorts |
-| `packages::remove` | The removal for each manager: `apt-get remove`/`purge`, `dnf`/`zypper`/`rpm`, `pacman -R`/`-Rns`, `flatpak uninstall` (`--delete-data`), `snap remove` (`--purge`), `brew uninstall` (`--cask --zap`: Homebrew's whole zap list, which may remove files other apps share, outside the home folder too, as the box says), `port uninstall`; an AppImage or bundle goes to the Trash. On macOS: refused while the app (a bundle, or a cask's app) is open; a formula's service stopped first; Homebrew run with `SUDO_ASKPASS`; the `launchctl bootout` that stops a leftover's job (`stop_job`) |
+| `packages::remove` | The removal for each manager: `apt-get remove`/`purge`, `dnf`/`zypper`/`rpm`, `pacman -R`/`-Rns`, `flatpak uninstall` (`--delete-data`), `snap remove` (`--purge`), `brew uninstall` (`--cask --zap`: Homebrew's whole zap list, which may remove files other apps share, outside the home folder too, as the box says), `port uninstall`; an AppImage or bundle goes to the Trash. On macOS: refused while the app (a bundle, or a cask's app) is open; a formula's service stopped first; Homebrew run with `SUDO_ASKPASS`; the `launchctl bootout` that stops a leftover's job by its label (`stop_job`: `gui/<uid>/<label>`, or `system/<label>` as administrator) |
 | `packages::others` | What else a removal would take: APT simulated first (`apt-get -s`), dnf and zypper tested with `rpm -e --test --allmatches` |
-| `packages::launchd` | A launchd plist's label, program and `AssociatedBundleIdentifiers`; the account's LaunchAgents a removed program leaves, and a formula's root service plist |
+| `packages::launchd` | A launchd plist's label, program, `AssociatedBundleIdentifiers` and every text it holds; a job's `Domain` (the account's session or the system); the account's LaunchAgents a removed program leaves, and a formula's root service plist |
+| `packages::daemons` | Every plist in the account's LaunchAgents, `/Library/LaunchAgents` and `/Library/LaunchDaemons`; the system-wide ones a removed app leaves, and the helpers in `/Library/PrivilegedHelperTools` its daemons start |
+| `packages::orphans` | "Leftovers of removed apps" (macOS): the jobs whose app is gone, judged by the apps they name (the listing, then Spotlight's `mdfind`) or the app bundle their program lay in, and their daemons' helpers |
 | `packages::leftovers` | Folders and files named exactly after the program in `~/.config`, `~/.local/share`, `~/.cache`, `~/.local/state`, `~/.var/app`, `~/snap`, home dot-folders, launchers and autostart entries, and the `~/Library` folders on macOS (by bundle id and name, `<TeamID>.<bundle id>` and `group.<bundle id>` by the bundle id only, and `<bundle id>.<suffix>` entries such as updaters unless a longer installed id owns them); Apple's own `com.apple.…` entries never, unless the app is Apple's |
 | `packages::extra` | macOS leftovers names cannot reach: a cask's own zap list (only `~/Library/…`, at least two folders down; left out: entries another installed cask shares, entries named after another installed program's name or bundle id, and a vendor's entry straight under a Library folder such as `Application Support/Microsoft` while another app of that vendor stays, the vendor read from the bundle id or, once the app is gone, from the identifiers its zap list names) and the folder a lone app came in (`/Applications/World of Warcraft` once no app is left anywhere in it, four folders down, links not followed) |
 | `wu-unix` | The real machine: programs found and run through `wcc-unix::process` (polkit's `pkexec` or macOS's prompt for administrator rights; a removal run as administrator takes its program only from root's own folders, as the disk cleaner's tasks do), `Info.plist` and launchd plists through `plutil`, running programs from `ps -axo comm=` (full paths on macOS), the askpass script (`askpass.rs`), `open -R` or `xdg-open` to show an item, the freedesktop.org Trash on Linux and Finder's on macOS |
@@ -131,10 +134,52 @@ Decisions in force:
   so its job is stopped too; WattClean's own (`co.swatto.wattclean…`)
   never.
   Before a ticked one moves, a loaded job is stopped with `launchctl bootout
-  gui/<uid> <plist>` (no administrator rights; the label must look like a
-  name); one that cannot be stopped is not moved and is reported. Putting
-  a plist back from the Trash takes effect at the next login. System-wide
-  jobs and helpers in `/Library` are not looked for yet.
+  gui/<uid>/<label>` (no administrator rights; the label must look like a
+  name; checked on this Mac with a throwaway agent, 2026-10-20); one that
+  cannot be stopped is not moved and is reported. Putting a plist back from
+  the Trash takes effect at the next login.
+- **System-wide jobs and helpers are leftovers** (macOS, 2026-10-20), by
+  what they say, never by name: a plist in `/Library/LaunchAgents` or
+  `/Library/LaunchDaemons` is the app's only when its
+  `AssociatedBundleIdentifiers` holds the app's bundle identifier (whole,
+  in the same letters) or its program (`Program`, else the first of
+  `ProgramArguments`) lies inside the removed bundle; one that also names
+  another installed app, a link, and WattClean's own stay. A helper is
+  offered only when it is a file directly in `/Library/PrivilegedHelperTools`,
+  the program of one of the app's daemons (an agent runs as the account,
+  which a helper is not for), and no other plist (the account's own
+  included) mentions its path anywhere, in any letters; while any plist
+  cannot be read, no helper is offered, since that one might start it. A
+  helper goes with its daemon's job. A daemon is stopped with `launchctl
+  bootout system/<label>` as administrator (macOS's prompt), an agent in
+  `/Library/LaunchAgents` in the account's own session (other accounts'
+  copies stop at their next login). They go to the Trash through Finder
+  like everything else: its scripted delete asks for an administrator's
+  password for an item only root may move, and then moves it (tried on
+  2026-10-20 with a throwaway root-owned file in a root-only folder in
+  `/Users/Shared`), so no other way of moving them is needed. Each item
+  asks once. The real case: OrbStack's `dev.orbstack.OrbStack.privhelper`
+  daemon and helper, left after OrbStack.app went, are matched by the
+  bundle identifier their plist names (`dev.kdrag0n.MacVirt`).
+- **Leftovers of removed apps** (macOS, `un_pkg_orphans`): the background
+  jobs of apps already gone, however they went (dragged to the Trash,
+  removed by another tool), from the account's LaunchAgents and
+  `/Library`'s two folders. A job is listed only when either every app its
+  `AssociatedBundleIdentifiers` names is neither listed nor found by
+  Spotlight (`mdfind 'kMDItemCFBundleIdentifier == "<id>"c'`, results in a
+  Trash ignored; an identifier with other characters is never put in a
+  query, and its job is not listed), or its program lay inside an app
+  bundle (the outermost `.app`) that no longer exists. A job naming an
+  installed app, or whose program's app is still there, is never listed,
+  nor one on another disk (`/Volumes/…`, maybe only unplugged). A job that
+  merely points at a missing program is not an orphan: a tool's path
+  changes when it is upgraded (the agent-standards collector's old
+  PowerShell path). Spotlight is trusted only once it finds an app known
+  to be there (the first listed app with a bundle identifier, else
+  Finder); otherwise only the program rule is used and the page says so.
+  The helpers of the daemons found go with them, as above. The list
+  replaces a removal's leftovers, so the search is marked as a removal
+  while it runs; it is offered in the same dialog, nothing ticked.
 - **A leftover can be shown before deciding**: "Show" beside each one
   (`un_pkg_reveal`, by number) runs `open -R` (Finder selects it) or opens
   the folder holding it with `xdg-open` (left running, reaped when it

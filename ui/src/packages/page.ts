@@ -2,16 +2,17 @@
 // Applications folders hold. Uninstalling runs the package manager's own
 // removal (which may ask for an administrator's password), then offers what
 // the program left in the home folder and the background jobs that start
-// it; nothing is ticked, each can be shown in the file manager first, and
-// what is ticked goes to the Trash.
+// it (`leftovers.ts`). On macOS "Leftovers of removed apps" offers the
+// background jobs of apps already gone the same way.
 
 import type { Context, Page } from "../context.ts";
-import { confirm, inform } from "../dialog.ts";
+import { confirm } from "../dialog.ts";
 import { commandButton, el, glyph, notice } from "../dom.ts";
 import { bytes, count, plural } from "../format.ts";
-import { trashName } from "../platform.ts";
-import { packagesApi, type LeftoverView, type PackageView } from "./api.ts";
-import { removalHow, revealLabel } from "./text.ts";
+import { platform, trashName } from "../platform.ts";
+import { packagesApi, type PackageView } from "./api.ts";
+import { offerLeftovers } from "./leftovers.ts";
+import { leftoversIntro, orphansIntro, removalHow } from "./text.ts";
 
 /** What "also remove its settings" means for each source, where it can. */
 const PURGE: Record<string, string> = {
@@ -28,122 +29,6 @@ const matches = (p: PackageView, query: string): boolean =>
     text.toLowerCase().includes(query),
   );
 
-/** Asks which leftovers to move to the Trash; resolves with their numbers. */
-const chooseLeftovers = (
-  name: string,
-  leftovers: LeftoverView[],
-): Promise<number[]> =>
-  new Promise((resolve) => {
-    const boxes = leftovers.map((leftover) => {
-      const box = el("input", {
-        type: "checkbox",
-        id: `un-pkg-left-${leftover.number}`,
-      });
-      return { box, leftover };
-    });
-    const shown = el("p", {
-      class: "muted",
-      id: "un-pkg-reveal-status",
-      role: "status",
-    });
-    const show = (leftover: LeftoverView) => {
-      const button = el("button", {
-        type: "button",
-        class: "link",
-        id: `un-pkg-show-${leftover.number}`,
-        text: "Show",
-        title: revealLabel(),
-        "aria-describedby": `un-pkg-path-${leftover.number}`,
-      });
-      button.addEventListener("click", () => {
-        shown.textContent = "";
-        packagesApi.reveal(leftover.number).catch((error: unknown) => {
-          shown.textContent = String(error);
-        });
-      });
-      return button;
-    };
-    const form = el(
-      "form",
-      { method: "dialog", class: "dialog-form" },
-      el("h2", {
-        class: "dialog-title",
-        id: "dialog-title",
-        text: `What ${name} left behind`,
-      }),
-      el("p", {
-        class: "dialog-text",
-        text: `Tick what to move to the ${trashName()}. Only items named after ${name}, and background jobs that start it, are listed; check each one, since another program may share a name. A background job is stopped before it moves.`,
-      }),
-      el(
-        "ul",
-        { class: "list", id: "un-pkg-leftovers" },
-        ...boxes.map(({ box, leftover }) =>
-          el(
-            "li",
-            {},
-            el(
-              "label",
-              { class: "check", for: box.id },
-              box,
-              el("span", {
-                class: "path",
-                id: `un-pkg-path-${leftover.number}`,
-                text: leftover.path,
-              }),
-            ),
-            el("span", {
-              class: "muted",
-              text:
-                (leftover.job ? "background job, " : "") +
-                (leftover.size === null
-                  ? "size unknown"
-                  : bytes(leftover.size)),
-            }),
-            show(leftover),
-          ),
-        ),
-      ),
-      shown,
-      el(
-        "div",
-        { class: "dialog-buttons" },
-        el("button", {
-          type: "submit",
-          value: "ok",
-          class: "primary",
-          text: `Move to the ${trashName()}`,
-        }),
-        el("button", {
-          type: "submit",
-          value: "cancel",
-          class: "secondary",
-          text: "Keep them",
-        }),
-      ),
-    );
-    const dialog = el(
-      "dialog",
-      { class: "dialog", "aria-labelledby": "dialog-title" },
-      form,
-    );
-    let chosen: number[] = [];
-    form.addEventListener("submit", (event) => {
-      const submitter = event.submitter;
-      if (submitter instanceof HTMLButtonElement && submitter.value === "ok") {
-        chosen = boxes
-          .filter(({ box }) => box.checked)
-          .map(({ leftover }) => leftover.number);
-      }
-    });
-    dialog.addEventListener("close", () => {
-      dialog.remove();
-      resolve(chosen);
-    });
-    document.body.append(dialog);
-    dialog.showModal();
-  });
-
 export const programsPage = (_ctx: Context): Page => {
   const uninstall = commandButton(
     "un-pkg-uninstall",
@@ -152,6 +37,14 @@ export const programsPage = (_ctx: Context): Page => {
     "primary danger",
   );
   const refresh = commandButton("un-pkg-refresh", "Refresh", "refresh");
+  // Background jobs outlive an app dragged to the Trash on macOS; Linux's
+  // package managers remove their own services.
+  const macos = platform() === "macos";
+  const orphans = commandButton(
+    "un-pkg-orphans",
+    "Leftovers of removed apps",
+    "search",
+  );
   const all = el("input", { type: "checkbox", id: "un-pkg-all" });
   const source = el("select", { id: "un-pkg-source", "aria-label": "Source" });
   const status = el("span", { class: "muted", id: "un-pkg-status" });
@@ -178,7 +71,8 @@ export const programsPage = (_ctx: Context): Page => {
   let query = "";
   /** A list is being loaded. */
   let busy = false;
-  /** A removal is running; only the removal itself clears this. */
+  /** A removal, or the search for removed apps' leftovers, is running;
+   *  only it clears this. */
   let removing = false;
   /** The latest list load; an older one's answer is dropped. */
   let loading = 0;
@@ -187,6 +81,7 @@ export const programsPage = (_ctx: Context): Page => {
   const sync = () => {
     const idle = !busy && !removing;
     uninstall.disabled = !idle || !selectedPackage();
+    orphans.disabled = !idle;
     refresh.disabled = !idle;
     all.disabled = !idle;
     source.disabled = !idle;
@@ -275,7 +170,7 @@ export const programsPage = (_ctx: Context): Page => {
     const purge = PURGE[target.source];
     const answer = await confirm({
       title: `Uninstall ${target.name}?`,
-      message: `${removalHow(target.source)} Then WattClean looks for what it left in your home folder.`,
+      message: `${removalHow(target.source)} Then WattClean looks for what it left behind.`,
       ok: "Uninstall",
       danger: true,
       ...(purge ? { checkbox: purge } : {}),
@@ -292,23 +187,12 @@ export const programsPage = (_ctx: Context): Page => {
       if (done.leftovers.length === 0) {
         notice(`${done.name} was removed. Nothing was left behind.`);
       } else {
-        const numbers = await chooseLeftovers(done.name, done.leftovers);
-        if (numbers.length > 0) {
-          const trashed = await packagesApi.trashLeftovers(numbers);
-          if (trashed.failed.length > 0) {
-            await inform(
-              "Some leftovers were not moved",
-              `${plural(trashed.moved, "item")} went to the ${trashName()}; these could not:`,
-              trashed.failed,
-            );
-          } else {
-            notice(
-              `${plural(trashed.moved, "item")} moved to the ${trashName()}.`,
-            );
-          }
-        } else {
-          notice(`${done.name} was removed; its leftovers were kept.`);
-        }
+        await offerLeftovers(
+          `What ${done.name} left behind`,
+          leftoversIntro(done.name, done.leftovers),
+          done.leftovers,
+          `${done.name} was removed; its leftovers were kept.`,
+        );
       }
     } catch (error) {
       notice(String(error), true);
@@ -318,7 +202,38 @@ export const programsPage = (_ctx: Context): Page => {
     }
   };
 
+  const findOrphans = async () => {
+    removing = true;
+    sync();
+    status.textContent = "Looking for leftovers of removed apps…";
+    try {
+      const found = await packagesApi.orphans();
+      if (!found.spotlight) {
+        notice(
+          "Spotlight could not be asked, so only background jobs whose app folder is gone were looked for.",
+          true,
+        );
+      }
+      if (found.leftovers.length === 0) {
+        notice("No leftovers of removed apps were found.");
+      } else {
+        await offerLeftovers(
+          "Leftovers of removed apps",
+          orphansIntro(found.leftovers),
+          found.leftovers,
+          "The leftovers were kept.",
+        );
+      }
+    } catch (error) {
+      notice(String(error), true);
+    } finally {
+      removing = false;
+      draw();
+    }
+  };
+
   uninstall.addEventListener("click", () => void remove());
+  orphans.addEventListener("click", () => void findOrphans());
   refresh.addEventListener("click", () => void load());
   all.addEventListener("change", () => void load());
   source.addEventListener("change", draw);
@@ -353,7 +268,7 @@ export const programsPage = (_ctx: Context): Page => {
   let loaded = false;
   return {
     element,
-    commands: [uninstall, refresh],
+    commands: macos ? [uninstall, orphans, refresh] : [uninstall, refresh],
     onShow: () => {
       if (!loaded) {
         loaded = true;

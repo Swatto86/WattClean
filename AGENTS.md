@@ -42,7 +42,8 @@ decisions; each engine's own structure and decisions are in
   `cargo run -p wattclean-cmd -- disk --preview --all-but-warning`;
   `cargo run -p wrc-windows --example dry_run -- [safe|moderate|advanced] [all]`;
   `cargo run -p wu-windows --example dry_run -- "<program>" [mode]`;
-  on Linux or macOS `cargo run -p wu-unix --example packages -- [--all] [name]`.
+  on Linux or macOS `cargo run -p wu-unix --example packages -- [--all]
+  [--orphans] [name]`.
 - Real-machine checks of the registry engine, as administrator, each
   touching only its own keys or tasks (see `docs/registry.md`):
   `force_check`, `trace_check`, `autostart_check` (WattClean installed and

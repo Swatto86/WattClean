@@ -141,7 +141,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         disk::tools::disk_wipe_free_space,
         packages::un_pkg_list,
         packages::un_pkg_uninstall,
-        packages::un_pkg_trash_leftovers,
-        packages::un_pkg_reveal,
+        packages::leftovers::un_pkg_orphans,
+        packages::leftovers::un_pkg_trash_leftovers,
+        packages::leftovers::un_pkg_reveal,
     ]
 }

@@ -1,8 +1,9 @@
 //! The uninstaller on Linux and macOS: the programs the package managers
 //! and Applications folders hold, removing one with its package manager,
-//! and moving what it left behind to the Trash. The page names a program
-//! by the key it was listed under and leftovers by number; every path and
-//! command is decided here and in `wu_core::packages`.
+//! and moving what it left behind to the Trash, as well as (on macOS) the
+//! background jobs of apps already gone. The page names a program by the
+//! key it was listed under and leftovers by number; every path and command
+//! is decided here and in `wu_core::packages`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -13,11 +14,18 @@ use wu_core::packages::{self, Leftover, Package, PackageSystem, Removal, Step};
 
 use crate::error::{CommandError, CommandResult, blocking};
 
+pub mod leftovers;
+
+use leftovers::{LeftoverView, views};
+#[cfg(test)]
+use leftovers::{reveal, trash_chosen};
+
 pub struct AppState {
     system: Arc<dyn PackageSystem>,
     /// Everything installed, as last listed (applications and the rest).
     listed: Mutex<Vec<Package>>,
-    /// The last removal's leftovers, numbered by position.
+    /// The last removal's leftovers (or removed apps' ones), numbered by
+    /// position.
     leftovers: Mutex<Vec<Leftover>>,
     removing: AtomicBool,
     /// Set once the app has begun quitting: a removal started now could be
@@ -130,18 +138,6 @@ pub async fn un_pkg_list(state: App<'_>, all: bool) -> CommandResult<PackageList
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LeftoverView {
-    number: usize,
-    path: String,
-    /// `None` when its size could not be read.
-    size: Option<u64>,
-    folder: bool,
-    /// A background job's plist, stopped before it goes to the Trash.
-    job: bool,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Uninstalled {
     name: String,
     /// What the package manager said last, when it said anything.
@@ -150,8 +146,9 @@ pub struct Uninstalled {
 }
 
 /// Removes one listed program (with its settings when `purge`), then looks
-/// for what it left behind: in the home folder, and a Homebrew service's
-/// plist. An app still open is refused before anything is removed.
+/// for what it left behind: in the home folder, and on macOS its
+/// background jobs and helpers in `/Library`. An app still open is refused
+/// before anything is removed.
 #[tauri::command]
 pub async fn un_pkg_uninstall(
     state: App<'_>,
@@ -177,22 +174,12 @@ pub async fn un_pkg_uninstall(
             )));
         }
         let found = packages::find_leftovers(shared.system.as_ref(), &package, &installed);
-        let views = found
-            .iter()
-            .enumerate()
-            .map(|(number, leftover)| LeftoverView {
-                number,
-                path: leftover.path.display().to_string(),
-                size: leftover.size,
-                folder: leftover.folder,
-                job: leftover.job.is_some(),
-            })
-            .collect();
+        let leftovers = views(&found);
         *lock(&shared.leftovers) = found;
         Ok(Uninstalled {
             name: package.name,
             said,
-            leftovers: views,
+            leftovers,
         })
     })
     .await
@@ -284,87 +271,6 @@ fn run_step(system: &dyn PackageSystem, step: &Step) -> Result<(), String> {
         let said = output.last_words().unwrap_or("it reported a failure");
         Err(said.to_string())
     }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Trashed {
-    moved: usize,
-    failed: Vec<String>,
-}
-
-/// Moves the chosen leftovers (by number) of the last removal to the Trash.
-#[tauri::command]
-pub async fn un_pkg_trash_leftovers(state: App<'_>, numbers: Vec<usize>) -> CommandResult<Trashed> {
-    let shared = Arc::clone(&state);
-    blocking(move || {
-        let chosen: Vec<Leftover> = {
-            let leftovers = lock(&shared.leftovers);
-            let mut numbers = numbers;
-            numbers.sort_unstable();
-            numbers.dedup();
-            numbers
-                .iter()
-                .map(|n| leftovers.get(*n).cloned())
-                .collect::<Option<_>>()
-                .ok_or("Those leftovers are no longer listed.")?
-        };
-        let trashed = trash_chosen(shared.system.as_ref(), &chosen);
-        lock(&shared.leftovers).clear();
-        Ok(trashed)
-    })
-    .await
-}
-
-/// Moves `chosen` to the Trash. A plist whose background job launchd has
-/// loaded is stopped first (a trashed plist's job runs on until logout);
-/// one that cannot be stopped stays, and is reported.
-fn trash_chosen(system: &dyn PackageSystem, chosen: &[Leftover]) -> Trashed {
-    let mut failed = Vec::new();
-    let mut paths = Vec::new();
-    for leftover in chosen {
-        let stopped = match packages::stop_job(system, leftover) {
-            Ok(None) => Ok(()),
-            Ok(Some(step)) => run_step(system, &step)
-                .map_err(|said| format!("its background job could not be stopped: {said}")),
-            Err(refused) => Err(refused),
-        };
-        match stopped {
-            Ok(()) => paths.push(leftover.path.clone()),
-            Err(why) => failed.push(format!("{}: {why}", leftover.path.display())),
-        }
-    }
-    let mut moved = 0;
-    for (path, result) in paths.iter().zip(system.trash(&paths)) {
-        match result {
-            Ok(()) => moved += 1,
-            Err(error) => failed.push(format!("{}: {error}", path.display())),
-        }
-    }
-    Trashed { moved, failed }
-}
-
-/// Shows one leftover (by number) of the last removal in Finder, or the
-/// folder holding it in the file manager.
-#[tauri::command]
-pub async fn un_pkg_reveal(state: App<'_>, number: usize) -> CommandResult<()> {
-    let shared = Arc::clone(&state);
-    blocking(move || {
-        // Not held while the file manager is asked: it may be slow to answer.
-        let leftovers = lock(&shared.leftovers).clone();
-        reveal(shared.system.as_ref(), &leftovers, number)
-    })
-    .await
-}
-
-fn reveal(system: &dyn PackageSystem, leftovers: &[Leftover], number: usize) -> CommandResult<()> {
-    let path = &leftovers
-        .get(number)
-        .ok_or("That leftover is no longer listed.")?
-        .path;
-    system.reveal(path).map_err(|error| {
-        CommandError::from(format!("{} could not be shown: {error}", path.display()))
-    })
 }
 
 #[cfg(test)]

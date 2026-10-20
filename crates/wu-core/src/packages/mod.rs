@@ -5,12 +5,14 @@
 //! Windows has no package manager to ask; its uninstaller reads the
 //! registry instead (the rest of this crate).
 
+mod daemons;
 mod extra;
 mod launchd;
 mod launchers;
 mod leftovers;
 mod linux;
 mod macos;
+mod orphans;
 mod others;
 mod remove;
 
@@ -19,8 +21,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-pub use launchd::LaunchdJob;
+pub use launchd::{Domain, Job, LaunchdJob};
 pub use leftovers::{Leftover, find_leftovers, keys_for};
+pub use orphans::{Orphans, orphans};
 pub use remove::{Removal, Step, removal, stop_job};
 
 /// What installed a package, and so what removes it.

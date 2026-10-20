@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::packages::testing::Machine;
+use crate::packages::{Domain, Job};
 
 /// An app moved to the Trash while it is open keeps running from there and
 /// writes its folders again after they were offered as leftovers.
@@ -136,11 +137,14 @@ fn plist(label: Option<&str>) -> Leftover {
         path: "/Users/t/Library/LaunchAgents/Tea.plist".into(),
         size: Some(1),
         folder: false,
-        job: label.map(String::from),
+        job: label.map(|label| Job::new(label, Domain::Session)),
+        system_wide: false,
     }
 }
 
-/// A plist moved to the Trash leaves its job running until logout.
+/// A plist moved to the Trash leaves its job running until logout. A job
+/// is stopped by its label: in this account's session without
+/// administrator rights, or a daemon for every account with them.
 #[test]
 fn a_loaded_background_job_is_stopped_before_its_plist_goes() {
     let machine = Machine::macos();
@@ -151,16 +155,35 @@ fn a_loaded_background_job_is_stopped_before_its_plist_goes() {
         "",
         "Could not find service \"Idle\" in domain for user gui: 501",
     );
+    machine.replies(
+        "launchctl print system/com.idle.daemon",
+        false,
+        "",
+        "Could not find service \"com.idle.daemon\" in domain for system",
+    );
     assert_eq!(
         stop_job(&machine, &plist(Some("Tea"))),
         Ok(Some(Step {
             program: "/usr/bin/launchctl".into(),
+            args: vec!["bootout".into(), "gui/501/Tea".into()],
+            admin: false,
+        }))
+    );
+    let daemon = |label: &str| Leftover {
+        path: format!("/Library/LaunchDaemons/{label}.plist").into(),
+        job: Some(Job::new(label, Domain::System)),
+        system_wide: true,
+        ..plist(None)
+    };
+    assert_eq!(
+        stop_job(&machine, &daemon("dev.orbstack.OrbStack.privhelper")),
+        Ok(Some(Step {
+            program: "/usr/bin/launchctl".into(),
             args: vec![
                 "bootout".into(),
-                "gui/501".into(),
-                "/Users/t/Library/LaunchAgents/Tea.plist".into()
+                "system/dev.orbstack.OrbStack.privhelper".into()
             ],
-            admin: false,
+            admin: true,
         }))
     );
     assert_eq!(
@@ -168,14 +191,17 @@ fn a_loaded_background_job_is_stopped_before_its_plist_goes() {
         Ok(None),
         "not loaded"
     );
+    assert_eq!(stop_job(&machine, &daemon("com.idle.daemon")), Ok(None));
     assert_eq!(stop_job(&machine, &plist(None)), Ok(None), "not a job");
     for label in [
         "co.swatto.wattclean",
         "Co.Swatto.WattClean.agent",
         "-x",
         "a b",
+        "a/b",
     ] {
         assert!(stop_job(&machine, &plist(Some(label))).is_err(), "{label}");
+        assert!(stop_job(&machine, &daemon(label)).is_err(), "{label}");
     }
     assert!(
         machine

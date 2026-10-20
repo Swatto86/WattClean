@@ -9,13 +9,15 @@
 //! (unless the app is Apple's) and the folders of a command-line tool still
 //! installed (Apple's git, Claude Code's `~/.claude`) are never offered.
 //! Nothing is pre-selected, and what is chosen goes to the Trash. `extra`
-//! adds a cask's own zap list and the folder a lone app came in.
+//! adds a cask's own zap list and the folder a lone app came in, and
+//! `launchd` and `daemons` the app's background jobs (macOS).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use super::launchd::Job;
 use super::{Manager, Package, PackageSystem, extra, launchd, tree_size};
 
 /// A file or folder a removed program left behind.
@@ -26,9 +28,12 @@ pub struct Leftover {
     /// `None` when macOS will not let WattClean look inside.
     pub size: Option<u64>,
     pub folder: bool,
-    /// The label of the background job this plist starts in the account's
-    /// session: stopped before the plist goes to the Trash.
-    pub job: Option<String>,
+    /// The background job this plist (or the helper program a daemon
+    /// starts) belongs to: stopped before it goes to the Trash.
+    pub job: Option<Job>,
+    /// In `/Library`, for every account: macOS asks for an administrator's
+    /// password to move it.
+    pub system_wide: bool,
 }
 
 /// Folder names shared by many programs or by the desktop itself.
@@ -306,7 +311,7 @@ pub fn find_leftovers(
 
 /// Leaves out Apple's own entries unless the app (`bundle`) is Apple's,
 /// sorts, and keeps each path once.
-fn tidy(mut out: Vec<Leftover>, bundle: Option<&str>) -> Vec<Leftover> {
+pub(super) fn tidy(mut out: Vec<Leftover>, bundle: Option<&str>) -> Vec<Leftover> {
     // Apple's entries are its own apps' (Notes' group, News' scripts), and
     // Apple's apps are never listed, so no name check can hold them back.
     let apple = bundle.is_some_and(|id| id.starts_with("com.apple."));
@@ -342,6 +347,7 @@ pub(super) fn leftover(path: &Path) -> Leftover {
         size: readable.then(|| tree_size(path)),
         folder,
         job: None,
+        system_wide: false,
     }
 }
 

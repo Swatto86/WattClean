@@ -4,16 +4,18 @@
 //! app. A plist is the app's when it names the app (Apple's
 //! `AssociatedBundleIdentifiers`), when the program it starts lies inside
 //! the removed bundle, or when its file name or label is one of the app's
-//! own names. Nothing in `/Library` is looked at here, except the plist of
-//! a Homebrew formula's service that ran for every account.
+//! own names. Plists in `/Library` are judged in `daemons`, never by name,
+//! except a Homebrew formula's service that ran for every account, found
+//! here by its exact name.
 
 use std::path::Path;
 
+use serde::Serialize;
 use serde_json::Value;
 
 use super::leftovers::{Leftover, leftover, owns};
 use super::remove::safe_name;
-use super::{Manager, Package, PackageSystem, within};
+use super::{Manager, Package, PackageSystem, daemons, within};
 
 /// WattClean's own identifier (`tauri.conf.json`): a job of its own is
 /// never offered or stopped.
@@ -29,6 +31,36 @@ pub(super) fn service_label(id: &str) -> String {
     format!("homebrew.mxcl.{id}")
 }
 
+/// Where launchd runs a job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Domain {
+    /// This account's session (`gui/<uid>`): the plists in
+    /// `~/Library/LaunchAgents` and `/Library/LaunchAgents`.
+    Session,
+    /// The whole machine's (`system`), as root: `/Library/LaunchDaemons`.
+    /// Stopping one takes administrator rights.
+    System,
+}
+
+/// A background job launchd runs, stopped before the file that starts it
+/// goes to the Trash.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Job {
+    pub label: String,
+    pub domain: Domain,
+}
+
+impl Job {
+    pub fn new(label: &str, domain: Domain) -> Self {
+        Self {
+            label: label.to_string(),
+            domain,
+        }
+    }
+}
+
 /// What a launchd job's plist says.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LaunchdJob {
@@ -37,6 +69,8 @@ pub struct LaunchdJob {
     pub program: Option<String>,
     /// `AssociatedBundleIdentifiers`: the apps it belongs to.
     pub associated: Vec<String>,
+    /// Every text in the plist, keys and values: what it refers to.
+    pub mentions: Vec<String>,
 }
 
 impl LaunchdJob {
@@ -63,16 +97,35 @@ impl LaunchdJob {
                 .collect(),
             _ => Vec::new(),
         };
+        let mut mentions = Vec::new();
+        texts(&value, &mut mentions);
         Some(Self {
             label,
             program,
             associated,
+            mentions,
         })
     }
 }
 
-/// `removed`'s background jobs on macOS: its agents (see [`agents`]) and
-/// a formula's service that ran for every account.
+/// Every string in a plist's JSON, keys included.
+fn texts(value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::String(text) => out.push(text.clone()),
+        Value::Array(items) => items.iter().for_each(|item| texts(item, out)),
+        Value::Object(entries) => {
+            for (key, item) in entries {
+                out.push(key.clone());
+                texts(item, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// `removed`'s background jobs on macOS: its agents (see [`agents`]), the
+/// jobs and helpers it left for every account (`daemons`) and a formula's
+/// service that ran for every account.
 pub(super) fn leftovers(
     system: &dyn PackageSystem,
     home: &Path,
@@ -86,6 +139,7 @@ pub(super) fn leftovers(
         return Vec::new();
     }
     let mut out = agents(system, home, removed, mine, theirs, bundle, other_bundles);
+    out.extend(daemons::for_app(system, home, removed, other_bundles));
     out.extend(homebrew_daemon(system, removed));
     out
 }
@@ -146,7 +200,7 @@ fn agents(
             .any(|name| theirs.iter().any(|key| key == name));
         if says || (by_name && !anothers) {
             let mut found = leftover(&path);
-            found.job = job.map(|job| job.label);
+            found.job = job.map(|job| Job::new(&job.label, Domain::Session));
             out.push(found);
         }
     }
@@ -165,7 +219,9 @@ pub(super) fn label_agents(system: &dyn PackageSystem, home: &Path, out: &mut [L
         .iter_mut()
         .filter(|found| found.job.is_none() && found.path.parent() == Some(&agents))
     {
-        found.job = system.launchd_job(&found.path).map(|job| job.label);
+        found.job = system
+            .launchd_job(&found.path)
+            .map(|job| Job::new(&job.label, Domain::Session));
     }
 }
 
@@ -181,9 +237,10 @@ fn homebrew_daemon(system: &dyn PackageSystem, removed: &Package) -> Option<Left
         service_label(&removed.id)
     );
     let path = system.at(&plist);
-    std::fs::symlink_metadata(&path)
-        .is_ok()
-        .then(|| leftover(&path))
+    std::fs::symlink_metadata(&path).is_ok().then(|| Leftover {
+        system_wide: true,
+        ..leftover(&path)
+    })
 }
 
 #[cfg(test)]
