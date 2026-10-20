@@ -58,12 +58,11 @@ fn a_failed_removal_reports_the_package_managers_error_not_its_progress() {
     let Err(error) = remove(&SudoFails, &cask, false) else {
         panic!("the removal should have failed");
     };
-    assert!(
-        error.message.starts_with(
-            "Blizzard Battle.net could not be removed: Error: Failure while executing;"
-        ),
-        "{}",
-        error.message
+    // Homebrew's error only introduces the failed step's output; its first
+    // line is the cause.
+    assert_eq!(
+        error.message,
+        "Blizzard Battle.net could not be removed: sudo: a terminal is required to read the password"
     );
 }
 

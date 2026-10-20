@@ -122,7 +122,9 @@ are refused. Custom paths and what is shredded (the tool and `--shred`) are
 the chosen file or folder exactly as written: no variables, wildcards or
 separator changes, since names on Linux and macOS may hold `%`, `*`, `?`
 and `\` (only a trailing separator or `.` is dropped: it would make the
-system follow a chosen link instead of removing it). The keep list and Custom paths refuse a `%NAME%` (nothing expands
+system follow a chosen link instead of removing it). A chosen path never
+holds `..`: the guard folds it by the text, the system by following links,
+so `Link/..` would reach a folder the guard never checked. The keep list and Custom paths refuse a `%NAME%` (nothing expands
 them) but take a lone `%`; shredding takes any. Emptying, SQLite, JSON and
 INI edits are never planned on a link (its target was never checked), and
 emptying opens with `O_NOFOLLOW` on Linux and macOS, so a link put in the

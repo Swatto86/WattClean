@@ -69,8 +69,9 @@ Decisions in force:
 - **A removal is confirmed by the next listing**: when the program is still
   listed, the removal failed (or the prompt was refused) and nothing is
   offered as left over. A failure reports the package manager's error (its
-  last `Error:`/`E:` line on stderr, else its last line there), not the
-  progress it printed on stdout.
+  last `Error:`/`E:` line on stderr, or the first line of the failed
+  step's output that Homebrew's error introduces, else its last line
+  there), not the progress it printed on stdout.
 - **A removal takes only the program chosen.** APT, dnf and zypper, told
   yes, also remove every package that needs it (the desktop, for a
   library), so they are asked first without administrator rights

@@ -139,14 +139,27 @@ pub struct Output {
 impl Output {
     /// What the program said last, for a message: its last error line on
     /// stderr (`Error: …`, `E: …`), else its last line there, else its last
-    /// line on stdout, where package managers print their progress.
+    /// line on stdout, where package managers print their progress. When
+    /// Homebrew's error only introduces the output of a step that failed
+    /// ("… Here's the output:"), the first line of that output is the cause.
     pub fn last_words(&self) -> Option<&str> {
         fn said(text: &str) -> impl DoubleEndedIterator<Item = &str> {
             text.lines().map(str::trim).filter(|line| !line.is_empty())
         }
+        let errors: Vec<&str> = said(&self.stderr).collect();
+        let error = errors
+            .iter()
+            .rposition(|line| line.starts_with("Error:") || line.starts_with("E:"));
+        if let Some(at) = error {
+            let line = errors.get(at).copied();
+            let cause = errors.get(at + 1).copied();
+            return match line {
+                Some(line) if line.ends_with("Here's the output:") => cause.or(Some(line)),
+                _ => line,
+            };
+        }
         said(&self.stderr)
-            .rfind(|line| line.starts_with("Error:") || line.starts_with("E:"))
-            .or_else(|| said(&self.stderr).next_back())
+            .next_back()
             .or_else(|| said(&self.stdout).next_back())
     }
 }
@@ -323,9 +336,7 @@ mod tests {
                     "==> Uninstalling Cask battle-net\n==> Removing files:\n/Applications/Battle.net.app\n",
                     "Error: Failure while executing; `/usr/bin/sudo -u root -- /bin/rm -f -r -- /Applications/Battle.net.app` exited with 1. Here's the output:\nsudo: a terminal is required to read the password\nsudo: a password is required\n",
                 ),
-                Some(
-                    "Error: Failure while executing; `/usr/bin/sudo -u root -- /bin/rm -f -r -- /Applications/Battle.net.app` exited with 1. Here's the output:",
-                ),
+                Some("sudo: a terminal is required to read the password"),
             ),
             (
                 said(

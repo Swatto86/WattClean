@@ -147,6 +147,26 @@ fn a_chosen_path_may_hold_a_percent_sign() {
     assert!(check_full_path(" /home/t/a.txt").is_err(), "taken as given");
 }
 
+/// The guard folds `..` by the text of a path, the system by following
+/// links, so `Link/..` would reach a folder the guard never looked at.
+#[test]
+fn a_chosen_path_never_steps_back_up() {
+    let back = if cfg!(windows) {
+        r"C:\Users\T\Link\..\Documents"
+    } else {
+        "/home/t/Link/../Documents"
+    };
+    let error = check_full_path(back).unwrap_err();
+    assert!(error.contains(".."), "{error}");
+    assert!(check_path(back).is_err(), "the lists too");
+    let dotted = if cfg!(windows) {
+        r"C:\Users\T\..notes"
+    } else {
+        "/home/t/..notes"
+    };
+    assert_eq!(check_full_path(dotted), Ok(()), "a name, not a step back");
+}
+
 #[cfg(unix)]
 #[test]
 fn lists_refuse_variables_but_not_percent_signs() {

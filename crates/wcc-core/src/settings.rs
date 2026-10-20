@@ -4,7 +4,7 @@
 //! checked before it is accepted. Loading keeps each field that parses, so
 //! one bad value never resets the rest.
 
-use std::path::Path;
+use std::path::{Component, Path};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -104,7 +104,10 @@ const FULL_PATH_EXAMPLE: &str = if cfg!(windows) {
 };
 
 /// A path a person picked, taken exactly as given (Shred): absolute, on a
-/// drive or share, sane length. It may hold `%`, which nothing expands.
+/// drive or share, sane length. It may hold `%`, which nothing expands. It
+/// may not step back up with `..`: the guard folds that by the text, the
+/// system by following links, so `Link/..` would reach a folder the guard
+/// never looked at.
 pub fn check_full_path(path: &str) -> Result<(), String> {
     if path.trim().is_empty() || path.len() > PATH_LIMIT || path.contains('\0') {
         return Err(format!("{path:?} is not a usable path"));
@@ -112,6 +115,14 @@ pub fn check_full_path(path: &str) -> Result<(), String> {
     if !Path::new(path).is_absolute() {
         return Err(format!(
             "{path:?} must be a full path such as {FULL_PATH_EXAMPLE}"
+        ));
+    }
+    if Path::new(path)
+        .components()
+        .any(|part| part == Component::ParentDir)
+    {
+        return Err(format!(
+            "{path:?} steps back up with \"..\": give the folder itself, such as {FULL_PATH_EXAMPLE}"
         ));
     }
     Ok(())
