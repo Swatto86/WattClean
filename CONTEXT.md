@@ -210,5 +210,18 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   Watt* repo): the local full gate is the verdict; releases are built and
   published by hand, each with `THIRD-PARTY-NOTICES.txt` as the open-source
   packages' licences ask.
+- **Releases** (from v0.1.3, 2026-10-20) carry each system's files, built
+  on that system from the tagged commit: `WattClean_X.Y.Z_x64-setup.exe`,
+  `_x64-portable.exe` (`target/release/wattclean.exe`) and `_x64-cmd.exe`
+  (`src-tauri/binaries/wattclean-cmd-x86_64-pc-windows-msvc.exe`) from
+  swatpc; `WattClean_X.Y.Z_universal.dmg` and `_macos-universal-cmd`
+  (`wattclean-cmd-universal-apple-darwin`) from the Mac; `_amd64.deb`,
+  `WattClean-X.Y.Z-1.x86_64.rpm`, `_amd64.AppImage` and `_linux-x64-cmd`
+  from WSL Ubuntu on swatpc (a clone on ext4 with Node 22 in
+  `~/.local/node`); plus `THIRD-PARTY-NOTICES.txt` and `SHA256SUMS.txt`.
+  The Windows gate's WebDriver suite needs the desktop, so over SSH it runs
+  as a scheduled task in the signed-in session (`/IT`); the install check
+  runs the same way with `/RL HIGHEST`, so the setup needs no UAC click.
+  swatto.co.uk names the standalone command lines through `assets` rules.
 - No network access except the winapp2.ini download the person clicks;
   no automatic updates yet (open question in `AGENTS.md`).
