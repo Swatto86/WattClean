@@ -36,6 +36,12 @@ wu-windows = { workspace = true }
 wcc-unix = { workspace = true }
 wu-unix = { workspace = true }
 
+# The app's name where the desktop has no other: the system tray item's
+# title, which Linux trays show as its tooltip (GTK's, already in the tree
+# through Tauri).
+[target.'cfg(target_os = "linux")'.dependencies]
+glib = "0.18"
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

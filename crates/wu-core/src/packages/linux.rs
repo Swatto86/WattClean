@@ -5,20 +5,20 @@
 
 use super::{Manager, Package, PackageSystem, launchers, macos, parse_size, query};
 
+/// The system's own package managers, in the order they are asked, by the
+/// program that lists what each installed.
+const NATIVE: [(&str, Manager); 3] = [
+    ("dpkg-query", Manager::Apt),
+    ("rpm", Manager::Rpm),
+    ("pacman", Manager::Pacman),
+];
+
 pub fn list(system: &dyn PackageSystem) -> (Vec<Package>, Vec<String>) {
-    let mut packages = Vec::new();
-    let mut problems = Vec::new();
+    let (mut packages, native, mut problems) = native(system);
     let mut add = |found: Option<Vec<Package>>, what: &str| match found {
         Some(found) => packages.extend(found),
         None => problems.push(format!("{what} could not list its packages")),
     };
-    if system.find_program("dpkg-query").is_some() {
-        add(dpkg(system), "dpkg");
-    } else if system.find_program("rpm").is_some() {
-        add(rpm(system), "rpm");
-    } else if system.find_program("pacman").is_some() {
-        add(pacman(system), "pacman");
-    }
     if system.find_program("flatpak").is_some() {
         add(flatpak(system), "Flatpak");
     }
@@ -29,14 +29,48 @@ pub fn list(system: &dyn PackageSystem) -> (Vec<Package>, Vec<String>) {
         add(macos::homebrew(system), "Homebrew");
     }
     packages.extend(appimages(system));
-    launchers::mark_apps(system, &mut packages);
+    if let Some(native) = native {
+        launchers::mark_apps(system, native, &mut packages);
+    }
     (packages, problems)
 }
 
+/// What the system's own package manager installed, and which one it is:
+/// the first that lists anything. Another may be installed beside it with
+/// nothing to list (Arch Linux packages dpkg and rpm for converting other
+/// systems' packages), so one that lists nothing, or fails, is passed
+/// over; its failure is reported only when no other answers.
+fn native(system: &dyn PackageSystem) -> (Vec<Package>, Option<Manager>, Vec<String>) {
+    let mut problems = Vec::new();
+    for (program, manager) in NATIVE {
+        if system.find_program(program).is_none() {
+            continue;
+        }
+        let found = match manager {
+            Manager::Apt => dpkg(system),
+            Manager::Rpm => rpm(system),
+            _ => pacman(system),
+        };
+        match found {
+            Some(found) if !found.is_empty() => return (found, Some(manager), Vec::new()),
+            Some(_) => {}
+            None => problems.push(format!("{} could not list its packages", label(program))),
+        }
+    }
+    (Vec::new(), None, problems)
+}
+
+/// What a listing program is called in a message: dpkg for `dpkg-query`.
+fn label(program: &str) -> &str {
+    program.strip_suffix("-query").unwrap_or(program)
+}
+
+/// What dpkg prints for each package.
+const DPKG_FORMAT: &str = r"--showformat=${db:Status-Abbrev}\t${Package}\t${Version}\t${Installed-Size}\t${binary:Summary}\n";
+
 /// dpkg's installed packages; sizes are in KiB.
 fn dpkg(system: &dyn PackageSystem) -> Option<Vec<Package>> {
-    let format = r"--showformat=${db:Status-Abbrev}\t${Package}\t${Version}\t${Installed-Size}\t${binary:Summary}\n";
-    let text = query(system, "dpkg-query", &["-W", format])?;
+    let text = query(system, "dpkg-query", &["-W", DPKG_FORMAT])?;
     Some(parse_dpkg(&text))
 }
 

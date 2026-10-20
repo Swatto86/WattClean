@@ -3,6 +3,8 @@
 //! the system's own password prompt (`osascript`) on macOS. Arguments are
 //! always passed one by one, never through a shell, except to macOS's
 //! prompt, which takes one command line: there every argument is quoted.
+//! Every program starts with the system's own environment, not an
+//! AppImage's (`host`).
 
 use std::io::{self, Read};
 use std::path::Path;
@@ -11,8 +13,10 @@ use std::time::{Duration, Instant};
 
 use wcc_core::system::ProgramOutput;
 
+mod host;
 mod lookup;
 
+pub use host::command;
 pub use lookup::{find, find_trusted};
 
 /// Runs `program` with `args` and waits for it; with `admin`, asks for
@@ -77,7 +81,7 @@ fn prepare(
     let mut command = if prompted {
         as_admin(&program, args)?
     } else {
-        let mut command = Command::new(&program);
+        let mut command = command(&program);
         command.args(args);
         command
     };
@@ -93,7 +97,7 @@ fn prepare(
 /// if it has not finished within `limit`. `None` when it could not run,
 /// failed or took too long.
 pub fn quick(program: &Path, args: &[&str], limit: Duration) -> Option<String> {
-    let mut child = Command::new(program)
+    let mut child = command(program)
         .args(args)
         .env("LC_ALL", "C")
         .stdin(Stdio::null())
@@ -139,7 +143,7 @@ fn as_admin(program: &Path, args: &[String]) -> io::Result<Command> {
             "this needs administrator rights: install polkit (pkexec) or run WattClean as root",
         )
     })?;
-    let mut command = Command::new(pkexec);
+    let mut command = command(pkexec);
     command.arg(program).args(args);
     Ok(command)
 }

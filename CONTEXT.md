@@ -105,6 +105,24 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   belong to root, so those commands ask for administrator rights each time
   (polkit's `pkexec`, macOS's own prompt): the app itself never runs as
   root, and there is no "restart as administrator" outside Windows.
+- **Programs WattClean starts get the system's own environment**
+  (2026-10-20, `wcc-unix/src/process/host.rs`). The AppImage's launcher
+  puts its own folders first in `LD_LIBRARY_PATH`, `PATH`,
+  `XDG_DATA_DIRS`, `PYTHONHOME`, GTK's and GIO's module and schema paths,
+  sets `GTK_THEME` and moves into the AppImage; inherited, they made
+  Arch's pacman load the AppImage's older OpenSSL and fail, so on Arch
+  (Omarchy) Uninstall programs listed nothing and pacman's cleaning tasks
+  could not run, while Ubuntu, where the AppImage is built, never showed
+  it. So every program WattClean starts (`process::command`: package
+  managers, `pkexec`, `xdg-open`, the clipboard tools) has the AppImage's
+  entries taken out of each variable (removed when nothing is left), the
+  launcher's own variables removed, and starts in the home folder; `find`
+  searches the system's `PATH`. Only when WattClean runs from inside
+  `APPDIR` (its own executable is there); elsewhere nothing changes.
+- **Linux trays name WattClean by its application name**: libayatana's
+  item has no title of its own and falls back to GTK's application name,
+  which was the program's file name (`wattclean`, shown as the tooltip by
+  Omarchy's bar and KDE); `lib.rs` sets it to WattClean at start.
 - **Unix safety rules**: sockets, pipes and devices are never listed (the
   temporary folder holds running sessions'); clearing "read-only" stays a
   Windows-only fallback (on Unix it would make a file world-writable;

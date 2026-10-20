@@ -85,26 +85,25 @@ pub fn pick(app: &tauri::AppHandle, _data_dir: &Path, what: Pick, title: &str) -
 }
 
 /// Opens a folder of the app's own in the file manager (Explorer, Finder,
-/// or the desktop's own through `xdg-open`).
+/// or the desktop's own through `xdg-open`, which may wait for the file
+/// manager to close: it is reaped when it ends).
 pub fn open_folder(fake: bool, folder: &Path) -> CommandResult<()> {
     std::fs::create_dir_all(folder)?;
     if fake {
         return Ok(());
     }
-    let opener = if cfg!(windows) {
-        "explorer.exe"
-    } else if cfg!(target_os = "macos") {
-        "/usr/bin/open"
-    } else {
-        "xdg-open"
-    };
-    std::process::Command::new(opener)
-        .arg(folder)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| {
-            CommandError::from(format!("The file manager could not be opened: {error}"))
-        })
+    #[cfg(windows)]
+    let mut opener = std::process::Command::new("explorer.exe");
+    // The system's own environment, not an AppImage's.
+    #[cfg(target_os = "macos")]
+    let mut opener = wcc_unix::process::command("/usr/bin/open");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut opener = wcc_unix::process::command("xdg-open");
+    let mut child = opener.arg(folder).spawn().map_err(|error| {
+        CommandError::from(format!("The file manager could not be opened: {error}"))
+    })?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
 }
 
 /// The community's winapp2.ini, as BleachBit downloads it.

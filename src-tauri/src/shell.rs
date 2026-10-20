@@ -235,7 +235,11 @@ fn relaunch(_exe: &std::path::Path) -> CommandResult<()> {
     Err("WattClean asks for administrator rights when a task needs them.".into())
 }
 
+#[cfg(windows)]
 const REMOVING: &str = "Wait for the registry clean or the uninstall's removal to finish first.";
+/// Linux and macOS have no registry: only a package manager's removal.
+#[cfg(not(windows))]
+const REMOVING: &str = "Wait for the program being removed to finish first.";
 
 #[cfg(test)]
 #[cfg(windows)]

@@ -194,7 +194,7 @@ impl PackageSystem for UnixPackages {
         let opener = self
             .find_program("xdg-open")
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "xdg-open is not installed"))?;
-        let mut child = std::process::Command::new(opener)
+        let mut child = wcc_unix::process::command(opener)
             .arg(folder)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())

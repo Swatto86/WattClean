@@ -88,6 +88,75 @@ fn packages_with_a_visible_launcher_are_applications_named_by_it() {
     );
 }
 
+/// Arch Linux packages dpkg and rpm for converting other systems' packages:
+/// installed there, they list nothing, and pacman's packages (and the
+/// launchers pacman says it owns) are the system's.
+#[test]
+fn the_systems_package_manager_is_the_one_that_lists_packages() {
+    let machine = Machine::new(&["dpkg-query", "rpm", "pacman"]);
+    let apps = machine.at("/usr/share/applications");
+    std::fs::create_dir_all(&apps).unwrap();
+    std::fs::write(
+        apps.join("gimp.desktop"),
+        "[Desktop Entry]\nName=GNU Image Manipulation Program\nExec=gimp\n",
+    )
+    .unwrap();
+    machine.replies(
+        &format!("dpkg-query -W {DPKG_FORMAT}"),
+        false,
+        "",
+        "dpkg-query: error: failed to open package info file '/var/lib/dpkg/status' for reading: No such file or directory\n",
+    );
+    machine.prints(
+        "pacman",
+        "Name            : gimp\nVersion         : 2.10.38-1\nInstalled Size  : 98.50 MiB\n\n\
+         Name            : glibc\nVersion         : 2.42-1\nInstalled Size  : 47.00 MiB\n",
+    );
+    machine.replies(
+        "pacman -Qo /usr/share/applications/gimp.desktop",
+        true,
+        "/usr/share/applications/gimp.desktop is owned by gimp 2.10.38-1\n",
+        "",
+    );
+    let (packages, problems) = list(&machine);
+    assert!(problems.is_empty(), "{problems:?}");
+    let found: Vec<(Manager, &str, bool)> = packages
+        .iter()
+        .map(|p| (p.manager, p.name.as_str(), p.app))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (Manager::Pacman, "GNU Image Manipulation Program", true),
+            (Manager::Pacman, "glibc", false),
+        ]
+    );
+    let asked = machine.ran();
+    assert!(
+        !asked.iter().any(|line| line.starts_with("dpkg-query -S")),
+        "{asked:?}"
+    );
+
+    // When none answers, the failure is reported.
+    let machine = Machine::new(&["dpkg-query", "pacman"]);
+    machine.replies(
+        &format!("dpkg-query -W {DPKG_FORMAT}"),
+        false,
+        "",
+        "dpkg-query: error\n",
+    );
+    machine.replies("pacman -Qi", false, "", "error: could not open database\n");
+    let (packages, problems) = list(&machine);
+    assert!(packages.is_empty());
+    assert_eq!(
+        problems,
+        [
+            "dpkg could not list its packages",
+            "pacman could not list its packages"
+        ]
+    );
+}
+
 #[test]
 fn appimages_in_the_home_folder_are_applications() {
     let machine = Machine::new(&[]);

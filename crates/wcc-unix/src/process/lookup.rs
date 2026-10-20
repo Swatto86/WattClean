@@ -94,7 +94,7 @@ const ADMIN_FOLDERS: &[&str] = &[
 /// the account; `None` when none is installed. `name` is a bare name:
 /// anything with a separator is refused.
 pub fn find(name: &str, home: Option<&Path>) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")
+    let path = super::host::var("PATH")
         .map(|path| std::env::split_paths(&path).collect())
         .unwrap_or_default();
     candidates(name, home, path)

@@ -5,6 +5,7 @@
 
 use std::fs;
 use std::io::{self, Write};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,11 +20,16 @@ pub fn home_trash(home: Option<&Path>) -> Option<PathBuf> {
 
 /// Moves `path` into the Trash folder `bin`, with its record. A file on
 /// another drive cannot be moved there and is reported, never deleted.
+/// What the Trash is made of, when WattClean makes it, is the account's
+/// alone, as the desktop's own Trash is: its names and records tell what
+/// was deleted, and from where.
 pub fn freedesktop(bin: &Path, path: &Path) -> io::Result<()> {
     let files = bin.join("files");
     let info = bin.join("info");
-    fs::create_dir_all(&files)?;
-    fs::create_dir_all(&info)?;
+    let mut folders = fs::DirBuilder::new();
+    folders.recursive(true).mode(0o700);
+    folders.create(&files)?;
+    folders.create(&info)?;
     let original = path
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "nothing to move"))?
@@ -40,6 +46,7 @@ pub fn freedesktop(bin: &Path, path: &Path) -> io::Result<()> {
         let mut file = match fs::OpenOptions::new()
             .write(true)
             .create_new(true)
+            .mode(0o600)
             .open(&record)
         {
             Ok(file) => file,
@@ -140,6 +147,15 @@ mod tests {
         let record = fs::read_to_string(bin.join("info/my app.trashinfo")).unwrap();
         assert!(record.starts_with("[Trash Info]\nPath=/"), "{record}");
         assert!(record.contains("my%20app\n"), "{record}");
+        // The account's alone, whatever the umask lets through.
+        let mode = |path: &Path| {
+            use std::os::unix::fs::PermissionsExt;
+            fs::metadata(path).unwrap().permissions().mode() & 0o777
+        };
+        for folder in [bin.clone(), bin.join("files"), bin.join("info")] {
+            assert_eq!(mode(&folder), 0o700, "{}", folder.display());
+        }
+        assert_eq!(mode(&bin.join("info/my app.trashinfo")), 0o600);
 
         fs::write(&first, b"again").unwrap();
         freedesktop(&bin, &first).unwrap();

@@ -67,6 +67,10 @@ pub fn run_job(id: &str) -> i32 {
 }
 
 pub fn run() {
+    // Linux trays name an item by its title, which is the app's name when
+    // it has none of its own; GTK's default is the program's file name.
+    #[cfg(target_os = "linux")]
+    glib::set_application_name("WattClean");
     let args: Vec<String> = std::env::args().collect();
     #[cfg(windows)]
     if let Some(pid) = shell::restarted_from(&args) {

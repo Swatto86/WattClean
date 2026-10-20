@@ -134,7 +134,9 @@ pub async fn disk_wipe_free_space(
             .drives()
             .into_iter()
             .find(|d| d.root.eq_ignore_ascii_case(&root))
-            .ok_or_else(|| CommandError::from(format!("{root} is not a drive on this PC.")))?;
+            .ok_or_else(|| {
+                CommandError::from(format!("{root} is not a drive WattClean can wipe."))
+            })?;
         let _job = app.start_job()?;
         let folder = app.system.wipe_folder(&drive);
         let limit = app.system.wipe_limit();

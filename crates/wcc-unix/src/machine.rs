@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use wcc_core::system::{Drive, ProgramOutput, Registry, System};
 
@@ -189,7 +189,7 @@ impl System for UnixSystem {
             )
         })?;
         // pbcopy reads nothing from an empty input and so empties the clipboard.
-        let status = Command::new(tool)
+        let status = process::command(tool)
             .args(args)
             .stdin(Stdio::null())
             .status()?;

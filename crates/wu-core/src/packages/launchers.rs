@@ -8,8 +8,9 @@ use std::path::{Path, PathBuf};
 use super::{Manager, Package, PackageSystem};
 
 /// The launchers (`.desktop` files) the system's packages installed, by
-/// package, with the name each launcher shows.
-pub(super) fn mark_apps(system: &dyn PackageSystem, packages: &mut [Package]) {
+/// package, with the name each launcher shows; `native` is the system's
+/// own package manager, which says what owns each one.
+pub(super) fn mark_apps(system: &dyn PackageSystem, native: Manager, packages: &mut [Package]) {
     let folder = system.at("/usr/share/applications");
     let launchers: Vec<PathBuf> = std::fs::read_dir(&folder)
         .map(|entries| {
@@ -24,11 +25,8 @@ pub(super) fn mark_apps(system: &dyn PackageSystem, packages: &mut [Package]) {
     if launchers.is_empty() {
         return;
     }
-    let owners = owners(system, &launchers, &folder);
-    for package in packages
-        .iter_mut()
-        .filter(|p| matches!(p.manager, Manager::Apt | Manager::Rpm | Manager::Pacman))
-    {
+    let owners = owners(system, native, &launchers, &folder);
+    for package in packages.iter_mut().filter(|p| p.manager == native) {
         // A hidden launcher (a helper the menu does not show) is no app.
         if let Some(name) = owners.get(&package.id).and_then(|l| launcher_name(l)) {
             package.app = true;
@@ -43,6 +41,7 @@ pub(super) fn mark_apps(system: &dyn PackageSystem, packages: &mut [Package]) {
 /// an unowned file and rpm a line for each of a file's owners.
 fn owners(
     system: &dyn PackageSystem,
+    native: Manager,
     launchers: &[PathBuf],
     folder: &Path,
 ) -> HashMap<String, PathBuf> {
@@ -64,16 +63,20 @@ fn owners(
             .map(|output| output.stdout)
             .unwrap_or_default()
     };
-    let owned = if let Some(dpkg) = system.find_program("dpkg-query") {
-        parse_dpkg_owners(&ask(&dpkg, &["-S"], &real))
-    } else if let Some(rpm) = system.find_program("rpm") {
-        rpm_owners(&real, |files| {
-            ask(&rpm, &["-qf", "--queryformat", r"%{NAME}\n"], files)
-        })
-    } else if let Some(pacman) = system.find_program("pacman") {
-        parse_pacman_owners(&ask(&pacman, &["-Qo"], &real))
-    } else {
+    let program = match native {
+        Manager::Apt => "dpkg-query",
+        Manager::Rpm => "rpm",
+        _ => "pacman",
+    };
+    let Some(path) = system.find_program(program) else {
         return HashMap::new();
+    };
+    let owned = match native {
+        Manager::Apt => parse_dpkg_owners(&ask(&path, &["-S"], &real)),
+        Manager::Rpm => rpm_owners(&real, |files| {
+            ask(&path, &["-qf", "--queryformat", r"%{NAME}\n"], files)
+        }),
+        _ => parse_pacman_owners(&ask(&path, &["-Qo"], &real)),
     };
     let mut out = HashMap::new();
     for (name, path) in owned {
@@ -232,7 +235,7 @@ mod tests {
              /usr/share/applications/org.inkscape.Inkscape.desktop is owned by inkscape 1:1.3.2-7\n",
             "error: No package owns /usr/share/applications/vmware.desktop\n",
         );
-        let found = owners(&machine, &asked, &folder);
+        let found = owners(&machine, Manager::Pacman, &asked, &folder);
         assert_eq!(found.len(), 2, "{found:?}");
         assert_eq!(found["gimp"], folder.join("gimp.desktop"));
         assert_eq!(
@@ -275,7 +278,7 @@ mod tests {
                 "",
             );
         }
-        let found = owners(&machine, &asked, &folder);
+        let found = owners(&machine, Manager::Rpm, &asked, &folder);
         assert_eq!(found.len(), 3, "{found:?}");
         assert_eq!(found["wine-desktop"], folder.join("wine.desktop"));
         assert_eq!(found["gimp"], folder.join("gimp.desktop"));
@@ -301,7 +304,7 @@ mod tests {
             "file /usr/share/applications/vmware.desktop is not owned by any package\ngimp\n",
             "",
         );
-        let found = owners(&machine, &asked, &folder);
+        let found = owners(&machine, Manager::Rpm, &asked, &folder);
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found["gimp"], folder.join("gimp.desktop"));
         assert_eq!(machine.ran().len(), 1);

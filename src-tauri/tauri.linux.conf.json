@@ -32,6 +32,11 @@
         "files": {
           "/usr/share/doc/wattclean/THIRD-PARTY-NOTICES.txt": "../THIRD-PARTY-NOTICES.txt"
         }
+      },
+      "appimage": {
+        "files": {
+          "/usr/share/doc/wattclean/THIRD-PARTY-NOTICES.txt": "../THIRD-PARTY-NOTICES.txt"
+        }
       }
     }
   }
