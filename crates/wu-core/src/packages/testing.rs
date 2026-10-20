@@ -7,7 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use super::{BundleInfo, Output, PackageSystem};
+use super::{BundleInfo, Output, Package, PackageSystem, find_leftovers};
 
 pub struct Machine {
     dir: tempfile::TempDir,
@@ -132,4 +132,19 @@ impl PackageSystem for Machine {
             })
             .collect()
     }
+}
+
+/// The paths found, relative to the home folder.
+pub fn offered(machine: &Machine, removed: &Package, installed: &[Package]) -> Vec<String> {
+    let home = machine.home().unwrap();
+    find_leftovers(machine, removed, installed)
+        .iter()
+        .map(|l| {
+            l.path
+                .strip_prefix(&home)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect()
 }

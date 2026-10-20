@@ -17,7 +17,8 @@ const PURGE: Record<string, string> = {
   pacman: "Also remove its saved settings and dependencies nothing else needs",
   Flatpak: "Also delete its data",
   Snap: "Also delete its data without keeping a snapshot",
-  "Homebrew Cask": "Also remove its settings and caches (zap)",
+  "Homebrew Cask":
+    "Also run Homebrew's zap: removes its settings and caches, and may remove files other apps share, including outside your home folder",
 };
 
 const matches = (p: PackageView, query: string): boolean =>

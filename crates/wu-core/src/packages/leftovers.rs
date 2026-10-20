@@ -3,11 +3,13 @@
 //! in. Names are matched whole, never as parts, except that on macOS an
 //! entry named after the app's bundle identifier plus a suffix
 //! (`com.vendor.App.ShipIt`) is the app's unless a longer installed
-//! identifier owns it. Generic folder names, names another installed
-//! program goes by, and the folders of a command-line tool still installed
-//! (Apple's git, Claude Code's `~/.claude`) are never offered. Nothing is
-//! pre-selected, and what is chosen goes to the Trash. `extra` adds a
-//! cask's own zap list and the folder a lone app came in.
+//! identifier owns it, and a team or group prefix (`<TeamID>.<id>`,
+//! `group.<id>`) is taken before the bundle identifier only. Generic folder
+//! names, names another installed program goes by, Apple's own entries
+//! (unless the app is Apple's) and the folders of a command-line tool still
+//! installed (Apple's git, Claude Code's `~/.claude`) are never offered.
+//! Nothing is pre-selected, and what is chosen goes to the Trash. `extra`
+//! adds a cask's own zap list and the folder a lone app came in.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -166,6 +168,20 @@ const SUFFIXED: &[&str] = &[
     "Library/Application Scripts",
 ];
 
+/// Forms that put a team or group prefix before a bundle identifier
+/// (`<TeamID>.<id>`, `group.<id>`): taken with the removed app's bundle
+/// identifier only, since a plain name such as `tag` ends many of Apple's
+/// own entries (`com.apple.news.tag`).
+fn prefixed(form: &&str) -> bool {
+    form.starts_with("*.") || form.starts_with("group.")
+}
+
+/// Whether an entry's name (lower case) is Apple's: `com.apple.…`,
+/// `group.com.apple.…` or `<TeamID>.com.apple.…`.
+fn apples(name: &str) -> bool {
+    name.starts_with("com.apple.") || name.contains(".com.apple.")
+}
+
 /// Whether an entry's name (lower case) is a key in one of the forms.
 fn named(entry: &str, forms: &[&str], keys: &[String]) -> bool {
     keys.iter().any(|key| {
@@ -233,7 +249,7 @@ pub fn find_leftovers(
         .map(str::to_lowercase)
         .collect();
     let places = if system.is_macos() { MACOS } else { LINUX };
-    let mut out = extra::leftovers(system, &home, removed, &others);
+    let mut out = extra::leftovers(system, &home, removed, &others, &theirs, &other_bundles);
     for (folder, forms) in places {
         if folder.is_empty() && gui {
             continue;
@@ -247,6 +263,12 @@ pub fn find_leftovers(
         if keys.is_empty() && suffixed.is_none() {
             continue;
         }
+        let (prefixed_forms, plain_forms): (Vec<&str>, Vec<&str>) =
+            forms.iter().copied().partition(prefixed);
+        let own_id: &[String] = match &bundle {
+            Some(id) if keys.contains(id) => std::slice::from_ref(id),
+            _ => &[],
+        };
         let dir = if folder.is_empty() {
             home.clone()
         } else {
@@ -257,13 +279,27 @@ pub fn find_leftovers(
         };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_lowercase();
-            let by_name = named(&name, forms, keys) && !named(&name, forms, &theirs);
+            let by_name = (named(&name, &plain_forms, keys)
+                || named(&name, &prefixed_forms, own_id))
+                && !named(&name, forms, &theirs);
             let by_bundle = suffixed.is_some_and(|id| owns(id, &name, &other_bundles));
             if by_name || by_bundle {
                 out.push(leftover(&entry.path()));
             }
         }
     }
+    // Apple's entries are its own apps' (Notes' group, News' scripts), and
+    // Apple's apps are never listed, so no name check can hold them back.
+    let apple = bundle
+        .as_deref()
+        .is_some_and(|id| id.starts_with("com.apple."));
+    out.retain(|leftover| {
+        apple
+            || !leftover
+                .path
+                .file_name()
+                .is_some_and(|name| apples(&name.to_string_lossy().to_lowercase()))
+    });
     out.sort_by(|a, b| a.path.cmp(&b.path));
     out.dedup_by(|a, b| a.path == b.path);
     out

@@ -1,5 +1,5 @@
 use super::*;
-use crate::packages::testing::Machine;
+use crate::packages::testing::{Machine, offered};
 
 #[test]
 fn keys_come_from_the_id_the_name_and_the_bundle() {
@@ -243,4 +243,73 @@ fn nothing_is_offered_while_another_copy_of_the_app_stays() {
     other.bundle_id = Some("us.zoom.xos".into());
     let found = find_leftovers(&machine, &zoom, &[zoom.clone(), other]);
     assert!(found.is_empty(), "by name: {found:#?}");
+}
+
+#[test]
+fn plain_names_never_reach_apples_group_containers_or_scripts() {
+    let machine = Machine::macos();
+    let library = machine.home().unwrap().join("Library");
+    for folder in [
+        "Group Containers/group.tvappservices.container",
+        "Application Scripts/group.tvappservices.container",
+        "Application Scripts/com.apple.news.tag",
+        "Application Scripts/com.apple.ScreenSaver.Hello",
+        "Application Scripts/com.apple.Batteries",
+        "Group Containers/group.com.apple.notes",
+        "Application Scripts/com.apple.Notes",
+        "Group Containers/group.com.example.notes",
+        "Application Scripts/ABCDE12345.com.example.notes",
+    ] {
+        std::fs::create_dir_all(library.join(folder)).unwrap();
+    }
+    for formula in ["container", "tag", "hello"] {
+        let removed = Package::new(Manager::Homebrew, formula, formula);
+        let found = offered(&machine, &removed, std::slice::from_ref(&removed));
+        assert!(found.is_empty(), "{formula}: {found:?}");
+    }
+    let batteries = Package::new(Manager::HomebrewCask, "batteries", "Batteries");
+    let found = offered(&machine, &batteries, std::slice::from_ref(&batteries));
+    assert!(found.is_empty(), "batteries: {found:?}");
+    // A third-party Notes keeps its own group and team entries, never Apple's.
+    let mut notes = Package::new(Manager::MacApp, "/Applications/Notes.app", "Notes");
+    notes.bundle_id = Some("com.example.Notes".into());
+    assert_eq!(
+        offered(&machine, &notes, std::slice::from_ref(&notes)),
+        [
+            "Library/Application Scripts/ABCDE12345.com.example.notes",
+            "Library/Group Containers/group.com.example.notes"
+        ]
+    );
+}
+
+#[test]
+fn apples_own_entries_are_offered_only_for_apples_own_app() {
+    let machine = Machine::macos();
+    let library = machine.home().unwrap().join("Library");
+    for folder in [
+        "Caches/com.apple.Safari",
+        "Group Containers/group.com.apple.notes",
+        "Group Containers/UBF8T346G9.com.apple.shared",
+        "Caches/com.apple.SFSymbols",
+    ] {
+        std::fs::create_dir_all(library.join(folder)).unwrap();
+    }
+    let mut cask = Package::new(Manager::HomebrewCask, "odd", "Odd");
+    cask.zap = vec![
+        "~/Library/Caches/com.apple.Safari".into(),
+        "~/Library/Group Containers/group.com.apple.notes".into(),
+        "~/Library/Group Containers/UBF8T346G9.com.apple.shared".into(),
+    ];
+    let found = offered(&machine, &cask, std::slice::from_ref(&cask));
+    assert!(found.is_empty(), "{found:?}");
+    let mut symbols = Package::new(
+        Manager::MacApp,
+        "/Applications/SF Symbols.app",
+        "SF Symbols",
+    );
+    symbols.bundle_id = Some("com.apple.SFSymbols".into());
+    assert_eq!(
+        offered(&machine, &symbols, std::slice::from_ref(&symbols)),
+        ["Library/Caches/com.apple.SFSymbols"]
+    );
 }
