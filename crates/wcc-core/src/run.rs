@@ -250,3 +250,7 @@ mod command_tests;
 #[cfg(test)]
 #[path = "run_running_tests.rs"]
 mod running_tests;
+
+#[cfg(test)]
+#[path = "run_wipe_tests.rs"]
+mod wipe_tests;

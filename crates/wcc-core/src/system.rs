@@ -196,12 +196,15 @@ pub struct Drive {
 /// Why a drive that compresses is not wiped.
 pub const COMPRESSES: &str = "this drive compresses what is written, so a wipe's zeros would take almost no space and could not overwrite its free space";
 
-/// The first drive whose root holds `path`, by the text of their paths.
+/// The drive whose root holds `path`, by the text of their paths: the
+/// deepest such root, so `/home/me` belongs to a `/home` drive rather than
+/// to `/`, which holds every path on Linux and macOS.
 pub fn drive_holding(drives: Vec<Drive>, path: &Path) -> Option<Drive> {
     let key = crate::paths::key(path);
     drives
         .into_iter()
-        .find(|d| crate::paths::is_within(&key, &crate::paths::key(Path::new(&d.root))))
+        .filter(|d| crate::paths::is_within(&key, &crate::paths::key(Path::new(&d.root))))
+        .max_by_key(|d| crate::paths::key(Path::new(&d.root)).len())
 }
 
 /// The hive and the rest of a registry key, with the hive in short form.
@@ -220,6 +223,35 @@ pub fn split_hive(key: &str) -> Option<(&'static str, &str)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn drive(root: &str) -> Drive {
+        Drive {
+            root: root.to_string(),
+            label: String::new(),
+            file_system: String::new(),
+            free: 0,
+            total: 0,
+            removable: false,
+        }
+    }
+
+    /// Mounts are listed `/` first; a folder on `/home` is `/home`'s.
+    #[test]
+    fn a_path_belongs_to_the_deepest_drive_holding_it() {
+        let drives = || vec![drive("/"), drive("/home"), drive("/home/me/usb")];
+        let root = |path: &str| drive_holding(drives(), Path::new(path)).map(|d| d.root);
+        assert_eq!(root("/home/me/.cache/tmp").as_deref(), Some("/home"));
+        assert_eq!(root("/home/me/usb/x").as_deref(), Some("/home/me/usb"));
+        assert_eq!(root("/var/tmp").as_deref(), Some("/"));
+        assert_eq!(root("/homework").as_deref(), Some("/"));
+        let windows = vec![drive(r"C:\"), drive(r"D:\")];
+        assert_eq!(
+            drive_holding(windows, Path::new(r"D:\Temp"))
+                .map(|d| d.root)
+                .as_deref(),
+            Some(r"D:\")
+        );
+    }
 
     #[test]
     fn hives_take_either_name() {
