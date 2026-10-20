@@ -6,6 +6,8 @@ use crate::packages::testing::Machine;
 
 /// An app moved to the Trash while it is open keeps running from there and
 /// writes its folders again after they were offered as leftovers.
+// Unix paths: on Windows `/Applications` is not a full path.
+#[cfg(unix)]
 #[test]
 fn an_open_app_is_not_removed() {
     let mut machine = Machine::macos();
