@@ -33,7 +33,7 @@ pub fn console(args: &[String]) -> i32 {
 
 #[cfg(not(windows))]
 pub fn console(_args: &[String]) -> i32 {
-    eprintln!("WattClean runs on Windows.");
+    eprintln!("The registry cleaner runs on Windows only.");
     2
 }
 

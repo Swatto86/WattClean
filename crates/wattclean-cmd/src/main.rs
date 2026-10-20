@@ -3,11 +3,23 @@
 //! (`wattclean-cmd registry …`, Revo's `RRCcmd` verbs). A console program,
 //! not the app with a console attached, so its exit code reaches the caller.
 
+/// The registry cleaner exists on Windows only, so elsewhere it is not
+/// offered.
+#[cfg(windows)]
 const USAGE: &str = "\
 WattClean command line
 
   wattclean-cmd disk ...       the disk cleaner (wattclean-cmd disk --help)
   wattclean-cmd registry ...   the registry cleaner (wattclean-cmd registry -help)
+  wattclean-cmd --version
+
+Exit codes: 0 done, 1 done with problems, 2 bad arguments or could not run.";
+
+#[cfg(not(windows))]
+const USAGE: &str = "\
+WattClean command line
+
+  wattclean-cmd disk ...       the disk cleaner (wattclean-cmd disk --help)
   wattclean-cmd --version
 
 Exit codes: 0 done, 1 done with problems, 2 bad arguments or could not run.";
@@ -32,4 +44,12 @@ fn main() -> std::process::ExitCode {
         }
     };
     std::process::ExitCode::from(u8::try_from(code).unwrap_or(2))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_registry_cleaner_is_offered_only_on_windows() {
+        assert_eq!(super::USAGE.contains("registry"), cfg!(windows));
+    }
 }
