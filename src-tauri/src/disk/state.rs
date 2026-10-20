@@ -23,6 +23,9 @@ pub struct AppState {
     catalog: RwLock<Arc<Catalog>>,
     busy: AtomicBool,
     cancel: AtomicBool,
+    /// Set once the app has begun quitting: it waits for the running job,
+    /// so a new one would be cut off when it exits.
+    quitting: AtomicBool,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -58,6 +61,7 @@ impl AppState {
             catalog: RwLock::new(Arc::new(catalog)),
             busy: AtomicBool::new(false),
             cancel: AtomicBool::new(false),
+            quitting: AtomicBool::new(false),
         }
     }
 
@@ -125,13 +129,25 @@ impl AppState {
         }
     }
 
-    /// Starts a job, or says one is already running.
+    /// Starts a job, or says one is already running or the app is quitting.
     pub fn start_job(&self) -> CommandResult<Job<'_>> {
         if self.busy.swap(true, Ordering::SeqCst) {
             return Err("Another clean, shred or wipe is still running.".into());
         }
+        let job = Job { state: self };
         self.cancel.store(false, Ordering::SeqCst);
-        Ok(Job { state: self })
+        // Looked at once busy, so a quit beginning meanwhile either sees
+        // this job (and stops it) or is seen here; dropping `job` frees the
+        // app again.
+        if self.quitting.load(Ordering::SeqCst) {
+            return Err("WattClean is quitting: it closes once the running task ends.".into());
+        }
+        Ok(job)
+    }
+
+    /// From now on no job starts: the app is quitting.
+    pub fn stop_new_jobs(&self) {
+        self.quitting.store(true, Ordering::SeqCst);
     }
 
     pub fn is_busy(&self) -> bool {
@@ -144,5 +160,26 @@ impl AppState {
 
     pub fn cancelled(&self) -> bool {
         self.cancel.load(Ordering::SeqCst)
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "fake-system")]
+mod tests {
+    use super::*;
+
+    fn state(sandbox: &std::path::Path) -> AppState {
+        let system = wcc_core::fake::FakeSystem::open(sandbox).expect("test machine");
+        AppState::new(Arc::new(system), sandbox.join("disk"), true)
+    }
+
+    #[test]
+    fn no_job_starts_once_the_app_is_quitting() {
+        let sandbox = tempfile::tempdir().expect("temp folder");
+        let state = state(sandbox.path());
+        drop(state.start_job().expect("a first job starts"));
+        state.stop_new_jobs();
+        assert!(state.start_job().is_err(), "a job started while quitting");
+        assert!(!state.is_busy());
     }
 }

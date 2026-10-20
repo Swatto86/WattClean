@@ -163,17 +163,34 @@ left out) are in `docs/disk-cleaner.md`, `docs/registry.md` and
   prefixes, and these nested), so the guard folds them, repeatedly, into
   one key; on Linux and macOS a leading `//` is `/` (no shares). What
   macOS will not let WattClean read (Safari, Mail, other apps' containers)
-  is reported with a Full Disk Access hint; WattClean never asks for that
-  access itself. Free-space wipes are offered only for local, visible,
-  writable volumes. The Trash is counted from every local volume's Trash
+  is reported with a Full Disk Access hint; WattClean never asks macOS for
+  that access itself, but the report (one banner with a count) and
+  Settings › About (whether it has it, from listing `~/Library/Safari` or
+  `/Library/Application Support/com.apple.TCC`, where only EPERM means no)
+  offer a button that opens System Settings at Full Disk Access (a fixed
+  address through `/usr/bin/open`). Free-space wipes are offered only for
+  local, visible, writable volumes. The Trash is counted from every local volume's Trash
   folder (`~/.Trash`, `.Trashes/<uid>`), and from Finder when one cannot
   be read; Finder empties it and moves removed
   apps there, which macOS asks the user to allow once
-  (`NSAppleEventsUsageDescription` in `src-tauri/Info.plist`). The
-  menu-bar icon is a template image, and clicking the Dock icon brings the
-  window back. Developer and deep-scan cleaners never look inside
+  (`NSAppleEventsUsageDescription` in `src-tauri/Info.plist`). Signing
+  depends on `src-tauri/Entitlements.plist`
+  (`com.apple.security.automation.apple-events`): a signed build runs
+  hardened, which otherwise refuses those Apple events with no prompt.
+  Developer and deep-scan cleaners never look inside
   libraries, bundles or disk images (`*.photoslibrary`, `*.app`,
   `*.sparsebundle`, OrbStack's folder).
+- **The window and quitting on macOS** (2026-10-20): the menu-bar icon (a
+  template image) shows its menu on a click; the Dock icon brings the
+  window back. The app menu is Tauri's default with Settings… (Cmd+,) and
+  a Quit (Cmd+Q) of its own that waits for a running task on a worker
+  thread, like the icon's Quit; AppKit's own quit (the Dock's menu,
+  logging out) can only wait on the main thread, so it hides the window
+  and waits at most a minute for a removal. A window closed in full screen
+  goes by hiding the app (Cmd+H), which leaves no empty black Space. The
+  `fake-system` build fakes only the disk on Linux and macOS (its pill says
+  "Test disk"). An older WebKit without `<dialog>` (before macOS 12.3) is
+  told to update instead of running pages whose confirmations cannot open.
 
 ## Repository
 

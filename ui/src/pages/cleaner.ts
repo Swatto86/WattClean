@@ -221,6 +221,10 @@ export const cleanerPage = (ctx: Context): Page => {
         ...renderReport(report, ctx.info.elevated, {
           restartAsAdmin: () =>
             api.restartAsAdmin().catch((e: unknown) => notice(String(e), true)),
+          openPrivacySettings: () =>
+            api
+              .openPrivacySettings()
+              .catch((e: unknown) => notice(String(e), true)),
         }),
       );
       if (mode === "clean") {

@@ -4,6 +4,20 @@
 
 import { el } from "./dom.ts";
 
+/** Whether the web engine has <dialog>'s `showModal` (WebKit from Safari
+ *  15.4): without it no confirmation could open. */
+export const dialogsWork = (
+  dialog: unknown = globalThis.HTMLDialogElement,
+): boolean => {
+  if (typeof dialog !== "function") return false;
+  const prototype: unknown = Reflect.get(dialog, "prototype");
+  return (
+    typeof prototype === "object" &&
+    prototype !== null &&
+    typeof Reflect.get(prototype, "showModal") === "function"
+  );
+};
+
 interface ConfirmOptions {
   title: string;
   message: string;

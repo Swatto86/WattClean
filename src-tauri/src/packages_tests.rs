@@ -263,3 +263,16 @@ fn a_leftover_is_shown_by_its_number_only() {
     let gone = reveal(&mac, &leftovers, 2).unwrap_err();
     assert_eq!(gone.message, "That leftover is no longer listed.");
 }
+
+#[test]
+fn no_removal_starts_once_the_app_is_quitting() {
+    let state = AppState::new(Arc::new(SudoFails));
+    drop(state.begin_removal().expect("a first removal starts"));
+    assert!(!state.is_removing());
+    state.stop_new_removals();
+    assert!(
+        state.begin_removal().is_err(),
+        "a removal started while quitting"
+    );
+    assert!(!state.is_removing());
+}

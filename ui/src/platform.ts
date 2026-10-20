@@ -3,6 +3,7 @@
 // system's own things. Set once at start, from the app's own answer.
 
 import type { Platform } from "./api.ts";
+import { plural } from "./format.ts";
 
 let current: Platform = "windows";
 
@@ -72,3 +73,34 @@ export const wipeCaveat = (removable: boolean): string =>
  *  disks) ignore case in names, Linux does not. */
 export const samePath = (a: string, b: string): boolean =>
   current === "linux" ? a === b : a.toLowerCase() === b.toLowerCase();
+
+/** The header's pill in the `fake-system` build. On Windows it swaps the
+ *  whole machine (disk, registry and programs); on Linux and macOS only the
+ *  disk, so Uninstall programs still acts on the real programs. */
+export const testBuild = (): { label: string; title: string } =>
+  current === "windows"
+    ? {
+        label: "Test machine",
+        title:
+          "This test build acts on a sandboxed test machine: its disk, registry and programs.",
+      }
+    : {
+        label: "Test disk",
+        title: `This test build cleans a sandboxed test disk, but Uninstall programs acts on this ${current === "macos" ? "Mac" : "computer"}'s real programs.`,
+      };
+
+/** Shown instead of the pages when the system's web engine has no
+ *  <dialog>, which every confirmation uses (Safari 15.4, macOS 12.3). */
+export const webEngineTooOld = (): string => {
+  const update =
+    current === "macos"
+      ? "Update macOS (12.3 or later) or Safari (15.4 or later)"
+      : current === "linux"
+        ? "Update the system's WebKitGTK"
+        : "Update the Microsoft Edge WebView2 Runtime";
+  return `WattClean needs a newer web engine than this system has: its confirmations could not open, so nothing could be cleaned or removed. ${update}, then open WattClean again.`;
+};
+
+/** The report's banner for the items macOS kept from WattClean. */
+export const fullDiskAccessBanner = (items: number): string =>
+  `macOS protected ${plural(items, "item")} from WattClean. Give WattClean Full Disk Access to clean ${items === 1 ? "it" : "them"}; macOS then asks to quit and reopen WattClean.`;

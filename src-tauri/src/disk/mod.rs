@@ -89,6 +89,34 @@ pub fn disk_open_cleaners_folder(state: App<'_>) -> CommandResult<()> {
     platform::open_folder(state.fake, &state.cleaners_dir())
 }
 
+/// Whether macOS lets WattClean read what Full Disk Access protects;
+/// `None` elsewhere, on the test machine, or when it could not tell.
+#[tauri::command]
+pub async fn disk_privacy_access(state: App<'_>) -> CommandResult<Option<bool>> {
+    let fake = state.fake;
+    blocking(move || {
+        Ok(if fake {
+            None
+        } else {
+            platform::full_disk_access()
+        })
+    })
+    .await
+}
+
+/// Opens System Settings at Full Disk Access (macOS only).
+#[tauri::command]
+pub async fn disk_open_privacy_settings(state: App<'_>) -> CommandResult<()> {
+    let fake = state.fake;
+    blocking(move || {
+        if fake {
+            return Ok(());
+        }
+        platform::open_privacy_settings()
+    })
+    .await
+}
+
 /// A wipe cut short (power loss, a killed process) leaves its filler
 /// folder behind; find and delete it so the space comes back.
 pub fn remove_wipe_leftovers(state: &AppState) {

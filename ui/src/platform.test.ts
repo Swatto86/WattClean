@@ -2,10 +2,13 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import {
+  fullDiskAccessBanner,
   runningBanner,
   runningWarning,
   samePath,
   setPlatform,
+  testBuild,
+  webEngineTooOld,
   wipeCaveat,
 } from "./platform.ts";
 
@@ -55,4 +58,38 @@ test("a wipe of the Mac's start-up disk warns that local snapshots go", () => {
   assert.equal(wipeCaveat(false), "");
   setPlatform("linux");
   assert.equal(wipeCaveat(false), "");
+});
+
+test("the test build says what it fakes: all of Windows, only the disk elsewhere", () => {
+  setPlatform("windows");
+  assert.equal(testBuild().label, "Test machine");
+  setPlatform("macos");
+  assert.equal(testBuild().label, "Test disk");
+  assert.match(
+    testBuild().title,
+    /Uninstall programs acts on this Mac's real programs/,
+  );
+  setPlatform("linux");
+  assert.equal(testBuild().label, "Test disk");
+  assert.match(testBuild().title, /real programs/);
+});
+
+test("too old a web engine is explained in the system's own terms", () => {
+  setPlatform("macos");
+  assert.match(webEngineTooOld(), /Update macOS/);
+  setPlatform("linux");
+  assert.match(webEngineTooOld(), /WebKitGTK/);
+  setPlatform("windows");
+  assert.match(webEngineTooOld(), /WebView2/);
+});
+
+test("the Full Disk Access banner counts what macOS protected", () => {
+  assert.equal(
+    fullDiskAccessBanner(1),
+    "macOS protected 1 item from WattClean. Give WattClean Full Disk Access to clean it; macOS then asks to quit and reopen WattClean.",
+  );
+  assert.match(
+    fullDiskAccessBanner(23),
+    /^macOS protected 23 items .* to clean them;/,
+  );
 });

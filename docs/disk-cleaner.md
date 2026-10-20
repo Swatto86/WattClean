@@ -144,12 +144,15 @@ Custom `.toml` and CleanerML `.xml` files go in the data folder's
 ## A run
 
 1. The page sends the ticked keys; the command checks them against the
-   catalog and starts the one job (`AppState::start_job`).
+   catalog and starts the one job (`AppState::start_job`, refused once
+   the app is quitting).
 2. `run::run` takes the options in catalog order. For each action the
    `Planner` expands variables, finds files (`search`), and asks the
    `Guard`; files already planned by an earlier option are left out. A
    folder the system will not let it list is a problem in the report (once
-   per option, with a Full Disk Access hint on macOS), never "nothing found".
+   per option, with a Full Disk Access hint on macOS, which the report
+   counts in one banner with a button to System Settings), never "nothing
+   found".
 3. Preview reports the plan; clean hands each operation to the `Executor`,
    which checks the guard again, deletes (or shreds), and reports what was
    done, what was in use, and what failed.

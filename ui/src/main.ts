@@ -15,10 +15,15 @@ import {
   type ShellSettings,
 } from "./api.ts";
 import { type Context, type Page, type SettingsSection } from "./context.ts";
-import { inform } from "./dialog.ts";
+import { dialogsWork, inform } from "./dialog.ts";
 import { el, glyph, notice, setText } from "./dom.ts";
 import { unixPages, windowsPages } from "./pagelist.ts";
-import { isWindows, setPlatform } from "./platform.ts";
+import {
+  isWindows,
+  setPlatform,
+  testBuild,
+  webEngineTooOld,
+} from "./platform.ts";
 import { startRegistry } from "./registry/start.ts";
 import { applyTheme, onSystemThemeChange } from "./theme.ts";
 import { startUninstall } from "./uninstall/start.ts";
@@ -66,6 +71,13 @@ const boot = async (): Promise<void> => {
   const listeners: ((s: Settings) => void)[] = [];
   applyLook(shell);
   onSystemThemeChange(() => applyLook(shell));
+  // An older WebKit (macOS before 12.3) has no <dialog>: every Clean,
+  // Shred, Wipe and Uninstall would silently do nothing.
+  if (!dialogsWork()) {
+    document.body.textContent = webEngineTooOld();
+    await reveal();
+    return;
+  }
 
   const restartAsAdmin = () => {
     api.restartAsAdmin().catch((e: unknown) => notice(String(e), true));
@@ -219,7 +231,11 @@ const boot = async (): Promise<void> => {
   await listen<string>("open-page", (event) => show(event.payload));
 
   statusBar(info, restartAsAdmin);
-  byId("test-machine").hidden = !info.testMachine;
+  const pill = byId("test-machine");
+  pill.hidden = !info.testMachine;
+  const test = testBuild();
+  pill.textContent = test.label;
+  pill.title = test.title;
   show("cleaner");
   // Started at sign-in: stay in the notification area until opened.
   if (!info.startedHidden) await reveal();

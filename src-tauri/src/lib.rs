@@ -1,7 +1,8 @@
 //! Composition root: find the data folder (taking over the old apps' data
 //! at first start on Windows), choose the machines, start the Registry
 //! Watcher, put the icon in the notification area, register every module's
-//! commands, and decide what closing the window does. Behaviour lives in
+//! commands, and decide what closing the window and quitting do (with
+//! macOS's app menu, `app_menu`). Behaviour lives in
 //! the engines (`wcc-core` disk, `wrc-core` registry, `wu-core` uninstaller);
 //! this file only wires them.
 //!
@@ -9,6 +10,8 @@
 //! only; on Linux and macOS the uninstaller is `packages`, over the package
 //! managers.
 
+#[cfg(target_os = "macos")]
+mod app_menu;
 mod commands;
 mod disk;
 mod error;
@@ -16,6 +19,7 @@ mod error;
 mod migrate;
 #[cfg(not(windows))]
 mod packages;
+mod quit;
 #[cfg(windows)]
 mod registry;
 mod settings;
@@ -83,19 +87,24 @@ pub fn run() {
         .setup(move |app| start(app, started_hidden));
     #[cfg(windows)]
     let builder = builder.on_menu_event(registry::menu::on_menu_event);
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(app_menu::build)
+        .on_menu_event(app_menu::on_menu_event);
     let app = builder
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle();
-                // Hide first: nothing below may stop the window going.
+                // Taken over before anything that could fail: the window is
+                // only ever hidden here, and the app exits through `quit`.
                 api.prevent_close();
                 if app
                     .try_state::<Arc<Shell>>()
                     .is_some_and(|shell| shell.keeps_running())
                 {
-                    let _ = window.hide();
+                    tray::hide_main(app);
                 } else {
-                    shell::quit_when_idle(app);
+                    quit::quit_when_idle(app);
                 }
             }
         })
@@ -123,13 +132,15 @@ fn on_event(handle: &tauri::AppHandle, event: tauri::RunEvent) {
 }
 
 /// Clicking the Dock icon (or opening the app again) shows the window that
-/// closing hid. macOS's own Quit (Cmd+Q, the Dock's menu, logging out)
-/// skips the close and tray paths, so Exit waits for a running job.
+/// closing hid. AppKit's own Quit (the Dock's menu, logging out) skips the
+/// close, menu and tray paths and ends the app from the main thread, so
+/// Exit waits there for a running job, the window hidden, and for a
+/// removal at most `QUIT_LIMIT`: the app cannot draw while it waits.
 #[cfg(target_os = "macos")]
 fn on_event(handle: &tauri::AppHandle, event: tauri::RunEvent) {
     match event {
         tauri::RunEvent::Reopen { .. } => tray::show_main(handle),
-        tauri::RunEvent::Exit => shell::wait_until_idle(handle),
+        tauri::RunEvent::Exit => quit::wait_until_idle(handle, Some(quit::QUIT_LIMIT)),
         _ => {}
     }
 }

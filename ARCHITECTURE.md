@@ -43,10 +43,12 @@ the app by `src-tauri/installer-hooks.nsh`.
 | --- | --- |
 | `lib.rs` | Composition root: data folder, migration (Windows), each module's machine and state, the watcher, the tray, close behaviour, `--run-job` |
 | `commands.rs` | The list of every command (shell, then `disk_*`, `reg_*`, `un_*`): one for Windows, one for Linux and macOS |
-| `shell.rs` | `Shell` state (data folder, shell settings, started hidden); about, shell settings, data folder, restart as administrator, quit, `quit_when_idle` |
+| `shell.rs` | `Shell` state (data folder, shell settings, started hidden); about, shell settings, data folder, restart as administrator, quit |
+| `quit.rs` | Quitting while a task runs: `quit_when_idle` (worker thread), `wait_until_idle` (also macOS's Exit event), no new jobs meanwhile |
 | `settings.rs` | The shell's settings: theme, accent, text size, navigation pane, keep running in the tray |
 | `migrate.rs` | Copying the old apps' data into the module folders at first start |
-| `tray.rs` | The notification-area icon: open, a page per module, quit |
+| `tray.rs` | The notification-area icon: open, a page per module, quit; showing and hiding the window |
+| `app_menu.rs` | macOS's app menu: Settings… and a Quit through `quit_when_idle` |
 | `disk/` | WattCompClean's commands: catalog, preview/clean, shred, wipe, community cleaners |
 | `registry/` | WattRegClean's commands: scan/search/clean, backups, tuner, watcher, schedules, start with Windows, native right-click menus (`menu.rs`) |
 | `uninstall/` | WattUninstaller's commands (Windows): programs, uninstall sessions, leftovers, backups, history, traced installs |
@@ -62,8 +64,11 @@ compiled for Windows only, `packages.rs` for Linux and macOS only.
 
 Closing the window hides it when "keep running in the notification area" is
 on (the default) or the app started at sign-in; otherwise, and from the
-tray's Quit, `quit_when_idle` stops a running disk job (a wipe gives its
-space back) and exits; the Exit event stops the Registry Watcher.
+tray's Quit (and macOS's Cmd+Q), `quit_when_idle` refuses new disk jobs
+and removals, hides the window, stops a running disk job (a wipe gives its
+space back), waits for a removal, and exits; the Exit event stops the
+Registry Watcher. On macOS AppKit's own quit (the Dock, logging out) waits
+in the Exit event instead, hidden, at most a minute for a removal.
 
 ## The window (`ui/`)
 

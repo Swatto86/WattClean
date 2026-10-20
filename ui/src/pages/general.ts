@@ -1,11 +1,12 @@
 // The shell's own settings, at the top and bottom of Settings: the look
 // (theme, accent, text size), running in the background (the tray, starting
-// with Windows, quitting), and about. Each change saves at once.
+// with Windows, quitting), and about (with macOS's Full Disk Access). Each
+// change saves at once.
 
 import { api, TEXT_SIZES, THEMES, type ShellSettings } from "../api.ts";
 import type { Context } from "../context.ts";
 import { el, notice } from "../dom.ts";
-import { isWindows, osName, trayName } from "../platform.ts";
+import { isWindows, osName, platform, trayName } from "../platform.ts";
 import { ACCENTS } from "../theme.ts";
 
 type Group = (
@@ -114,6 +115,35 @@ export const general = (
     api.openDataFolder().catch(fail);
   });
 
+  // macOS keeps Safari, Mail and other apps' data from WattClean until it
+  // is given Full Disk Access.
+  const mac = platform() === "macos";
+  const access = el("p", {
+    id: "privacy-access",
+    hidden: !mac,
+    text: "Checking Full Disk Access…",
+  });
+  const privacy = el("button", {
+    type: "button",
+    class: "secondary",
+    id: "open-privacy",
+    text: "Open Privacy & Security",
+    hidden: !mac,
+  });
+  privacy.addEventListener("click", () => {
+    api.openPrivacySettings().catch(fail);
+  });
+  if (mac) {
+    api.privacyAccess().then((given) => {
+      access.textContent =
+        given === null
+          ? "WattClean could not tell whether it has Full Disk Access."
+          : given
+            ? "WattClean has Full Disk Access."
+            : "WattClean does not have Full Disk Access, so what macOS protects (Safari, Mail, other apps' data) is not cleaned. Once it is given, macOS asks to quit and reopen WattClean.";
+    }, fail);
+  }
+
   const apply = (shell: ShellSettings) => {
     theme.value = shell.theme;
     size.value = shell.textSize;
@@ -172,7 +202,8 @@ export const general = (
       note(
         "WattClean is MIT-licensed. The licences of the open-source packages it is built with are in THIRD-PARTY-NOTICES.txt in its program folder.",
       ),
-      el("div", { class: "row-buttons" }, openData, restart),
+      access,
+      el("div", { class: "row-buttons" }, openData, privacy, restart),
     ),
     apply,
   };

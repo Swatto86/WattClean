@@ -1,10 +1,13 @@
 //! The notification-area icon, present while the app runs. A left click
-//! opens the window; its menu opens a module's page or quits. Closing the
-//! window hides it here when "keep running" is on, so the Registry Watcher
-//! goes on watching.
+//! opens the window (on macOS, where a menu-bar icon's click shows its
+//! menu, the menu's first item does); its menu opens a module's page or
+//! quits. Closing the window hides it here when "keep running" is on, so
+//! the Registry Watcher goes on watching.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::TrayIconBuilder;
+#[cfg(not(target_os = "macos"))]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 
 const TRAY: &str = "main";
@@ -26,6 +29,9 @@ const PAGES: &[(&str, &str, &str)] = &[
 
 /// Show and focus the main window.
 pub fn show_main(app: &AppHandle) {
+    // A window left in full screen was hidden with the whole app.
+    #[cfg(target_os = "macos")]
+    let _ = app.show();
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -33,8 +39,23 @@ pub fn show_main(app: &AppHandle) {
     }
 }
 
+/// Hide the main window. On macOS a window in full screen goes by hiding
+/// the whole app, as Cmd+H does, which leaves its full-screen Space:
+/// hiding the window alone would leave the user on an empty black Space.
+pub fn hide_main(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    #[cfg(target_os = "macos")]
+    if window.is_fullscreen().unwrap_or(false) {
+        let _ = app.hide();
+        return;
+    }
+    let _ = window.hide();
+}
+
 /// Show the window on one page.
-fn show_page(app: &AppHandle, page: &str) {
+pub fn show_page(app: &AppHandle, page: &str) {
     show_main(app);
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit("open-page", page);
@@ -62,22 +83,26 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let mut tray = TrayIconBuilder::with_id(TRAY)
         .tooltip("WattClean")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        // A click on a menu-bar icon shows its menu on macOS; elsewhere a
+        // left click opens the window and the menu is a right-click away.
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
             match id {
                 "tray-open" => show_main(app),
-                // The one way out that waits for a running wipe to stop;
-                // the Exit event then stops the watcher.
-                "tray-quit" => crate::shell::quit_when_idle(app),
+                // Waits for a running job off the main thread (as macOS's
+                // Quit menu item does); the Exit event then stops the watcher.
+                "tray-quit" => crate::quit::quit_when_idle(app),
                 _ => {
                     if let Some((_, _, page)) = PAGES.iter().find(|(item, _, _)| *item == id) {
                         show_page(app, page);
                     }
                 }
             }
-        })
-        .on_tray_icon_event(|tray, event| {
+        });
+    #[cfg(not(target_os = "macos"))]
+    {
+        tray = tray.on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
@@ -87,6 +112,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                 show_main(tray.app_handle());
             }
         });
+    }
     // The menu bar shows a monochrome glyph it tints for light and dark
     // appearance; elsewhere the app's own icon.
     #[cfg(target_os = "macos")]

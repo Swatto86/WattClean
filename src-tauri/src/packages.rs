@@ -20,6 +20,9 @@ pub struct AppState {
     /// The last removal's leftovers, numbered by position.
     leftovers: Mutex<Vec<Leftover>>,
     removing: AtomicBool,
+    /// Set once the app has begun quitting: a removal started now could be
+    /// cut short when it exits.
+    quitting: AtomicBool,
 }
 
 type App<'a> = State<'a, Arc<AppState>>;
@@ -45,11 +48,32 @@ impl AppState {
             listed: Mutex::new(Vec::new()),
             leftovers: Mutex::new(Vec::new()),
             removing: AtomicBool::new(false),
+            quitting: AtomicBool::new(false),
         }
     }
 
     pub fn is_removing(&self) -> bool {
         self.removing.load(Ordering::SeqCst)
+    }
+
+    /// From now on no removal starts: the app is quitting.
+    pub fn stop_new_removals(&self) {
+        self.quitting.store(true, Ordering::SeqCst);
+    }
+
+    /// Marks a removal under way until the guard is dropped; refused while
+    /// another runs or the app is quitting.
+    fn begin_removal(&self) -> CommandResult<Removing<'_>> {
+        if self.removing.swap(true, Ordering::SeqCst) {
+            return Err("Another program is being removed: wait for it to finish.".into());
+        }
+        let removing = Removing(&self.removing);
+        // Looked at once marked, so a quit beginning meanwhile either waits
+        // for this removal or is seen here.
+        if self.quitting.load(Ordering::SeqCst) {
+            return Err("WattClean is quitting: it closes once the running task ends.".into());
+        }
+        Ok(removing)
     }
 
     fn list_all(&self) -> (Vec<Package>, Vec<String>) {
@@ -141,10 +165,7 @@ pub async fn un_pkg_uninstall(
             .find(|package| package.key() == key)
             .cloned()
             .ok_or("That program is no longer listed: refresh the list.")?;
-        if shared.removing.swap(true, Ordering::SeqCst) {
-            return Err("Another program is being removed: wait for it to finish.".into());
-        }
-        let _removing = Removing(&shared.removing);
+        let _removing = shared.begin_removal()?;
         let said = remove(shared.system.as_ref(), &package, purge)?;
         let (installed, _) = shared.list_all();
         if installed.iter().any(|other| other.key() == package.key()) {

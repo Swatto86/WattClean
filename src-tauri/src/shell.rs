@@ -1,16 +1,19 @@
 //! What the whole app shares: its data folder, the shell's settings, how it
 //! was started, and the commands no single module owns (about, the look,
-//! administrator restart, quitting).
+//! administrator restart, quitting from Settings; `quit` waits for a
+//! running task when the app is closed or quit elsewhere).
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+#[cfg(windows)]
+use tauri::Manager;
+use tauri::{AppHandle, State};
 
 use crate::disk;
 use crate::error::{CommandError, CommandResult};
+use crate::quit::removing;
 #[cfg(windows)]
 use crate::registry;
 use crate::settings::{ShellPatch, ShellSettings};
@@ -233,65 +236,6 @@ fn relaunch(_exe: &std::path::Path) -> CommandResult<()> {
 }
 
 const REMOVING: &str = "Wait for the registry clean or the uninstall's removal to finish first.";
-
-/// A registry clean, or an uninstall's removal or restore, is under way:
-/// cut short, its backup would hold entries that were never removed.
-#[cfg(windows)]
-fn removing(app: &AppHandle) -> bool {
-    app.try_state::<Arc<registry::state::AppState>>()
-        .is_some_and(|state| state.is_cleaning())
-        || app
-            .try_state::<Arc<crate::uninstall::state::AppState>>()
-            .is_some_and(|state| state.is_removing())
-}
-
-/// A package manager is removing a program: cut short, it could leave the
-/// package database half-changed.
-#[cfg(not(windows))]
-fn removing(app: &AppHandle) -> bool {
-    app.try_state::<Arc<crate::packages::AppState>>()
-        .is_some_and(|state| state.is_removing())
-}
-
-/// Quits once the app is idle (`wait_until_idle`), at once when it already is.
-pub fn quit_when_idle(app: &AppHandle) {
-    if !disk_busy(app) && !removing(app) {
-        app.exit(0);
-        return;
-    }
-    let app = app.clone();
-    std::thread::spawn(move || {
-        wait_until_idle(&app);
-        app.exit(0);
-    });
-}
-
-/// Stops the running disk job (a wipe gives its space back when stopped)
-/// and waits for it, at most a minute, and for any registry clean or
-/// uninstall removal to finish. macOS's own Quit (Cmd+Q, the Dock) ends the
-/// app without asking, so the Exit event waits here too, unless the quit
-/// already waited.
-pub fn wait_until_idle(app: &AppHandle) {
-    static WAITED: AtomicBool = AtomicBool::new(false);
-    if WAITED.load(Ordering::SeqCst) {
-        return;
-    }
-    if disk_busy(app)
-        && let Some(disk) = app.try_state::<Arc<disk::state::AppState>>()
-    {
-        disk.cancel();
-    }
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
-    while (disk_busy(app) && std::time::Instant::now() < deadline) || removing(app) {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    WAITED.store(true, Ordering::SeqCst);
-}
-
-fn disk_busy(app: &AppHandle) -> bool {
-    app.try_state::<Arc<disk::state::AppState>>()
-        .is_some_and(|disk| disk.is_busy())
-}
 
 #[cfg(test)]
 #[cfg(windows)]

@@ -17,7 +17,11 @@ decisions; each engine's own structure and decisions are in
   Run the app on the test machines with
   `npx tauri dev --features fake-system` and `WATTCLEAN_DATA_DIR` set to a
   temp folder. A plain `tauri dev` acts on the real PC (and copies the old
-  apps' data on its first start unless `WATTCLEAN_DATA_DIR` is set).
+  apps' data on its first start unless `WATTCLEAN_DATA_DIR` is set). On
+  Linux and macOS that build fakes only the disk (its pill says "Test
+  disk"): Uninstall programs removes real programs. A temp `HOME` (as
+  `e2e/linux/smoke.py` sets) keeps per-user apps and leftovers in the
+  sandbox, not system packages, `/Applications` or Homebrew.
 - Full gate: `node "$HOME/.agents/hooks/gate-runner.mjs" verify` →
   `scripts/verify.ps1` → `scripts/verify.sh`: fmt, clippy, Rust tests,
   release feature guard (all three engines' `fake`), frontend build, types,
@@ -110,4 +114,5 @@ decisions; each engine's own structure and decisions are in
 - `SRSetRestorePoint` may be throttled by Windows to one point per 24 hours;
   both cleaners report what it returns and carry on.
 - Linux and macOS releases are not published yet; macOS signing and
-  notarization are undecided (entitlements wait for signing).
+  notarization are undecided (`src-tauri/Entitlements.plist` holds the
+  Apple-events entitlement a signed build needs).

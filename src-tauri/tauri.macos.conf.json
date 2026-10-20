@@ -15,6 +15,7 @@
     ],
     "macOS": {
       "minimumSystemVersion": "11.0",
+      "entitlements": "Entitlements.plist",
       "files": {
         "MacOS/wattclean-cmd": "../target/release/wattclean-cmd",
         "Resources/THIRD-PARTY-NOTICES.txt": "../THIRD-PARTY-NOTICES.txt"

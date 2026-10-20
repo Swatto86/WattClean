@@ -3,7 +3,7 @@
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 
-import { arr, failure, str } from "./decode.ts";
+import { arr, bool, failure, str } from "./decode.ts";
 import * as wire from "./wire.ts";
 
 export const CATEGORIES = [
@@ -301,6 +301,13 @@ export const api = {
     call("disk_get_history", (v) => arr(v, "history", wire.historyEntry)),
   clearHistory: () => call("disk_clear_history", nothing),
   openCleanersFolder: () => call("disk_open_cleaners_folder", nothing),
+  /** macOS: whether WattClean has Full Disk Access; null elsewhere, on the
+   *  test machine, or when it could not tell. */
+  privacyAccess: () =>
+    call("disk_privacy_access", (v) =>
+      v === null ? null : bool(v, "Full Disk Access"),
+    ),
+  openPrivacySettings: () => call("disk_open_privacy_settings", nothing),
   restartAsAdmin: () => call("restart_as_admin", nothing),
   quitApp: () => call("quit_app", nothing),
 };

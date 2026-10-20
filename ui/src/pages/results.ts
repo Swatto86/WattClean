@@ -3,7 +3,12 @@
 import type { ItemKind, OptionReport, Progress, Report } from "../api.ts";
 import { el, glyph } from "../dom.ts";
 import { bytes, count, duration, percent, plural } from "../format.ts";
-import { isWindows, runningBanner } from "../platform.ts";
+import {
+  fullDiskAccessBanner,
+  isWindows,
+  platform,
+  runningBanner,
+} from "../platform.ts";
 
 const KIND_LABELS: Record<ItemKind, string> = {
   file: "File",
@@ -133,7 +138,19 @@ const optionResult = (r: OptionReport): HTMLElement => {
 
 export interface ReportActions {
   restartAsAdmin: () => void;
+  /** macOS: System Settings at Full Disk Access. */
+  openPrivacySettings: () => void;
 }
+
+/** What macOS's privacy protection kept from WattClean: the engine's
+ *  problems carry a Full Disk Access hint on macOS only. */
+const protectedItems = (report: Report): number =>
+  report.options.reduce(
+    (sum, o) =>
+      sum +
+      o.problems.filter((p) => p.message.includes("Full Disk Access")).length,
+    0,
+  );
 
 /** The whole report: banners, totals and each option's findings. */
 export const renderReport = (
@@ -189,6 +206,26 @@ export const renderReport = (
           text: isWindows()
             ? "Some items need administrator rights."
             : "Some items need administrator rights, which were not granted.",
+        }),
+        button,
+      ),
+    );
+  }
+  const shielded = platform() === "macos" ? protectedItems(report) : 0;
+  if (shielded > 0) {
+    const button = el("button", {
+      type: "button",
+      class: "secondary",
+      text: "Open Privacy & Security",
+    });
+    button.addEventListener("click", actions.openPrivacySettings);
+    nodes.push(
+      el(
+        "div",
+        { class: "banner", id: "privacy-banner" },
+        el("span", {
+          class: "banner-text",
+          text: fullDiskAccessBanner(shielded),
         }),
         button,
       ),

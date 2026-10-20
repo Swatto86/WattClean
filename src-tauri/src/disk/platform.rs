@@ -1,7 +1,7 @@
 //! Which machine the app acts on (Windows, Linux or macOS itself, or the
 //! sandboxed test machine in the WebDriver suite's `fake-system` build),
 //! and the native pieces the commands use: Open dialogs, the file manager,
-//! administrator restart.
+//! administrator restart, macOS's Full Disk Access.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -149,5 +149,100 @@ pub fn download(url: &str, to: &Path) -> CommandResult<()> {
             String::from_utf8_lossy(&output.stderr).trim()
         )
         .into())
+    }
+}
+
+/// System Settings › Privacy & Security › Full Disk Access.
+#[cfg(target_os = "macos")]
+const FULL_DISK_ACCESS: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
+
+/// Whether macOS lets WattClean read what Full Disk Access protects:
+/// Safari's folder (nearly every account has one), else the system's privacy
+/// database folder. `None` when neither could tell.
+#[cfg(target_os = "macos")]
+pub fn full_disk_access() -> Option<bool> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    access_by_listing(&[
+        home.join("Library/Safari"),
+        PathBuf::from("/Library/Application Support/com.apple.TCC"),
+    ])
+}
+
+/// Full Disk Access is macOS's.
+#[cfg(not(target_os = "macos"))]
+pub fn full_disk_access() -> Option<bool> {
+    None
+}
+
+/// Opens System Settings at Full Disk Access, by a fixed address: macOS
+/// asks to quit and reopen WattClean once access is given.
+#[cfg(target_os = "macos")]
+pub fn open_privacy_settings() -> CommandResult<()> {
+    let status = std::process::Command::new("/usr/bin/open")
+        .arg(FULL_DISK_ACCESS)
+        .status()
+        .map_err(|error| {
+            CommandError::from(format!("System Settings could not be opened: {error}"))
+        })?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("System Settings could not be opened ({status}).").into())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn open_privacy_settings() -> CommandResult<()> {
+    Err("Full Disk Access is a macOS setting.".into())
+}
+
+/// Whether `protected` can be read, from listing the first one that is
+/// there.
+#[cfg(any(target_os = "macos", test))]
+fn access_by_listing(protected: &[PathBuf]) -> Option<bool> {
+    protected
+        .iter()
+        .find_map(|folder| verdict(std::fs::read_dir(folder).map(|_| ())))
+}
+
+/// What listing one protected folder says: listed, access; refused by
+/// macOS's privacy protection (EPERM, not a file's permissions), none;
+/// anything else (it is not there), nothing.
+#[cfg(any(target_os = "macos", test))]
+fn verdict(listed: std::io::Result<()>) -> Option<bool> {
+    match listed {
+        Ok(()) => Some(true),
+        Err(error) if error.raw_os_error() == Some(1) => Some(false),
+        Err(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_macos_privacy_refusal_means_no_full_disk_access() {
+        let refused = std::io::Error::from_raw_os_error(1); // EPERM
+        assert_eq!(verdict(Err(refused)), Some(false));
+        assert_eq!(verdict(Ok(())), Some(true));
+        let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+        assert_eq!(verdict(Err(missing)), None);
+        let denied = std::io::Error::from_raw_os_error(13); // EACCES
+        assert_eq!(verdict(Err(denied)), None, "file permissions are not TCC");
+    }
+
+    #[test]
+    fn the_first_protected_folder_that_is_there_decides() {
+        let home = tempfile::tempdir().expect("temp folder");
+        let safari = home.path().join("Library/Safari");
+        let elsewhere = home.path().join("Library/Elsewhere");
+        assert_eq!(
+            access_by_listing(&[safari.clone(), elsewhere.clone()]),
+            None
+        );
+        std::fs::create_dir_all(&elsewhere).expect("folder");
+        assert_eq!(access_by_listing(&[safari, elsewhere]), Some(true));
     }
 }
