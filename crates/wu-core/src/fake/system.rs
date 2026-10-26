@@ -8,6 +8,26 @@ use crate::model::{RawValue, RegPath};
 use crate::system::{Account, Launch, Running, System, Tracing};
 
 impl System for FakeSystem {
+    fn store_apps(&self) -> io::Result<Vec<crate::store_apps::StoreApp>> {
+        Ok(self.lock().store_apps.clone())
+    }
+
+    fn remove_store_app(&self, id: &str) -> io::Result<()> {
+        self.mutate(|state| {
+            if id.starts_with("Contoso.Blocked_") {
+                return Err(io::Error::other("Windows refused to remove this package."));
+            }
+            let index = state
+                .store_apps
+                .iter()
+                .position(|app| app.id == id)
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::NotFound, "Package is no longer installed.")
+                })?;
+            state.store_apps.remove(index);
+            Ok(())
+        })
+    }
     fn subkeys(&self, key: &RegPath) -> io::Result<Vec<String>> {
         let state = self.lock();
         if !key.path.is_empty() && !state.keys.contains_key(&key.folded()) {

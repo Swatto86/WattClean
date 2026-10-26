@@ -27,6 +27,7 @@ pub mod programs;
 pub mod scan;
 pub mod settings;
 pub mod store;
+pub mod store_apps;
 pub mod system;
 pub mod trace;
 

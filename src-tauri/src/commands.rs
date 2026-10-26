@@ -86,6 +86,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         uninstall::un_get_settings,
         uninstall::un_save_settings,
         uninstall::un_list_installed,
+        uninstall::store_apps::un_list_store_apps,
+        uninstall::store_apps::un_remove_store_app,
         uninstall::un_begin_uninstall,
         uninstall::un_begin_forced,
         uninstall::un_create_restore_point,

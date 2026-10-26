@@ -1,5 +1,6 @@
 /** Typed wrappers for every Rust command; results are checked on arrival. */
 import { invoke } from "@tauri-apps/api/core";
+import { storeApp } from "./schema-store.ts";
 
 import { bool, list, optStr, str } from "./decode.ts";
 import {
@@ -41,6 +42,10 @@ async function call<T>(
 }
 
 export const api = {
+  listStoreApps: () =>
+    call("un_list_store_apps", {}, (v, w) => list(v, w, storeApp)),
+  removeStoreApp: (packageId: string) =>
+    call("un_remove_store_app", { packageId }, nothing),
   appInfo: () => call("app_info", {}, appInfo),
   getSettings: () => call("un_get_settings", {}, settings),
   saveSettings: (value: Settings) =>

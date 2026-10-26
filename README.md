@@ -43,6 +43,10 @@ macOS without the registry tools (see [Linux and macOS](#linux-and-macos)).
   creates, so its uninstall later removes exactly that.
 - **Forced uninstall** for programs whose uninstaller is broken or gone,
   plus **Uninstall backups** and **Uninstall history**.
+- **Windows Store apps**: search and remove Appx/MSIX apps for the current
+  Windows account. Windows handles their removal and app data; protected
+  components and shared frameworks are excluded. Store app data is not
+  backed up by WattClean.
 
 ## Everywhere
 

@@ -534,3 +534,11 @@
   color: var(--accent);
   border-color: var(--accent);
 }
+/* Keep long package identities inside the Store app dialog. */
+.un .store-table {
+  max-height: 45vh;
+  overflow: auto;
+}
+.un .store-table td:first-child {
+  overflow-wrap: anywhere;
+}

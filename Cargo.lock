@@ -4939,6 +4939,7 @@ dependencies = [
 name = "wu-windows"
 version = "0.1.4"
 dependencies = [
+ "serde_json",
  "tempfile",
  "windows-sys 0.61.2",
  "winreg",

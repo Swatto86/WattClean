@@ -41,6 +41,8 @@ struct FakeKey {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct State {
+    #[serde(default)]
+    store_apps: Vec<crate::store_apps::StoreApp>,
     keys: BTreeMap<String, FakeKey>,
     env: BTreeMap<String, String>,
     elevated: bool,
@@ -80,6 +82,14 @@ impl FakeSystem {
     pub fn seeded(root: &Path) -> io::Result<Self> {
         let system = Self::empty(root);
         seed::seed(&system)?;
+        system.lock().store_apps = ["Notes", "Blocked"]
+            .map(|name| crate::store_apps::StoreApp {
+                id: format!("Contoso.{name}_1.0.0.0_x64__abcdefghijklm"),
+                name: format!("Contoso Store {name}"),
+                publisher: "Contoso".into(),
+                version: "1.0.0.0".into(),
+            })
+            .to_vec();
         Ok(system)
     }
 

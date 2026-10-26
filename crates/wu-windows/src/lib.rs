@@ -6,6 +6,7 @@ mod privilege;
 mod process;
 mod registry;
 mod restore;
+pub mod store_apps;
 #[cfg(test)]
 mod tests;
 pub mod trace;
@@ -131,6 +132,13 @@ impl Default for WindowsSystem {
 }
 
 impl System for WindowsSystem {
+    fn store_apps(&self) -> io::Result<Vec<wu_core::store_apps::StoreApp>> {
+        store_apps::list()
+    }
+
+    fn remove_store_app(&self, id: &str) -> io::Result<()> {
+        store_apps::remove(id)
+    }
     fn subkeys(&self, key: &RegPath) -> io::Result<Vec<String>> {
         let (root, key) = self.locate(key)?;
         registry::subkeys(&root, &key)

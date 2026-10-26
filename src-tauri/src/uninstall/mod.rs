@@ -5,6 +5,7 @@ pub mod platform;
 pub mod prepare;
 pub mod session;
 pub mod state;
+pub mod store_apps;
 pub mod traced;
 
 use std::sync::Arc;

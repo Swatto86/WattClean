@@ -39,6 +39,34 @@ the fake machine is just a temp folder plus a JSON registry.
 | `trace`, `install_log` (+ `noise`) | A traced install's changes, folded into a log of what it left: created vs changed, noise and undone changes dropped, linked to the uninstall key it wrote |
 | `msi` | Windows Installer records: packed product codes, component files, upgrade codes |
 | `history`, `settings`, `store` | JSON files written atomically; a damaged file is reported, never overwritten |
+| `store_apps` | Store package records and package-identity validation; the `System` port lists and removes them |
+
+## Windows Store apps
+
+The Programs page's **Windows Store apps** button opens a searchable list
+for the current Windows account, including sideloaded Appx/MSIX apps.
+`wu-windows::store_apps` runs the inbox Windows PowerShell Appx cmdlets
+without profiles or an interactive console. The embedded script is fixed;
+the validated full package identity is passed as environment data, never
+interpolated into code. Main packages only are considered, excluding
+frameworks, resources, partially staged and non-removable packages, System
+signatures, and the package containing WattClean itself. A single launcher
+supplies the friendly name; packages with several launchers keep their
+package name because removal affects all their apps.
+
+Removal re-enumerates eligible packages, matches the full identity exactly,
+uses `Remove-AppxPackage` for the current user only, then checks the package
+is absent. No all-users or provisioning operations are used. Windows owns
+package and app-data cleanup: there is no registry leftover scan, direct
+WindowsApps/Packages deletion, or WattClean backup. The confirmation states
+this explicitly. Success and failure are recorded in the existing history;
+quitting waits for an active removal. Fake-system builds use persisted
+synthetic packages and never run the real Appx commands.
+
+Read-only live check: `cargo run -p wu-windows --example store_apps`.
+Adapter tests run the production script and process arguments against
+stubbed Appx cmdlets; WebDriver covers search, cancellation, removal and
+failure through the real IPC boundary without removing installed software.
 
 ## Linux and macOS (`wu-core::packages`, `wu-unix`, 2026-10-19)
 
@@ -381,5 +409,5 @@ Live runs on this PC with the WattUninstaller NSIS setup:
 
 - Install tracing through a kernel driver, as Revo does: needs an EV
   certificate and Microsoft signing; ETW does the job instead (see above).
-- Windows Store apps, browser extensions, autorun manager, junk/evidence
+- Browser extensions, autorun manager, junk/evidence
   cleaners, hunter mode, full-registry backups: candidates for later units.

@@ -58,6 +58,9 @@ pub struct Account {
 /// when it is not signed in; a hive that cannot be loaded (its file in use,
 /// no administrator rights) answers `io::ErrorKind::PermissionDenied`.
 pub trait System: Send + Sync {
+    fn store_apps(&self) -> io::Result<Vec<crate::store_apps::StoreApp>>;
+    /// Remove an exact, freshly checked package for the current user only.
+    fn remove_store_app(&self, id: &str) -> io::Result<()>;
     fn subkeys(&self, key: &RegPath) -> io::Result<Vec<String>>;
     fn values(&self, key: &RegPath) -> io::Result<Vec<RawValue>>;
     /// The key's last write time, in seconds since the Unix epoch.

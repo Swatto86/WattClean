@@ -12,6 +12,7 @@ use crate::error::CommandError;
 use crate::uninstall::session::Session;
 
 pub struct AppState {
+    pub store_operation: Mutex<()>,
     pub system: Arc<dyn System>,
     pub data_dir: PathBuf,
     /// Folders a scan never offers: the app's data and its own program.
@@ -56,6 +57,7 @@ impl AppState {
             protected.push(dir);
         }
         Self {
+            store_operation: Mutex::new(()),
             system,
             data_dir,
             protected,

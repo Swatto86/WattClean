@@ -7,6 +7,7 @@ description = "The Windows side of the uninstall engine: registry, processes, pr
 
 [dependencies]
 wu-core = { workspace = true }
+serde_json = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

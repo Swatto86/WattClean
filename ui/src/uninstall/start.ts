@@ -8,6 +8,7 @@ import { uninstallMany } from "./batch.ts";
 import { inform } from "./dialog.ts";
 import { byId } from "./dom.ts";
 import { ProgramList } from "./programs.ts";
+import { showStoreApps } from "./store-apps.ts";
 import { showBackups, showHistory, wireHistory } from "./records.ts";
 import { wireSettings } from "./settings.ts";
 import { installWithTracing, showLogs } from "./traced.ts";
@@ -99,6 +100,9 @@ export async function startUninstall(host: Host): Promise<UninstallViews> {
     if (listChanged) void programs?.load();
   });
   wireHistory();
+  byId("store-apps", HTMLButtonElement).addEventListener("click", () => {
+    void showStoreApps();
+  });
   byId("trace-install", HTMLButtonElement).addEventListener("click", () => {
     void installWithTracing(() => {
       void showLogs();
