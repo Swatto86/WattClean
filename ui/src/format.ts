@@ -30,7 +30,11 @@ export const count = (value: number): string =>
   Math.round(value).toLocaleString("en-GB");
 
 /** "1 file", "3 files". */
-export const plural = (value: number, one: string, many = `${one}s`): string => {
+export const plural = (
+  value: number,
+  one: string,
+  many = `${one}s`,
+): string => {
   const shown = Math.round(value);
   return `${count(shown)} ${shown === 1 ? one : many}`;
 };
