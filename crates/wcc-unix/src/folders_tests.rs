@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {

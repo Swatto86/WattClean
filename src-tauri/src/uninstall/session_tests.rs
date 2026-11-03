@@ -1,4 +1,3 @@
-
 use super::restore_point_name;
 
 #[test]
