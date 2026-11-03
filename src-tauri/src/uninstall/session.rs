@@ -319,7 +319,7 @@ impl Session {
         if let Err(error) = self.record(app, Some(report.mode), Some(&removal), refused_count) {
             failed.push(FailedItem {
                 item: "The history entry".into(),
-                error: error.to_string(),
+                error: error.message,
             });
         }
         Ok(RemovalView {
