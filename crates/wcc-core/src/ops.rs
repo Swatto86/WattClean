@@ -156,11 +156,19 @@ impl Op {
     }
 
     /// The file this operation touches, for de-duplication across options.
+    ///
+    /// The guard's key folds case and both separators, which is right on
+    /// Windows but wrong on Linux and macOS: there `A` and `a`, or `a\b`
+    /// and `a/b`, are different files and both must be planned.
     fn file_key(&self) -> Option<String> {
         match self {
             Self::DeleteFile { path, .. }
             | Self::DeleteDir { path }
-            | Self::Truncate { path, .. } => Some(paths::key(path)),
+            | Self::Truncate { path, .. } => Some(if cfg!(windows) {
+                paths::key(path)
+            } else {
+                path.to_string_lossy().into_owned()
+            }),
             _ => None,
         }
     }

@@ -35,9 +35,13 @@ const PROTECTED_KEYS: &[&str] = &[
     "system\\currentcontrolset\\services\\eventlog",
 ];
 
-/// Subtrees never deleted at any depth: Windows' own scheduled tasks.
-const PROTECTED_SUBTREES: &[&str] =
-    &["software\\microsoft\\windows nt\\currentversion\\schedule\\taskcache\\tree\\microsoft"];
+/// Subtrees never deleted at any depth: Windows' own scheduled tasks and
+/// policy trees (a program's key below `Policies` is the administrator's).
+const PROTECTED_SUBTREES: &[&str] = &[
+    "software\\microsoft\\windows nt\\currentversion\\schedule\\taskcache\\tree\\microsoft",
+    "software\\policies",
+    "software\\wow6432node\\policies",
+];
 
 const TASK_CACHE: &str = "software\\microsoft\\windows nt\\currentversion\\schedule\\taskcache";
 

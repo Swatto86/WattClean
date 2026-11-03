@@ -313,11 +313,28 @@ pub(crate) fn tree_size(path: &Path) -> u64 {
 /// `1.2 GB`, `640 kB`, `12 MiB` and the like, as package managers print
 /// sizes, in bytes.
 pub(crate) fn parse_size(text: &str) -> Option<u64> {
-    let text = text.trim().replace(',', ".");
+    let text = text.trim();
     let split = text
-        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == ',' || c == ' '))
         .unwrap_or(text.len());
     let (number, unit) = text.split_at(split);
+    // A comma is a decimal point in some locales (`12,5 MB`) and a
+    // thousands separator in others (`1,234 MB`). With a dot present it is
+    // grouping; alone, three digits after it are grouping only when the
+    // number before it is short (`1,234`), otherwise it is a decimal.
+    let number = number.trim().replace(' ', "");
+    let number = if number.contains('.') {
+        number.replace(',', "")
+    } else if number.matches(',').count() == 1 {
+        let (whole, fraction) = number.split_once(',').unwrap_or((&number, ""));
+        if fraction.len() == 3 && !whole.is_empty() && whole.len() <= 3 {
+            format!("{whole}{fraction}")
+        } else {
+            format!("{whole}.{fraction}")
+        }
+    } else {
+        number.replace(',', "")
+    };
     let number: f64 = number.parse().ok()?;
     let factor: f64 = match unit.trim().to_ascii_lowercase().as_str() {
         "" | "b" | "bytes" => 1.0,

@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use super::shortcut::{target_of, url_of};
 use super::{Confidence, Context, Found, Mode, Target};
 use crate::identity::{Identity, Match};
-use crate::paths::is_within;
 
 pub(super) fn scan(identity: &Identity, mode: Mode, context: &Context<'_>, found: &mut Found) {
     for dir in &identity.install_dirs {
@@ -250,11 +249,7 @@ fn shortcut(
         return;
     }
     if let Some(target) = target_of(file) {
-        if identity
-            .install_dirs
-            .iter()
-            .any(|dir| is_within(&target, dir))
-        {
+        if identity.owns_path(&target) {
             found.path(
                 context,
                 identity,

@@ -71,9 +71,9 @@ fn live_installs(
                 embedded_path(&expand(context.system, &command)).filter(|file| file.is_file());
             dirs.extend(file.and_then(|file| file.parent().map(Path::to_path_buf)));
         }
-        if !dirs.is_empty() {
-            live.push((key, dirs));
-        }
+        // Keep the live entry even when no folder could be derived: the
+        // entry itself must still be protected from a duplicate scan.
+        live.push((key, dirs));
     }
     live
 }

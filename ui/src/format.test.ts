@@ -13,6 +13,10 @@ test("sizes read like Explorer's", () => {
   assert.equal(bytes(250 * 1024 * 1024 * 1024), "250 GB");
   assert.equal(bytes(-5), "0 bytes");
   assert.equal(bytes(Number.NaN), "0 bytes");
+  assert.equal(bytes(1.4), "1 byte");
+  assert.equal(bytes(0.6), "1 byte");
+  assert.equal(bytes(1023.6), "1.00 KB");
+  assert.equal(bytes(1023.9 * 1024), "1.00 MB");
 });
 
 test("counts and plurals", () => {
@@ -20,12 +24,17 @@ test("counts and plurals", () => {
   assert.equal(plural(1, "file"), "1 file");
   assert.equal(plural(2, "file"), "2 files");
   assert.equal(plural(3, "entry", "entries"), "3 entries");
+  assert.equal(plural(1.4, "file"), "1 file");
+  assert.equal(plural(0.6, "file"), "1 file");
 });
 
 test("durations and percentages", () => {
   assert.equal(duration(850), "850 ms");
+  assert.equal(duration(999.6), "1.0 s");
   assert.equal(duration(4200), "4.2 s");
   assert.equal(duration(125_000), "2 min 5 s");
+  assert.equal(duration(119_999), "2 min 0 s");
+  assert.equal(duration(59_999), "1 min 0 s");
   assert.equal(percent(1, 4), 25);
   assert.equal(percent(5, 0), 0);
   assert.equal(percent(9, 4), 100);

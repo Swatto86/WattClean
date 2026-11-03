@@ -77,6 +77,9 @@ fn sizes_are_read_in_every_unit_package_managers_print() {
     assert_eq!(parse_size("640 kB"), Some(640_000));
     assert_eq!(parse_size("1.5 GB"), Some(1_500_000_000));
     assert_eq!(parse_size("12,0 MiB"), Some(12_582_912));
+    assert_eq!(parse_size("1,234 MB"), Some(1_234_000_000));
+    assert_eq!(parse_size("1,234.5 MB"), Some(1_234_500_000));
+    assert_eq!(parse_size("1 234 MB"), Some(1_234_000_000));
     assert_eq!(parse_size("512"), Some(512));
     assert_eq!(parse_size("lots"), None);
     assert_eq!(parse_size("3 parsecs"), None);

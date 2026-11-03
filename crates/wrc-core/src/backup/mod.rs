@@ -201,8 +201,21 @@ pub fn list(dir: &Path) -> Result<Vec<Summary>> {
             }),
         }
     }
-    summaries.sort_by(|a, b| b.created.cmp(&a.created).then_with(|| b.id.cmp(&a.id)));
+    summaries.sort_by(|a, b| {
+        b.created
+            .cmp(&a.created)
+            .then_with(|| id_counter(&b.id).cmp(&id_counter(&a.id)))
+            .then_with(|| b.id.cmp(&a.id))
+    });
     Ok(summaries)
+}
+
+/// The `-<n>` suffix of an id made in a second that already had one. The
+/// first backup of a second has no suffix, so it is counter 1.
+fn id_counter(id: &str) -> u64 {
+    id.rsplit_once('-')
+        .and_then(|(_, counter)| counter.parse().ok())
+        .unwrap_or(1)
 }
 
 pub fn delete(dir: &Path, id: &str) -> Result<()> {

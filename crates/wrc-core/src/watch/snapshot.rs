@@ -96,7 +96,9 @@ pub fn diff(before: &Snapshot, after: &Snapshot) -> Vec<Change> {
                         .find(|old| old.name.eq_ignore_ascii_case(&value.name));
                     match old {
                         None => changes.push(value_change(Op::ValueAdded, key, None, Some(value))),
-                        Some(old) if old != value => {
+                        // Registry value names are case-insensitive: a
+                        // case-only rename with the same data changed nothing.
+                        Some(old) if old.kind != value.kind || old.bytes != value.bytes => {
                             changes.push(value_change(
                                 Op::ValueChanged,
                                 key,

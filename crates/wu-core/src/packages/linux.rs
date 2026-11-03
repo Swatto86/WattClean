@@ -264,7 +264,12 @@ fn appimages(system: &dyn PackageSystem) -> Vec<Package> {
             let is_appimage = path
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("appimage"));
-            if !is_appimage || !path.is_file() {
+            // A link to an AppImage is not another copy of it: trashing the
+            // link would leave the application installed.
+            let Ok(meta) = std::fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if !is_appimage || !meta.is_file() {
                 continue;
             }
             let stem = path
@@ -273,7 +278,7 @@ fn appimages(system: &dyn PackageSystem) -> Vec<Package> {
                 .unwrap_or_default();
             let mut package =
                 Package::new(Manager::AppImage, &path.to_string_lossy(), &app_name(&stem));
-            package.size = entry.metadata().ok().map(|meta| meta.len());
+            package.size = Some(meta.len());
             package.app = true;
             out.push(package);
         }
@@ -281,14 +286,19 @@ fn appimages(system: &dyn PackageSystem) -> Vec<Package> {
     out
 }
 
-/// `Krita-5.2.2-x86_64` → `Krita`: an AppImage's name without its version
-/// and architecture.
+/// `Krita-5.2.2-x86_64` and `Krita-v5.2.2-x86_64` → `Krita`: an
+/// AppImage's name without its version and architecture.
 fn app_name(stem: &str) -> String {
+    let version = |word: &str| {
+        word.strip_prefix(['v', 'V'])
+            .unwrap_or(word)
+            .starts_with(|c: char| c.is_ascii_digit())
+    };
     let words: Vec<&str> = stem.split(['-', '_']).collect();
     let name: Vec<&str> = words
         .iter()
         .take_while(|word| {
-            !word.starts_with(|c: char| c.is_ascii_digit())
+            !version(word)
                 && !matches!(
                     **word,
                     "x86" | "amd64" | "aarch64" | "arm64" | "i386" | "i686"

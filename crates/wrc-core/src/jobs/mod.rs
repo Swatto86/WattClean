@@ -208,7 +208,8 @@ pub fn set_enabled(
     Ok(job)
 }
 
-/// Delete a job and its task.
+/// Delete a job and its task. The task goes first: if it cannot be removed,
+/// the job stays listed so the user can try again.
 pub fn delete(system: &dyn System, dir: &Path, id: &str) -> Result<()> {
     let mut file = load(dir)?;
     let before = file.jobs.len();
@@ -216,10 +217,11 @@ pub fn delete(system: &dyn System, dir: &Path, id: &str) -> Result<()> {
     if file.jobs.len() == before {
         return Err(Error::Invalid("That schedule no longer exists.".into()));
     }
-    save(dir, &file)?;
     system.delete_task(&task_name(id)).map_err(|source| {
         Error::Invalid(format!("Its Windows task could not be removed: {source}"))
-    })
+    })?;
+    save(dir, &file)?;
+    Ok(())
 }
 
 /// Create, replace or delete the job's task to match it.
@@ -241,7 +243,12 @@ fn sync_task(system: &dyn System, job: &mut Job, launcher: Launcher) {
                 .map_err(|error| format!("Windows refused the task: {error}"))
         });
     job.scheduled = result.is_ok();
-    job.problem = result.err();
+    if let Err(problem) = result {
+        // An older task would otherwise keep running with the old schedule
+        // while the page says the job is not scheduled.
+        let _ = system.delete_task(&task_name(&job.id));
+        job.problem = Some(problem);
+    }
 }
 
 fn validate(input: &JobInput) -> Result<()> {

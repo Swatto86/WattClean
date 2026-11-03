@@ -16,7 +16,7 @@ pub fn parse_key(text: &str) -> Result<RegPath, String> {
     if without_computer.is_empty() {
         return Err("Enter a registry key, such as HKEY_CURRENT_USER\\Software\\Example.".into());
     }
-    if without_computer.len() > MAX_PATH {
+    if without_computer.chars().count() > MAX_PATH {
         return Err("That key path is longer than the registry allows.".into());
     }
     if without_computer.chars().any(char::is_control) {
@@ -40,6 +40,9 @@ pub fn parse_key(text: &str) -> Result<RegPath, String> {
     };
     if rest.split('\\').any(str::is_empty) && !rest.is_empty() {
         return Err("A key path cannot contain an empty name (\\\\).".into());
+    }
+    if rest.split('\\').any(|part| part.chars().count() > 255) {
+        return Err("A key name can be at most 255 characters.".into());
     }
     Ok(RegPath::new(hive, rest))
 }

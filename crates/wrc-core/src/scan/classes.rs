@@ -75,7 +75,12 @@ pub fn com_objects(context: &Context, out: &mut Vec<Found>) {
                 }
             }
         }
-        type_libraries(context, &classes.child("TypeLib"), out);
+        for typelib in [
+            classes.child("TypeLib"),
+            classes.child(r"WOW6432Node\TypeLib"),
+        ] {
+            type_libraries(context, &typelib, out);
+        }
     }
 }
 

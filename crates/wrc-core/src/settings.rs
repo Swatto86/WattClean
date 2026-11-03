@@ -170,7 +170,12 @@ impl Settings {
         let keys = |list: &[ListEntry]| {
             list.iter()
                 .filter(|entry| entry.enabled)
-                .filter_map(|entry| parse_key(&entry.key).ok().map(|key| (key, entry.subkeys)))
+                .filter_map(|entry| {
+                    parse_key(&entry.key)
+                        .ok()
+                        .filter(|key| !key.path.is_empty())
+                        .map(|key| (key, entry.subkeys))
+                })
                 .collect()
         };
         Options {

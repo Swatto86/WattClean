@@ -15,7 +15,8 @@ pub fn to_reg_file(backup: &Backup) -> String {
     let _ = write!(
         text,
         "\r\n; WattClean backup {} — {}\r\n",
-        backup.id, backup.label
+        backup.id,
+        comment(&backup.label)
     );
     for item in &backup.items {
         let Some(saved) = &item.saved else { continue };
@@ -37,8 +38,13 @@ pub fn to_reg_file(backup: &Backup) -> String {
             }
             Saved::Key(tree) => write_key(&mut text, &item.key, tree),
             Saved::Value(value) => {
-                let _ = write!(text, "\r\n[{}]\r\n", long_name(&item.key));
-                write_value(&mut text, value);
+                let name = long_name(&item.key);
+                // A `]` or a line break in a key name would close or break
+                // the `[key]` line; such a key is left to the JSON backup.
+                if exportable(&name) {
+                    let _ = write!(text, "\r\n[{}]\r\n", name);
+                    write_value(&mut text, value);
+                }
             }
         }
     }
@@ -53,13 +59,23 @@ pub fn reg_file_bytes(text: &str) -> Vec<u8> {
 }
 
 fn write_key(text: &mut String, key: &RegPath, tree: &KeyTree) {
-    let _ = write!(text, "\r\n[{}]\r\n", long_name(key));
+    let name = long_name(key);
+    if !exportable(&name) {
+        return;
+    }
+    let _ = write!(text, "\r\n[{}]\r\n", name);
     for value in &tree.values {
         write_value(text, value);
     }
     for child in &tree.keys {
         write_key(text, &key.child(&child.name), &child.tree);
     }
+}
+
+/// A key name a `.reg` file can hold on one `[key]` line. Unlike a value
+/// name it cannot be quoted or escaped there.
+fn exportable(name: &str) -> bool {
+    !name.contains(['\r', '\n', ']'])
 }
 
 fn write_value(text: &mut String, value: &RawValue) {
@@ -100,7 +116,18 @@ fn plain_string(bytes: &[u8]) -> Option<String> {
 }
 
 fn escape(text: &str) -> String {
-    text.replace('\\', "\\\\").replace('"', "\\\"")
+    text.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n")
+}
+
+/// One line of comment text: a line break in the label must not become a
+/// registry directive on a line of its own.
+fn comment(text: &str) -> String {
+    text.chars()
+        .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
+        .collect()
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -163,6 +190,56 @@ mod tests {
         assert!(text.contains("[HKEY_CURRENT_USER\\Software\\Acme\\Sub]\r\n"));
         let bytes = reg_file_bytes("W");
         assert_eq!(bytes, vec![0xff, 0xfe, b'W', 0]);
+    }
+
+    #[test]
+    fn a_line_break_in_the_label_cannot_become_a_directive() {
+        let mut backup = Backup {
+            version: 1,
+            id: "1".into(),
+            created: 1,
+            kind: BackupKind::Manual,
+            label: "x\r\n[-HKEY_CURRENT_USER\\Software\\Keep]".into(),
+            items: Vec::new(),
+        };
+        let text = to_reg_file(&backup);
+        assert!(!text.contains("[-HKEY_CURRENT_USER"), "{text}");
+        backup.label = "plain".into();
+        assert_eq!(escape("a\r\nb"), "a\\r\\nb");
+    }
+
+    #[test]
+    fn a_key_name_that_would_close_the_line_is_not_exported() {
+        let tree = KeyTree {
+            values: Vec::new(),
+            keys: vec![Child {
+                name: "bad]\r\n[-HKEY_CURRENT_USER\\Software\\Keep".into(),
+                tree: KeyTree::default(),
+            }],
+            security: None,
+        };
+        let backup = Backup {
+            version: 1,
+            id: "1".into(),
+            created: 1,
+            kind: BackupKind::Manual,
+            label: "plain".into(),
+            items: vec![Item {
+                key: RegPath::new(Hive::CurrentUser, r"Software\Acme"),
+                value: None,
+                category: None,
+                detail: String::new(),
+                saved: Some(Saved::Key(tree)),
+                security: None,
+                state: ItemState::Kept,
+            }],
+        };
+        let text = to_reg_file(&backup);
+        assert!(
+            text.contains(r"[HKEY_CURRENT_USER\Software\Acme]"),
+            "{text}"
+        );
+        assert!(!text.contains("[-HKEY_CURRENT_USER"), "{text}");
     }
 
     #[test]

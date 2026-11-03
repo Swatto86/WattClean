@@ -37,7 +37,13 @@ pub struct Autostart {
 }
 
 pub fn state(system: &dyn System) -> Autostart {
-    let elevated = system.task_exists(TASK).unwrap_or(false);
+    // A task that cannot be read may still exist; treating that as off
+    // would leave it starting the app while the page says it is off.
+    let elevated = match system.task_exists(TASK) {
+        Ok(exists) => exists,
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => true,
+        Err(_) => false,
+    };
     let run = find_value(&system.values(&run_key()).unwrap_or_default(), RUN_VALUE).is_some();
     Autostart {
         on: elevated || run,

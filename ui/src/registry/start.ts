@@ -93,15 +93,22 @@ export async function startRegistry(host: Host): Promise<RegistryViews> {
   );
   let refreshSettings: () => void = () => {};
   let refreshBackups: () => void = () => {};
+  // Settings are sent whole, so two overlapping changes must not start
+  // from the same copy: each waits for the one before it.
+  let pending: Promise<void> = Promise.resolve();
   const context: AppContext = {
     info,
     titles,
     settings: () => settings,
-    update: async (change) => {
-      const next = change(settings);
-      await api.saveSettings(next);
-      settings = next;
-      refreshSettings();
+    update: (change) => {
+      const run = pending.then(async () => {
+        const next = change(settings);
+        await api.saveSettings(next);
+        settings = next;
+        refreshSettings();
+      });
+      pending = run.catch(() => undefined);
+      return run;
     },
     restartAsAdmin: host.restartAsAdmin,
     backupsChanged: () => refreshBackups(),

@@ -272,7 +272,8 @@ fn build_action(def: &ActionDef, fill: &dyn Fn(&str) -> String) -> Result<Action
         }
         // Named from each found item's folder: a full path or a variable
         // could name anything.
-        if let Some(link) = &def.keep_link
+        let keep_link = def.keep_link.as_deref().map(fill);
+        if let Some(link) = &keep_link
             && (link.is_empty() || link.starts_with(['/', '\\']) || link.contains([':', '%']))
         {
             return Err("keep_link must be a path relative to the found items' folder".into());
@@ -284,12 +285,12 @@ fn build_action(def: &ActionDef, fill: &dyn Fn(&str) -> String) -> Result<Action
             nregex: def.nregex.clone(),
             wholeregex: def.wholeregex.clone(),
             nwholeregex: def.nwholeregex.clone(),
-            names: def.names.clone(),
-            beside: def.beside.clone(),
+            names: def.names.as_deref().map(fill),
+            beside: def.beside.as_deref().map(fill),
             kind: def.kind,
             older_than_days: def.older_than_days,
             exclude: def.exclude.iter().map(|e| fill(e)).collect(),
-            keep_link: def.keep_link.clone(),
+            keep_link,
             literal: false,
         })
     };

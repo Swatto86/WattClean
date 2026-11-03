@@ -146,6 +146,7 @@ impl Searcher<'_> {
                     && complete
                     && filter.kind != Some(Kind::File)
                     && filter.path_ok(root)
+                    && filter.age_ok(&meta)
                 {
                     self.push(out, root, Kind::Dir, 0);
                 }
@@ -161,7 +162,18 @@ impl Searcher<'_> {
                 && filter.path_ok(root)
                 && filter.name_ok(root, &meta) =>
             {
-                self.push(out, root, Kind::File, meta.len());
+                let kind = paths::kind_of(&meta);
+                if filter.kind.is_some_and(|k| k != kind) {
+                    return;
+                }
+                // A link's size is its own text, nothing that would be
+                // freed; on Windows a junction is removed as a folder.
+                let size = if kind == Kind::File && !meta.file_type().is_symlink() {
+                    meta.len()
+                } else {
+                    0
+                };
+                self.push(out, root, kind, size);
             }
             _ => {}
         }

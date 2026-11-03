@@ -178,6 +178,12 @@ pub(super) fn move_out(system: &dyn System, path: &Path, stored: &Path) -> io::R
     // (disk full, unreadable file) leaves it untouched and the item failed.
     let copied = if metadata.is_dir() {
         copy_tree(path, stored)
+    } else if metadata.file_type().is_symlink() {
+        // Copying would follow the link and store its target's contents;
+        // the original link would then go and could not be restored.
+        Err(io::Error::other(
+            "a link cannot be copied to another drive; it is left as it is",
+        ))
     } else {
         fs::copy(path, stored).map(drop)
     };
@@ -225,6 +231,13 @@ pub(super) fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
             copy_tree(&entry.path(), &target)?;
         } else if kind.is_file() {
             fs::copy(entry.path(), target)?;
+        } else {
+            // A link or reparse point: skipping it would delete it with the
+            // folder without a copy to restore, so the whole copy fails.
+            return Err(io::Error::other(format!(
+                "{} is a link; the folder cannot be copied whole",
+                entry.path().display()
+            )));
         }
     }
     Ok(())

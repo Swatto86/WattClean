@@ -82,11 +82,21 @@ pub fn run_scheduled(
     dir: &Path,
     id: &str,
 ) -> (Result<LastRun>, io::Result<()>) {
-    let name = list(dir)
+    let job = list(dir)
         .ok()
-        .and_then(|jobs| jobs.into_iter().find(|job| job.id == id))
-        .map(|job| job.name);
-    let outcome = run(system, dir, id);
+        .and_then(|jobs| jobs.into_iter().find(|job| job.id == id));
+    let name = job.as_ref().map(|job| job.name.clone());
+    // A task left behind by a failed delete must not clean while the job is
+    // paused: remove it and say why nothing ran.
+    let outcome = match &job {
+        Some(job) if !job.enabled => {
+            let _ = system.delete_task(&task_name(id));
+            Err(Error::Invalid(format!(
+                "Schedule {id} is paused; its task was removed."
+            )))
+        }
+        _ => run(system, dir, id),
+    };
     let (title, body) = notice(name.as_deref(), &outcome);
     let shown = system.notify(&title, &body);
     (outcome, shown)

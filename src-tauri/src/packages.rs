@@ -72,6 +72,9 @@ impl AppState {
     /// Marks a removal under way until the guard is dropped; refused while
     /// another runs or the app is quitting.
     fn begin_removal(&self) -> CommandResult<Removing<'_>> {
+        if crate::quit::stopping() {
+            return Err("WattClean is quitting: no new removal starts now.".into());
+        }
         if self.removing.swap(true, Ordering::SeqCst) {
             return Err("Another program is being removed: wait for it to finish.".into());
         }

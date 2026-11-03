@@ -41,13 +41,41 @@ pub fn schedule(name: &str, xml: &str) -> io::Result<()> {
 }
 
 pub fn exists(name: &str) -> io::Result<bool> {
-    Ok(run(&["/Query", "/TN", name])?.status.success())
+    let output = run(&["/Query", "/TN", name])?;
+    if output.status.success() {
+        Ok(true)
+    } else if access_denied(&output) {
+        // It may well exist; the caller must not take "cannot read it" for
+        // "not there" and leave an elevated task running.
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "the task exists but cannot be read without administrator rights",
+        ))
+    } else {
+        Ok(false)
+    }
+}
+
+fn access_denied(output: &std::process::Output) -> bool {
+    let text = format!(
+        "{} {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let lower = text.to_ascii_lowercase();
+    lower.contains("access is denied") || lower.contains("0x80070005")
 }
 
 /// Delete the task; a task that is not there is already deleted.
 pub fn delete(name: &str) -> io::Result<()> {
     let query = run(&["/Query", "/TN", name])?;
     if !query.status.success() {
+        if access_denied(&query) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "the task exists but cannot be removed without administrator rights",
+            ));
+        }
         return Ok(());
     }
     let output = run(&["/Delete", "/TN", name, "/F"])?;

@@ -37,8 +37,11 @@ pub fn key(path: &Path) -> String {
     if cfg!(target_os = "macos") && prefix.is_empty() && rooted {
         parts = fold_mac_aliases(parts, boot_volume_names());
     }
+    // `C:foo` is a path on the current folder of `C:`, not `C:\foo`: a
+    // separator after the prefix would name a different file.
+    let drive_relative = !rooted && prefix.ends_with(':');
     for (i, part) in parts.iter().enumerate() {
-        if i > 0 || !(out.is_empty() || out.ends_with('\\')) {
+        if i > 0 || (!drive_relative && !(out.is_empty() || out.ends_with('\\'))) {
             out.push('\\');
         }
         out.push_str(&part.to_lowercase());

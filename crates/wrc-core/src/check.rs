@@ -78,7 +78,12 @@ impl<'a> PathCheck<'a> {
         }
         let expanded = expand(self.system, raw.trim().trim_matches('"'));
         let text = expanded.trim();
-        if !is_absolute_local(text) || text.contains(['*', '?', '<', '>', '|']) {
+        // An unknown variable is left in place by `expand`; the literal
+        // `%NAME%` path does not exist, but that says nothing about the file.
+        if text.contains('%')
+            || !is_absolute_local(text)
+            || text.contains(['*', '?', '<', '>', '|'])
+        {
             return Verdict::Unknown;
         }
         let path = PathBuf::from(text);

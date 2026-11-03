@@ -21,12 +21,18 @@ const APPROVED: &str = r"Microsoft\Windows\CurrentVersion\Explorer\StartupApprov
 /// Run entries whose program is missing, and Task Manager's on/off switches
 /// left for startup items that no longer exist anywhere.
 pub fn startup(context: &Context, out: &mut Vec<Found>) {
-    let mut run_names = Vec::new();
+    // Run entries are kept per account and registry view: another account's
+    // entry, or the other view's, must not hide an orphaned switch here.
+    let mut run_names: std::collections::HashMap<(Hive, String), Vec<String>> =
+        std::collections::HashMap::new();
     for (software, view32) in context.software_roots() {
         for run in RUN_KEYS {
             let key = software.child(run);
+            let names = run_names
+                .entry((key.hive, software.path.to_lowercase()))
+                .or_default();
             for value in values_or_empty(context.system, &key) {
-                run_names.push(value.name.to_lowercase());
+                names.push(value.name.to_lowercase());
                 let Some(target) = value.as_text().and_then(|text| command_target(&text)) else {
                     continue;
                 };
@@ -54,8 +60,14 @@ pub fn startup(context: &Context, out: &mut Vec<Found>) {
     for key in approved {
         for list in ["Run", "Run32"] {
             let list_key = key.child(list);
+            let scope = run_scope(&key, list);
+            let Some(names) = scope.as_ref().and_then(|scope| run_names.get(scope)) else {
+                // This view's Run keys were not read, so no switch here can
+                // be called orphaned with confidence.
+                continue;
+            };
             for value in values_or_empty(context.system, &list_key) {
-                if switched_on(&value) && !run_names.contains(&value.name.to_lowercase()) {
+                if switched_on(&value) && !names.contains(&value.name.to_lowercase()) {
                     out.push(Found::value(
                         Category::Startup,
                         list_key.clone(),
@@ -72,6 +84,18 @@ pub fn startup(context: &Context, out: &mut Vec<Found>) {
     }
 }
 
+/// The Run keys that decide an approved switch's account and view.
+fn run_scope(approved: &RegPath, list: &str) -> Option<(Hive, String)> {
+    let suffix = format!(r"\{APPROVED}");
+    let root = approved.path.strip_suffix(&suffix)?.to_lowercase();
+    let root = if approved.hive == Hive::LocalMachine && list == "Run32" {
+        format!(r"{root}\wow6432node")
+    } else {
+        root
+    };
+    Some((approved.hive, root))
+}
+
 /// Task Manager's switch reads "on" (`02` or `06` first). A switch set to
 /// "off" records the person's choice, which would be lost if the item came
 /// back, so only "on" switches for removed items are offered.
@@ -79,31 +103,30 @@ fn switched_on(value: &RawValue) -> bool {
     matches!(value.bytes.first(), Some(0x02 | 0x06))
 }
 
-/// Switches for shortcuts that are no longer in either Startup folder.
+/// Switches for shortcuts that are no longer in the matching Startup folder.
 fn startup_folder_switches(context: &Context, approved: &RegPath, out: &mut Vec<Found>) {
     // Other accounts' Startup folders are not known here, so only this
     // account's switches and the machine's are judged.
     if approved.hive == Hive::Users {
         return;
     }
-    // The account's own Startup folder and the one shared by all accounts.
-    let folders: Vec<String> = ["APPDATA", "ProgramData"]
-        .into_iter()
-        .filter_map(|variable| {
-            let base = context.system.env_var(variable)?;
-            Some(format!(
-                r"{base}\Microsoft\Windows\Start Menu\Programs\Startup"
-            ))
-        })
-        .collect();
-    if folders.len() < 2 || !folders.iter().all(|folder| Path::new(folder).is_dir()) {
+    // The machine's switch belongs to the common Startup folder; a user's
+    // only to that user's own. Checking both against both hides orphans.
+    let variable = if approved.hive == Hive::LocalMachine {
+        "ProgramData"
+    } else {
+        "APPDATA"
+    };
+    let Some(base) = context.system.env_var(variable) else {
+        return;
+    };
+    let folder = Path::new(&base).join(r"Microsoft\Windows\Start Menu\Programs\Startup");
+    if !folder.is_dir() {
         return;
     }
     let key = approved.child("StartupFolder");
     for value in values_or_empty(context.system, &key) {
-        let present = folders
-            .iter()
-            .any(|folder| Path::new(folder).join(&value.name).exists());
+        let present = folder.join(&value.name).exists();
         if switched_on(&value) && !present {
             out.push(Found::value(
                 Category::Startup,

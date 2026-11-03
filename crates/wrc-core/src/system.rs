@@ -108,7 +108,13 @@ pub fn values_or_empty(system: &dyn System, key: &RegPath) -> Vec<RawValue> {
 }
 
 pub fn key_exists(system: &dyn System, key: &RegPath) -> bool {
-    system.subkeys(key).is_ok()
+    match system.subkeys(key) {
+        Ok(_) => true,
+        // An existing key that cannot be read is not a missing key: saying
+        // it is absent would let a revert delete a key it never created.
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => true,
+        Err(_) => false,
+    }
 }
 
 /// A text value, trimmed; `None` when absent, not text, or blank.

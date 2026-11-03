@@ -78,18 +78,21 @@ impl Folders {
         put("HOME", home.clone());
         put(
             "XDG_STATE_HOME",
-            set("XDG_STATE_HOME").unwrap_or_else(|| under(".local/state")),
+            trusted("XDG_STATE_HOME", &kept).unwrap_or_else(|| under(".local/state")),
         );
         put("XDG_CONFIG_HOME", config.clone());
         put("XDG_CACHE_HOME", cache.clone());
         put("XDG_DATA_HOME", data.clone());
         put(
             "GOPATH",
-            set("GOPATH").map_or_else(|| under("go"), |p| first_of_list(&p)),
+            set("GOPATH")
+                .map(|p| first_of_list(&p))
+                .filter(|folder| holds_none_of(folder, &kept))
+                .unwrap_or_else(|| under("go")),
         );
         put(
             "CARGO_HOME",
-            set("CARGO_HOME").unwrap_or_else(|| under(".cargo")),
+            trusted("CARGO_HOME", &kept).unwrap_or_else(|| under(".cargo")),
         );
         if platform == Platform::Macos {
             if let Some(cache) = darwin_user_cache().filter(|dir| holds_none_of(dir, &kept)) {
@@ -100,7 +103,8 @@ impl Folders {
             put("TRASH", under(".Trash"));
             put(
                 "HOMEBREW_CACHE",
-                set("HOMEBREW_CACHE").unwrap_or_else(|| under("Library/Caches/Homebrew")),
+                trusted("HOMEBREW_CACHE", &kept)
+                    .unwrap_or_else(|| under("Library/Caches/Homebrew")),
             );
         } else {
             put("CONFIG", config);
@@ -108,7 +112,7 @@ impl Folders {
             put("TRASH", format!("{data}/Trash"));
             put(
                 "HOMEBREW_CACHE",
-                set("HOMEBREW_CACHE").unwrap_or_else(|| format!("{cache}/Homebrew")),
+                trusted("HOMEBREW_CACHE", &kept).unwrap_or_else(|| format!("{cache}/Homebrew")),
             );
         }
         for (name, folder) in people {
@@ -347,6 +351,10 @@ mod tests {
                 ("XDG_CACHE_HOME", "/home/t"),
                 ("XDG_DATA_HOME", "/home/t/Documents"),
                 ("XDG_CONFIG_HOME", "/etc"),
+                ("XDG_STATE_HOME", "/home/t"),
+                ("GOPATH", "/home/t:/home/t/go"),
+                ("CARGO_HOME", "/home/t"),
+                ("HOMEBREW_CACHE", "/home/t"),
             ]),
         );
         assert_eq!(folders.get("CACHE"), Some("/home/t/.cache"));
@@ -354,6 +362,13 @@ mod tests {
         assert_eq!(folders.get("XDG_DATA_HOME"), Some("/home/t/.local/share"));
         assert_eq!(folders.get("TRASH"), Some("/home/t/.local/share/Trash"));
         assert_eq!(folders.get("XDG_CONFIG_HOME"), Some("/home/t/.config"));
+        assert_eq!(folders.get("XDG_STATE_HOME"), Some("/home/t/.local/state"));
+        assert_eq!(folders.get("GOPATH"), Some("/home/t/go"));
+        assert_eq!(folders.get("CARGO_HOME"), Some("/home/t/.cargo"));
+        assert_eq!(
+            folders.get("HOMEBREW_CACHE"),
+            Some("/home/t/.cache/Homebrew")
+        );
     }
 
     #[test]

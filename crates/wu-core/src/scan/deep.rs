@@ -8,7 +8,7 @@ use super::registry::software_roots;
 use super::{Confidence, Context, Found, Mode};
 use crate::identity::{Identity, Match};
 use crate::model::RegPath;
-use crate::paths::embedded_path;
+use crate::paths::{embedded_path, expand};
 use crate::system::subkeys_or_empty;
 
 /// Subtrees that are huge, owned by Windows, or covered elsewhere.
@@ -83,7 +83,7 @@ fn inspect_values(identity: &Identity, context: &Context<'_>, found: &mut Found,
         let named = embedded_path(&value.name).is_some_and(|path| identity.owns_path(&path));
         let points = value
             .as_text()
-            .is_some_and(|text| identity.references(&text));
+            .is_some_and(|text| identity.references(&expand(context.system, &text)));
         if named || points {
             found.value(
                 context,

@@ -118,18 +118,21 @@ fn read_vars(root: Node, platform: Platform) -> HashMap<String, Vec<String>> {
         };
         let values = children(var, "value", platform)
             .filter_map(|v| v.text())
-            .map(|t| env_style(t.trim()));
+            .map(|t| env_style(t.trim(), platform));
         vars.entry(name.to_string()).or_default().extend(values);
     }
     vars
 }
 
-/// `$APPDATA` and `${APPDATA}` written as `%APPDATA%`, and a leading `~`
-/// (the home folder on Linux and macOS) as `%HOME%`.
-fn env_style(path: &str) -> String {
+/// `$APPDATA` and `${APPDATA}` written as `%APPDATA%`, and on Linux and
+/// macOS a leading `~` (the home folder) as `%HOME%`. On Windows `~` is
+/// not a folder: a definition naming it stays literal there.
+fn env_style(path: &str, platform: Platform) -> String {
     let mut out = String::new();
     let path = match path.strip_prefix('~') {
-        Some(rest) if rest.is_empty() || rest.starts_with('/') => {
+        Some(rest)
+            if platform != Platform::Windows && (rest.is_empty() || rest.starts_with('/')) =>
+        {
             out.push_str("%HOME%");
             rest
         }
@@ -139,6 +142,13 @@ fn env_style(path: &str) -> String {
     while let Some(c) = chars.next() {
         if c != '$' {
             out.push(c);
+            continue;
+        }
+        // A `$$name$$` is one of the cleaner's own variables: leave it for
+        // `substitute`, never read it as an environment variable.
+        if chars.peek() == Some(&'$') {
+            chars.next();
+            out.push_str("$$");
             continue;
         }
         let braced = chars.peek() == Some(&'{');
@@ -168,21 +178,41 @@ fn env_style(path: &str) -> String {
     out
 }
 
-/// One `path` per value of each `$$var$$` it uses.
-fn substitute(path: &str, vars: &HashMap<String, Vec<String>>) -> Vec<String> {
+/// One `path` per value of each `$$var$$` it uses. A value may itself name
+/// another variable, so this repeats until nothing changes; names are
+/// visited in a fixed order so the actions are listed the same way every
+/// run, whatever order the map happens to have.
+fn substitute(path: &str, vars: &HashMap<String, Vec<String>>, platform: Platform) -> Vec<String> {
+    let mut names: Vec<&String> = vars.keys().collect();
+    names.sort();
     let mut results = vec![path.to_string()];
-    for (name, values) in vars {
-        let token = format!("$${name}$$");
-        if !path.contains(&token) {
-            continue;
+    for _ in 0..8 {
+        let before = results.clone();
+        for name in &names {
+            let token = format!("$${name}$$");
+            let values = &vars[*name];
+            results = results
+                .into_iter()
+                .flat_map(|r| {
+                    if r.contains(&token) {
+                        values
+                            .iter()
+                            .map(|v| r.replace(&token, v))
+                            .collect::<Vec<_>>()
+                    } else {
+                        vec![r]
+                    }
+                })
+                .collect();
         }
-        let token = &token;
-        results = results
-            .iter()
-            .flat_map(|r| values.iter().map(move |v| r.replace(token, v)))
-            .collect();
+        if results == before {
+            break;
+        }
     }
-    results.into_iter().map(|p| env_style(&p)).collect()
+    results
+        .into_iter()
+        .map(|p| env_style(&p, platform))
+        .collect()
 }
 
 fn read_action(
@@ -198,10 +228,14 @@ fn read_action(
     }
     if command == "winreg" {
         let key = node.attribute("path").ok_or("winreg without a path")?;
-        return Ok(vec![Action::Registry {
-            key: key.to_string(),
-            value: node.attribute("name").map(str::to_string),
-        }]);
+        let value = node.attribute("name").map(str::to_string);
+        return Ok(substitute(key, vars, platform)
+            .into_iter()
+            .map(|key| Action::Registry {
+                key,
+                value: value.clone(),
+            })
+            .collect());
     }
     if command == "win.shell.change.notify" {
         // Explorer is told after every clean of recent-file lists anyway.
@@ -266,7 +300,7 @@ fn read_action(
         }
         other => return Err(format!("command {other:?} is not supported")),
     };
-    Ok(substitute(path, vars)
+    Ok(substitute(path, vars, platform)
         .into_iter()
         .map(|p| build(make(p)))
         .collect())
@@ -387,5 +421,27 @@ mod tests {
         assert_eq!(notes, ["cache: registry actions apply to Windows only"]);
         let (windows, _) = parse(text, Platform::Windows).unwrap();
         assert_eq!(windows.options[0].actions.len(), 3, "~ stays literal there");
+        let Action::Delete(spec) = &windows.options[0].actions[0] else {
+            panic!()
+        };
+        assert_eq!(spec.path, "~/.cache/gedit");
+    }
+
+    #[test]
+    fn winreg_paths_use_the_cleaners_variables() {
+        let text = r#"<cleaner id="x">
+  <var name="hive"><value>$$base$$\Recent</value></var>
+  <var name="base"><value>HKCU\Software\Example</value></var>
+  <option id="a"><action command="winreg" path="$$hive$$"/></option>
+</cleaner>"#;
+        let (cleaner, notes) = parse(text, Platform::Windows).unwrap();
+        assert!(notes.is_empty(), "{notes:?}");
+        assert_eq!(
+            cleaner.options[0].actions,
+            [Action::Registry {
+                key: r"HKCU\Software\Example\Recent".into(),
+                value: None,
+            }]
+        );
     }
 }

@@ -78,14 +78,17 @@ impl Shell {
         self.started_hidden || self.settings().keep_in_tray
     }
 
-    /// Saves first, then keeps: a failed save leaves the old settings.
+    /// Saves first, then keeps: a failed save leaves the old settings. The
+    /// lock is held throughout, so two updates cannot each start from the
+    /// same copy and lose one of the changes.
     fn update(&self, patch: ShellPatch) -> CommandResult<ShellSettings> {
-        let next = self.settings().patched(patch)?;
+        let mut current = lock(&self.settings);
+        let next = current.patched(patch)?;
         next.save(&self.root.join("settings.json"))
             .map_err(|error| {
                 CommandError::from(format!("The settings could not be saved: {error}"))
             })?;
-        *lock(&self.settings) = next.clone();
+        *current = next.clone();
         Ok(next)
     }
 }

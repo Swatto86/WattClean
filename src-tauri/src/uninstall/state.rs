@@ -68,9 +68,12 @@ impl AppState {
         }
     }
 
-    pub fn begin_removal(&self) -> Removing<'_> {
+    pub fn begin_removal(&self) -> Result<Removing<'_>, CommandError> {
+        if crate::quit::stopping() {
+            return Err("WattClean is quitting: no new removal starts now.".into());
+        }
         self.removing.fetch_add(1, Ordering::SeqCst);
-        Removing(&self.removing)
+        Ok(Removing(&self.removing))
     }
 
     pub fn is_removing(&self) -> bool {

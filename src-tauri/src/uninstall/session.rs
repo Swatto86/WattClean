@@ -46,6 +46,12 @@ impl ScanProgress {
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::Relaxed);
     }
+
+    /// A new scan starts un-cancelled: the flag belongs to one scan, not
+    /// the whole session.
+    pub fn reset(&self) {
+        self.cancel.store(false, Ordering::Relaxed);
+    }
 }
 
 impl Progress for ScanProgress {
@@ -227,6 +233,7 @@ impl Session {
     }
 
     pub fn scan(&self, app: &AppState, mode: Mode) -> CommandResult<ScanReport> {
+        self.progress.reset();
         let system = app.system.as_ref();
         let folders = Folders::load(system)?;
         let others = self.others(system, &folders);
@@ -295,23 +302,30 @@ impl Session {
         );
         release_hives(system);
         let removal = removal?;
-        self.record(app, Some(report.mode), Some(&removal))?;
+        let refused_count = refused.len();
+        let mut failed: Vec<FailedItem> = refused
+            .into_iter()
+            .map(|item| FailedItem {
+                item: item.target.display(),
+                error: "Left in place: Windows or another program uses it now.".to_owned(),
+            })
+            .collect();
+        failed.extend(removal.failed.iter().map(|(item, error)| FailedItem {
+            item: item.clone(),
+            error: error.clone(),
+        }));
+        // The removal has happened; a history file that cannot be written
+        // is reported beside it, never as if nothing was removed.
+        if let Err(error) = self.record(app, Some(report.mode), Some(&removal), refused_count) {
+            failed.push(FailedItem {
+                item: "The history entry".into(),
+                error: error.to_string(),
+            });
+        }
         Ok(RemovalView {
             removed: removal.removed,
             at_restart: removal.at_restart,
-            failed: refused
-                .into_iter()
-                .map(|item| FailedItem {
-                    item: item.target.display(),
-                    error: "Left in place: Windows or another program uses it now.".to_owned(),
-                })
-                .chain(
-                    removal
-                        .failed
-                        .into_iter()
-                        .map(|(item, error)| FailedItem { item, error }),
-                )
-                .collect(),
+            failed,
             bytes: removal.bytes,
             backup_id: removal.backup.id,
         })
@@ -324,6 +338,7 @@ impl Session {
         app: &AppState,
         mode: Option<Mode>,
         removal: Option<&Removal>,
+        extra_failed: usize,
     ) -> CommandResult<()> {
         let mut state = self.state();
         if state.recorded {
@@ -346,7 +361,9 @@ impl Session {
             uninstaller,
             removed: removal.map(|r| r.removed).unwrap_or_default(),
             at_restart: removal.map_or(0, |r| r.at_restart),
-            failed: removal.map_or(0, |r| u32::try_from(r.failed.len()).unwrap_or(u32::MAX)),
+            failed: removal.map_or(0, |r| {
+                u32::try_from(r.failed.len() + extra_failed).unwrap_or(u32::MAX)
+            }),
             bytes: removal.map_or(0, |r| r.bytes),
             backup_id: removal.map(|r| r.backup.id.clone()),
         };

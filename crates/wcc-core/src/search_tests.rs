@@ -250,6 +250,31 @@ fn a_wildcard_exclusion_skips_matching_folders_at_any_depth() {
     assert_eq!(found, vec![("Proj/Thumbs.db".to_string(), Kind::File)]);
 }
 
+#[test]
+fn an_exclusion_with_two_folder_wildcards_handles_each_standing_for_none_or_more() {
+    let dir = tempfile::tempdir().unwrap();
+    for file in [
+        r"A\one\two\keep.txt",
+        r"A\one\gone.txt",
+        r"A\x\two\gone.txt",
+        r"A\gone.txt",
+    ] {
+        let path = crate::paths::join(dir.path(), file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, b"x").unwrap();
+    }
+    let mut spec = FileSpec::new(path(dir.path(), "A"), Search::WalkFiles);
+    spec.exclude = vec![path(dir.path(), r"A\*\*\two")];
+    let found = rel(dir.path(), run(&spec, &Guard::default()));
+    assert_eq!(
+        found,
+        vec![
+            ("A/gone.txt".to_string(), Kind::File),
+            ("A/one/gone.txt".to_string(), Kind::File),
+        ]
+    );
+}
+
 fn projects() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     for file in [

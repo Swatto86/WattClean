@@ -67,7 +67,9 @@ fn restore_item(system: &dyn System, item: &mut Item, outcome: &mut RestoreOutco
         (ItemState::Restored, _) => skip("it was already restored"),
         (_, Saved::Hive(_)) => skip(FULL_RESTORE),
         // A key delete stopped part-way: put back what went, keep the rest.
-        (ItemState::Failed { .. }, Saved::Key(tree)) if partly_removed(system, item) => {
+        (ItemState::Failed { .. } | ItemState::Pending, Saved::Key(tree))
+            if partly_removed(system, item) =>
+        {
             let left = write_tree(system, &item.key, tree, true)?;
             if left > 0 {
                 skip(&format!("{left} values still there were left as they are"));

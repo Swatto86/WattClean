@@ -91,6 +91,47 @@ fn compile(pattern: Option<&String>) -> Result<Option<Regex>, SpecError> {
         .transpose()
 }
 
+/// Every spelling of a key where each `\*\` component is either kept
+/// (matching one or more folders) or removed (matching none).
+fn folder_star_variants(key: &str) -> Vec<String> {
+    // Two choices per component; a hand-written (or imported) pattern with
+    // a great many of them must not turn into millions of regexes.
+    if key.matches(r"\*\").count() > 8 {
+        let mut variants = vec![key.to_string()];
+        let none = key.replace(r"\*\", r"\");
+        if none != key {
+            variants.push(none);
+        }
+        return variants;
+    }
+    fn walk(text: &str, out: &mut Vec<String>) {
+        let Some(at) = text.find(r"\*\") else {
+            out.push(text.to_string());
+            return;
+        };
+        let (head, tail) = text.split_at(at + r"\*\".len());
+        let tail = tail.to_string();
+        // Kept: the star stays and may match one or more folders.
+        let mut kept = Vec::new();
+        walk(&tail, &mut kept);
+        for rest in kept {
+            out.push(format!("{head}{rest}"));
+        }
+        // Removed: the component is not there at all, leaving the one
+        // separator that joins the folders around it.
+        let mut removed = Vec::new();
+        walk(&tail, &mut removed);
+        for rest in removed {
+            out.push(format!("{}\\{rest}", &text[..at]));
+        }
+    }
+    let mut variants = Vec::new();
+    walk(key, &mut variants);
+    variants.sort();
+    variants.dedup();
+    variants
+}
+
 impl Filter {
     pub fn new(spec: &FileSpec, vars: &dyn Vars, now: SystemTime) -> Result<Self, SpecError> {
         let mut exclude_roots = Vec::new();
@@ -102,11 +143,13 @@ impl Filter {
             for expanded in expansions {
                 if Wildcard::has_wildcards(&expanded) {
                     let key = paths::key(Path::new(&expanded));
-                    // `\*\` spans any number of folders, none included.
-                    if key.contains(r"\*\") {
-                        exclude_patterns.push(Wildcard::new(&key.replace(r"\*\", r"\")));
+                    // A `\*\` component spans any number of folders, none
+                    // included. A path may hold several of them, and each
+                    // may stand for none or more, so every combination is
+                    // a pattern of its own.
+                    for variant in folder_star_variants(&key) {
+                        exclude_patterns.push(Wildcard::new(&variant));
                     }
-                    exclude_patterns.push(Wildcard::new(&key));
                 } else {
                     exclude_roots.push(paths::key(Path::new(&expanded)));
                 }

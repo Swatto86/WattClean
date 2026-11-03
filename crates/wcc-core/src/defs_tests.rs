@@ -228,6 +228,11 @@ id = "logs"
 name = "Logs"
 description = "l"
 actions = [{ op = "delete", search = "walk.files", path = '{root}\logs' }]
+[[template.option]]
+id = "named"
+name = "Named"
+description = "n"
+actions = [{ op = "delete", search = "find.dirs", path = '{root}', names = '{dirs}', beside = '{marker}', keep_link = '{link}' }]
 
 [[cleaner]]
 id = "app"
@@ -236,7 +241,7 @@ description = "An app"
 category = "applications"
 template = "t"
 skip = ["logs"]
-vars = { root = '%APPDATA%\App' }
+vars = { root = '%APPDATA%\App', dirs = 'target', marker = 'Cargo.toml', link = '../current' }
 detect = ['{root}']
 [[cleaner.option]]
 id = "mru"
@@ -248,11 +253,17 @@ actions = [{ op = "registry", key = 'HKCU\Software\App', value = "MRU" }]
     let app = &cleaners[0];
     assert_eq!(app.detect, vec![Detect::Path(r"%APPDATA%\App".into())]);
     let ids: Vec<_> = app.options.iter().map(|o| o.id.as_str()).collect();
-    assert_eq!(ids, vec!["cache", "mru"]);
+    assert_eq!(ids, vec!["cache", "named", "mru"]);
     let Action::Delete(spec) = &app.options[0].actions[0] else {
         panic!()
     };
     assert_eq!(spec.path, r"%APPDATA%\App\*\Cache");
+    let Action::Delete(named) = &app.options[1].actions[0] else {
+        panic!()
+    };
+    assert_eq!(named.names.as_deref(), Some("target"));
+    assert_eq!(named.beside.as_deref(), Some("Cargo.toml"));
+    assert_eq!(named.keep_link.as_deref(), Some("../current"));
 }
 
 #[test]

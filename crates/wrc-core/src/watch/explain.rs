@@ -47,8 +47,18 @@ pub struct Explained {
 }
 
 /// A write's identity, so one seen by two overlapping windows is logged once.
+/// The data written is part of it: two writes to one value in the same
+/// millisecond with different data are different writes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct WriteId(u64, u32, String, Option<String>, u8);
+pub struct WriteId(
+    u64,
+    u32,
+    String,
+    Option<String>,
+    u8,
+    Option<(u32, Vec<u8>)>,
+    Option<(u32, Vec<u8>)>,
+);
 
 fn id(write: &Write) -> WriteId {
     let op = match write.op {
@@ -57,12 +67,19 @@ fn id(write: &Write) -> WriteId {
         WriteOp::ValueSet => 2,
         WriteOp::ValueDeleted => 3,
     };
+    let captured = |value: &Option<crate::trace::Captured>| {
+        value
+            .as_ref()
+            .map(|captured| (captured.kind, captured.bytes.clone()))
+    };
     WriteId(
         write.time,
         write.actor.pid,
         write.key.folded(),
         write.value.clone(),
         op,
+        captured(&write.new),
+        captured(&write.old),
     )
 }
 

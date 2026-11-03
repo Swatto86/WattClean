@@ -170,7 +170,7 @@ pub async fn un_remove_leftovers(
     let app = Arc::clone(&state);
     let session = state.session(session)?;
     blocking(move || {
-        let _removing = app.begin_removal();
+        let _removing = app.begin_removal()?;
         session.remove(&app, &ids)
     })
     .await
@@ -180,7 +180,7 @@ pub async fn un_remove_leftovers(
 #[tauri::command]
 pub fn un_end_uninstall(state: App<'_>, session: u32) -> CommandResult<()> {
     if let Some(session) = state.end_session(session) {
-        session.record(&state, None, None)?;
+        session.record(&state, None, None, 0)?;
     }
     Ok(())
 }
@@ -201,7 +201,7 @@ pub struct RestoreView {
 pub async fn un_restore_backup(state: App<'_>, id: String) -> CommandResult<RestoreView> {
     let app = Arc::clone(&state);
     blocking(move || {
-        let _removing = app.begin_removal();
+        let _removing = app.begin_removal()?;
         let restored = backup::restore(app.system.as_ref(), &app.backups_dir(), &id, now());
         crate::uninstall::session::release_hives(app.system.as_ref());
         let RestoreReport { restored, failed } = restored?;

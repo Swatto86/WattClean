@@ -108,6 +108,7 @@ fn a_flatpak_installed_twice_is_listed_twice() {
 #[test]
 fn appimage_names_lose_their_versions() {
     assert_eq!(app_name("Krita-5.2.2-x86_64"), "Krita");
+    assert_eq!(app_name("Krita-v5.2.2-x86_64"), "Krita");
     assert_eq!(app_name("Obsidian-1.6.7"), "Obsidian");
     assert_eq!(app_name("balena_etcher_amd64"), "balena etcher");
     assert_eq!(app_name("123"), "123");

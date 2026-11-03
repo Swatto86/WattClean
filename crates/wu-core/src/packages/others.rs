@@ -76,7 +76,8 @@ fn goes_alone(
         ));
     };
     // `name:arch` is the chosen package's own copy for another architecture.
-    others.retain(|other| other.split(':').next() != Some(package.id.as_str()));
+    let own = package.id.split(':').next().unwrap_or(&package.id);
+    others.retain(|other| other.split(':').next() != Some(own));
     others.sort();
     others.dedup();
     if others.is_empty() {

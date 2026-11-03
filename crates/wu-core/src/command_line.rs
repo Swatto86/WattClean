@@ -93,7 +93,11 @@ pub fn split_command(command: &str, exists: impl Fn(&Path) -> bool) -> Option<(S
     }
     if let Some(rest) = command.strip_prefix('"') {
         let (exe, args) = rest.split_once('"').unwrap_or((rest, ""));
-        return Some((exe.trim().to_owned(), args.trim().to_owned()));
+        let exe = exe.trim();
+        if exe.is_empty() {
+            return None;
+        }
+        return Some((exe.to_owned(), args.trim().to_owned()));
     }
     let words: Vec<&str> = command.split(' ').collect();
     for end in 1..=words.len() {
@@ -128,17 +132,27 @@ fn is_named(path: &Path, name: &str) -> bool {
 }
 
 fn msi_install_to_remove(args: &str) -> String {
-    args.split(' ')
-        .map(|word| {
-            let lower = word.to_ascii_lowercase();
-            if (lower.starts_with("/i") || lower.starts_with("-i")) && lower.contains('{') {
-                format!("/X{}", &word[2..])
-            } else {
-                word.to_owned()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    let words: Vec<&str> = args.split(' ').collect();
+    let mut out = Vec::with_capacity(words.len());
+    let mut index = 0;
+    while index < words.len() {
+        let word = words[index];
+        let lower = word.to_ascii_lowercase();
+        // `MsiExec.exe /I {GUID}` is the same install switch as `/I{GUID}`.
+        if matches!(lower.as_str(), "/i" | "-i")
+            && words
+                .get(index + 1)
+                .is_some_and(|next| next.trim_start().starts_with('{'))
+        {
+            out.push("/X".to_string());
+        } else if (lower.starts_with("/i") || lower.starts_with("-i")) && lower.contains('{') {
+            out.push(format!("/X{}", &word[2..]));
+        } else {
+            out.push(word.to_owned());
+        }
+        index += 1;
+    }
+    out.join(" ")
 }
 
 /// Unattended switches for installer families recognisable by file name.
@@ -198,6 +212,8 @@ mod tests {
             assert_eq!(got, (exe.to_owned(), args.to_owned()), "{command}");
         }
         assert_eq!(split_command("   ", exists), None);
+        assert_eq!(split_command(r#""""#, exists), None);
+        assert_eq!(split_command(r#""   ""#, exists), None);
     }
 
     #[test]
@@ -250,6 +266,8 @@ mod tests {
     #[test]
     fn msiexec_install_switch_becomes_remove() {
         assert_eq!(msi_install_to_remove("/I{ABC} /qn"), "/X{ABC} /qn");
+        assert_eq!(msi_install_to_remove("/I {ABC} /qn"), "/X {ABC} /qn");
+        assert_eq!(msi_install_to_remove("-i {ABC}"), "/X {ABC}");
         assert_eq!(msi_install_to_remove("/x{ABC}"), "/x{ABC}");
         assert_eq!(msi_install_to_remove("/i package.msi"), "/i package.msi");
     }

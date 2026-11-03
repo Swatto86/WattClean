@@ -167,7 +167,11 @@ pub async fn disk_run_cleaner(
 
 fn history_entry(report: &Report) -> Entry {
     let mut names: Vec<&str> = report.options.iter().map(|o| o.cleaner.as_str()).collect();
-    names.dedup();
+    // Options are in catalog order and a cleaner may appear twice (its
+    // free-space option comes last), so remove every repeat, not just
+    // neighbouring ones.
+    let mut seen = std::collections::HashSet::new();
+    names.retain(|name| seen.insert(*name));
     let summary = match names.len() {
         0 => "Nothing".to_string(),
         1..=3 => names.join(", "),

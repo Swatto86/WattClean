@@ -185,13 +185,19 @@ function editor(job: Job | null): Promise<Job | null> {
       ],
       work?.kind ?? "clean",
     );
+    const modeOptions: [string, string][] = [
+      ["safe", "Safe"],
+      ["moderate", "Moderate"],
+      ["advanced", "Advanced"],
+    ];
+    // The editor has no category picker, so a stored custom job keeps its
+    // own categories instead of being silently turned into a safe clean.
+    if (work?.kind === "clean" && work.mode === "custom") {
+      modeOptions.push(["custom", "Custom (keep its categories)"]);
+    }
     const mode = select(
       "job-mode",
-      [
-        ["safe", "Safe"],
-        ["moderate", "Moderate"],
-        ["advanced", "Advanced"],
-      ],
+      modeOptions,
       work?.kind === "clean" ? work.mode : "safe",
     );
     const all = h("input", { type: "checkbox", id: "job-all" });
@@ -296,7 +302,13 @@ function editor(job: Job | null): Promise<Job | null> {
         const modeValue: Mode =
           mode.value === "moderate" || mode.value === "advanced"
             ? mode.value
-            : "safe";
+            : mode.value === "custom"
+              ? "custom"
+              : "safe";
+        const categories =
+          modeValue === "custom" && job && job.work.kind === "clean"
+            ? job.work.categories
+            : [];
         const input: JobInput = {
           id: job?.id ?? null,
           name: name.value,
@@ -308,7 +320,7 @@ function editor(job: Job | null): Promise<Job | null> {
                 : {
                     kind: "clean",
                     mode: modeValue,
-                    categories: [],
+                    categories,
                     allAccounts: all.checked,
                   },
           schedule: chosen,

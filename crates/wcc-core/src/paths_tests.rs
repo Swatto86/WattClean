@@ -12,6 +12,10 @@ fn keys_ignore_case_separators_and_dots() {
     );
     assert_eq!(key(&p(r"\\?\C:\Temp")), r"c:\temp");
     assert_eq!(key(&p(r"C:\")), r"c:\");
+    // Drive-relative, not the root: `C:foo` is not `C:\foo`.
+    assert_eq!(key(&p("C:foo")), "c:foo");
+    assert_eq!(key(&p(r"C:foo\bar")), r"c:foo\bar");
+    assert_ne!(key(&p("C:foo")), key(&p(r"C:\foo")));
 }
 
 #[test]

@@ -69,6 +69,9 @@ impl AppState {
 
     /// Start a clean; refused while another one runs.
     pub fn begin_clean(&self) -> Result<Cleaning<'_>, CommandError> {
+        if crate::quit::stopping() {
+            return Err("WattClean is quitting: no new clean starts now.".into());
+        }
         if self.cleaning.swap(true, Ordering::SeqCst) {
             return Err("A clean is already running.".into());
         }

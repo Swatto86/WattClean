@@ -32,7 +32,7 @@ fn remove(app: &AppState, id: &str) -> CommandResult<()> {
         .store_operation
         .try_lock()
         .map_err(|_| "Another Store app operation is running.")?;
-    let _removing = app.begin_removal();
+    let _removing = app.begin_removal()?;
     let package = app
         .system
         .store_apps()?

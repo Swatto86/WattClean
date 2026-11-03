@@ -7,7 +7,7 @@ use std::path::Path;
 use super::{Confidence, Context, Found, Mode};
 use crate::identity::{Identity, Match};
 use crate::model::{Hive, RegPath};
-use crate::paths::{embedded_path, expand, is_within};
+use crate::paths::{embedded_path, expand};
 use crate::system::{subkeys_or_empty, text_value, values_or_empty};
 
 const CURRENT: &str = r"Microsoft\Windows\CurrentVersion";
@@ -119,6 +119,7 @@ pub(super) fn app_paths(
     for name in subkeys_or_empty(context.system, app_paths) {
         let key = app_paths.child(&name);
         let target = text_value(&values_or_empty(context.system, &key), "").unwrap_or_default();
+        let target = expand(context.system, &target);
         let ours = identity.references(&target)
             || (identity.exe_names.contains(&name.to_lowercase())
                 && embedded_path(&target).is_none_or(|path| !path.exists()));
@@ -244,12 +245,7 @@ pub(super) fn value_names_within(
 ) {
     for value in values_or_empty(context.system, key) {
         let path = embedded_path(&value.name);
-        if path.is_some_and(|path| {
-            identity
-                .install_dirs
-                .iter()
-                .any(|dir| is_within(&path, dir))
-        }) {
+        if path.is_some_and(|path| identity.owns_path(&path)) {
             found.value(context, key.clone(), value.name, reason, Confidence::High);
         }
     }

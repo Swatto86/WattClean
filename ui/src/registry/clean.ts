@@ -51,7 +51,13 @@ async function confirmAndClean(
     context.backupsChanged();
     await inform("Clean finished", describe(outcome));
   } catch (error: unknown) {
-    await inform("Nothing was removed", message(error));
+    // The backup is written before removal and saved as items go, so an
+    // error here may come after some entries were removed. Saying nothing
+    // was removed would be wrong (and would hide a backup to restore).
+    await inform(
+      "The clean did not finish",
+      `${message(error)}\n\nSome entries may already have been removed. Check the results and the Backup Center before trying again.`,
+    );
   }
 }
 

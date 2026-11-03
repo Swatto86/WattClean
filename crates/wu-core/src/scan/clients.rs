@@ -5,6 +5,7 @@
 use super::{Confidence, Context, Found, Mode};
 use crate::identity::{Identity, Match};
 use crate::model::{Hive, RegPath};
+use crate::paths::expand;
 use crate::programs::uninstall_roots;
 use crate::system::{key_exists, subkeys_or_empty, text_value, values_or_empty};
 
@@ -67,8 +68,8 @@ fn clients(
             .unwrap_or_default();
             let named =
                 |strength| identity.matches(&name, strength) && !context.belongs_to_other(&name);
-            let level = if identity.references(&command)
-                || identity.references(&icon)
+            let level = if identity.references(&expand(context.system, &command))
+                || identity.references(&expand(context.system, &icon))
                 || named(Match::Exact)
             {
                 Confidence::High

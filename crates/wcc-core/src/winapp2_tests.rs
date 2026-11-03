@@ -115,6 +115,27 @@ fn entries_for_other_windows_versions_are_left_out() {
 }
 
 #[test]
+fn a_build_number_in_detectos_does_not_hide_the_entry() {
+    let text = "[Build *]\nDetectOS=10.0.19041|\nFileKey1=%Temp%|*.build\n";
+    let names: Vec<_> = parse(text).into_iter().map(|c| c.name).collect();
+    assert_eq!(names, vec!["Build"]);
+}
+
+#[test]
+fn a_file_exclusion_without_a_pattern_names_the_file_itself() {
+    let text = "[App *]\nFileKey1=%AppData%\\App|*.log\n\
+        ExcludeKey1=FILE|%AppData%\\App\\settings.ini\n";
+    let option = &parse(text)[0].options[0];
+    let Action::Delete(spec) = &option.actions[0] else {
+        panic!()
+    };
+    assert_eq!(
+        spec.exclude,
+        vec![r"%AppData%\App\settings.ini".to_string()]
+    );
+}
+
+#[test]
 fn a_registry_detect_may_hold_wildcards() {
     let dir = tempfile::tempdir().unwrap();
     let machine = dir.path().join("machine");

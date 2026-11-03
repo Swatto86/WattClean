@@ -73,6 +73,8 @@ pub async fn reg_delete_job(state: App<'_>, id: String) -> CommandResult<()> {
 #[tauri::command]
 pub async fn reg_run_job_now(state: App<'_>, id: String) -> CommandResult<LastRun> {
     let app = Arc::clone(&state);
+    // A job may clean or write a full backup: quitting must wait for it.
+    let _cleaning = app.begin_clean()?;
     let _scan = app.begin_scan()?;
     let result = blocking({
         let app = Arc::clone(&app);

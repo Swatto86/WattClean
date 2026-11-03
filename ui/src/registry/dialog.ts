@@ -53,9 +53,9 @@ export class Modal {
     );
     if (actions.length > 0) this.box.append(footer);
     const preferred = this.box.querySelector<HTMLElement>(
-      "button.primary, button.danger, input, button",
+      "button.primary:not(:disabled), button.danger:not(:disabled), input:not(:disabled), select:not(:disabled), button:not(:disabled)",
     );
-    preferred?.focus();
+    (preferred ?? this.root).focus();
   }
 
   dismissWith(handler: (() => void) | null): void {
@@ -76,7 +76,7 @@ export class Modal {
     if (event.key !== "Tab") return;
     const focusable = [
       ...this.box.querySelectorAll<HTMLElement>(
-        "button:not(:disabled), input, select, [tabindex='0']",
+        "button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']",
       ),
     ];
     const first = focusable[0];

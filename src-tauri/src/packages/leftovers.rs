@@ -80,11 +80,20 @@ pub struct Trashed {
 }
 
 /// Moves the chosen leftovers (by number) of the last removal, or of the
-/// last search for removed apps' ones, to the Trash.
+/// last search for removed apps' ones, to the Trash. The ones that went are
+/// forgotten; the rest stay listed so they can be tried again.
 #[tauri::command]
 pub async fn un_pkg_trash_leftovers(state: App<'_>, numbers: Vec<usize>) -> CommandResult<Trashed> {
     let shared = Arc::clone(&state);
     blocking(move || {
+        // The list a number names must not be replaced while it is used.
+        let _removing = shared.begin_removal()?;
+        if numbers.is_empty() {
+            return Ok(Trashed {
+                moved: 0,
+                failed: Vec::new(),
+            });
+        }
         let chosen: Vec<Leftover> = {
             let leftovers = lock(&shared.leftovers);
             let mut numbers = numbers;
@@ -97,7 +106,15 @@ pub async fn un_pkg_trash_leftovers(state: App<'_>, numbers: Vec<usize>) -> Comm
                 .ok_or("Those leftovers are no longer listed.")?
         };
         let trashed = trash_chosen(shared.system.as_ref(), &chosen);
-        lock(&shared.leftovers).clear();
+        let chosen_paths: Vec<_> = chosen.iter().map(|leftover| &leftover.path).collect();
+        let mut listed = lock(&shared.leftovers);
+        listed.retain(|leftover| {
+            !chosen_paths.contains(&&leftover.path)
+                || trashed
+                    .failed
+                    .iter()
+                    .any(|failed| failed.starts_with(&format!("{}: ", leftover.path.display())))
+        });
         Ok(trashed)
     })
     .await

@@ -108,9 +108,18 @@ fn wait_while(
     }
 }
 
+/// Set once a quit has begun: new clean/removal work must not start.
+static STOPPING: AtomicBool = AtomicBool::new(false);
+
+/// Whether a quit has begun and no new work should start.
+pub fn stopping() -> bool {
+    STOPPING.load(Ordering::SeqCst)
+}
+
 /// From now on no disk job or removal starts: the app is quitting, and one
 /// started now could be cut off when it exits.
 fn stop_new_work(app: &AppHandle) {
+    STOPPING.store(true, Ordering::SeqCst);
     if let Some(disk) = app.try_state::<Arc<disk::state::AppState>>() {
         disk.stop_new_jobs();
     }

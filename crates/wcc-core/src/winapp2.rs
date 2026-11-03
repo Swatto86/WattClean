@@ -79,6 +79,9 @@ fn fits_this_windows(range: &str) -> bool {
         while parts.len() < WINDOWS.len() {
             parts.push(0);
         }
+        // Only the major and minor matter here: a build number in the range
+        // (`10.0.19041|`) must not make a shorter version compare as older.
+        parts.truncate(WINDOWS.len());
         Some(Some(parts))
     };
     let Some((min, max)) = range.split_once('|') else {
@@ -148,10 +151,18 @@ fn excludes(list: &[String]) -> Vec<String> {
             let mut parts = line.split('|');
             let kind = parts.next()?.trim().to_ascii_uppercase();
             let path = parts.next()?.trim().trim_end_matches('\\');
-            let pattern = parts.next().map(str::trim).unwrap_or("*.*");
+            let pattern = parts.next().map(str::trim).filter(|p| !p.is_empty());
             match kind.as_str() {
-                "PATH" if pattern == "*.*" || pattern == "*" => Some(path.to_string()),
-                "PATH" | "FILE" => Some(format!(r"{path}\{pattern}")),
+                // A PATH with no pattern is the folder itself; a FILE with
+                // no pattern is that one file, not a folder below it.
+                "PATH" => match pattern {
+                    None | Some("*.*") | Some("*") => Some(path.to_string()),
+                    Some(pattern) => Some(format!(r"{path}\{pattern}")),
+                },
+                "FILE" => Some(match pattern {
+                    None => path.to_string(),
+                    Some(pattern) => format!(r"{path}\{pattern}"),
+                }),
                 _ => None,
             }
         })
