@@ -123,11 +123,12 @@ fn escape(text: &str) -> String {
 }
 
 /// One line of comment text: a line break in the label must not become a
-/// registry directive on a line of its own.
+/// registry directive on a line of its own, so only the first line is kept.
 fn comment(text: &str) -> String {
-    text.chars()
-        .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
-        .collect()
+    text.split(['\r', '\n'])
+        .next()
+        .unwrap_or_default()
+        .to_owned()
 }
 
 fn hex(bytes: &[u8]) -> String {
