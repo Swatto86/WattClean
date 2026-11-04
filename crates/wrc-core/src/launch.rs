@@ -9,6 +9,14 @@ use crate::paths::is_within;
 
 /// Why `exe` must not be recorded, or `None` when it is an installed copy.
 pub fn not_installed(exe: &Path, temp: &Path, downloads: Option<&Path>) -> Option<String> {
+    // A cargo build is named as one wherever the checkout is: a test or
+    // development copy under Temp is still a development build.
+    if is_cargo_build(exe) {
+        return Some(format!(
+            "this is a development build ({}). Only the installed app can do this.",
+            exe.display()
+        ));
+    }
     if downloads.is_some_and(|downloads| is_within(exe, downloads)) {
         return Some(format!(
             "this copy runs from your Downloads folder ({}). Install WattClean first.",
@@ -18,12 +26,6 @@ pub fn not_installed(exe: &Path, temp: &Path, downloads: Option<&Path>) -> Optio
     if is_within(exe, temp) {
         return Some(format!(
             "this copy runs from a temporary folder ({}). Install WattClean first.",
-            exe.display()
-        ));
-    }
-    if is_cargo_build(exe) {
-        return Some(format!(
-            "this is a development build ({}). Only the installed app can do this.",
             exe.display()
         ));
     }
@@ -66,5 +68,14 @@ mod tests {
                 "{bad}"
             );
         }
+    }
+
+    #[test]
+    fn a_cargo_build_under_temp_is_a_development_build() {
+        let temp = Path::new(r"C:\Users\A\AppData\Local\Temp");
+        let checkout = Path::new(r"C:\Users\A\AppData\Local\Temp\work\WattClean");
+        let exe = checkout.join(r"target\debug\wattclean.exe");
+        let reason = not_installed(&exe, temp, None).expect("refused");
+        assert!(reason.contains("development build"), "{reason}");
     }
 }
