@@ -1,0 +1,174 @@
+name: release
+
+# Tag-driven release: installers, portable binaries and checksums for
+# Windows, Linux and macOS, published after the full gate passes on the
+# tagged commit. Portable binaries need the documented platform runtimes
+# (WebView2, webkit2gtk); see README.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to rebuild (e.g. v0.1.5)"
+        required: true
+      publish:
+        description: "Publish or update the GitHub release after building"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: nsis
+          - os: ubuntu-latest
+            bundles: deb,rpm,appimage
+          - os: macos-latest
+            bundles: dmg,app
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Verify tag matches the manifests
+        shell: bash
+        run: |
+          version="${TAG#v}"
+          test "$version" = "$(node -p "require('./package.json').version")"
+          node scripts/check-version-agreement.mjs "$version"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Exactly the compiler rust-toolchain.toml pins, so the gate here is the
+      # one a developer runs.
+      - name: Install the pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install --profile minimal --no-self-update
+          rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.os }}
+          cache-on-failure: true
+
+      - name: Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libxdo-dev webkit2gtk-driver xvfb dbus-x11 rpm
+
+      - name: Pinned native WebDriver
+        if: matrix.os != 'macos-latest'
+        shell: bash
+        run: |
+          bash scripts/setup-tauri-driver.sh
+          echo "$PWD/.webdriver" >> "$GITHUB_PATH"
+
+      - name: Match EdgeDriver to WebView2
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: ./scripts/setup-e2e.ps1
+
+      # The gate runs again on the tagged commit: green on the branch is not
+      # evidence about the tag if anything landed between them.
+      - name: Gate
+        shell: bash
+        run: ./scripts/verify.sh
+
+      # Default features only: the fake platform is test-only and verify.sh
+      # asserts it is not a default feature.
+      - name: Build the app
+        env:
+          AGENT_RELEASE: "1"
+          CARGO_PROFILE_RELEASE_DEBUG: "0"
+        run: npx --no-install tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          out=release-artifacts
+          mkdir -p "$out"
+
+          case "${{ matrix.os }}" in
+            windows-latest)
+              cp target/release/wattclean.exe "$out/WattClean_${version}_x64-portable.exe"
+              cp src-tauri/binaries/wattclean-cmd-x86_64-pc-windows-msvc.exe "$out/WattClean_${version}_x64-cmd.exe"
+              cp target/release/bundle/nsis/*-setup.exe "$out/"
+              ;;
+            ubuntu-latest)
+              cp target/release/bundle/deb/*.deb "$out/"
+              cp target/release/bundle/rpm/*.rpm "$out/"
+              cp target/release/bundle/appimage/*.AppImage "$out/"
+              cp src-tauri/binaries/wattclean-cmd-x86_64-unknown-linux-gnu "$out/WattClean_${version}_linux-x64-cmd"
+              ;;
+            macos-latest)
+              cp target/release/bundle/dmg/*.dmg "$out/"
+              cmd=$(find src-tauri/binaries -maxdepth 1 -name 'wattclean-cmd-*' -type f | head -1)
+              [ -n "$cmd" ] || { echo "no macOS wattclean-cmd was built"; exit 1; }
+              cp "$cmd" "$out/WattClean_${version}_macos-$(uname -m)-cmd"
+              ;;
+          esac
+
+          cp THIRD-PARTY-NOTICES.txt "$out/"
+          ls -la "$out"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    if: github.event_name != 'workflow_dispatch' || inputs.publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd release-artifacts
+          rm -f SHA256SUMS.txt
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 |
+            sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: release-artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
