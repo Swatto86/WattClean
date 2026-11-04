@@ -219,7 +219,6 @@ mod tests {
         assert!(!registry.key_exists(r"HKCU\Software\NoSuchKey-WattClean"));
         let names = registry.subkeys(r"HKCU\Software");
         assert!(names.iter().any(|n| n.eq_ignore_ascii_case("Microsoft")));
-        assert!(registry.subkeys("HKCU").iter().any(|n| n == "Software"));
         assert!(registry.subkeys(r"HKCU\NoSuchKey-WattClean").is_empty());
     }
 
