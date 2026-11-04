@@ -9,9 +9,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::explain::{Reading, explain};
 use super::log::Log;
-use super::{diff, lock, snapshot};
+use super::{Snapshot, diff, lock, snapshot};
 use crate::model::RegPath;
-use crate::system::System;
+use crate::system::{KeyWatch, System};
 use crate::trace::{RegistryTrace, TraceState, Write};
 use crate::{Error, Result};
 
@@ -26,20 +26,42 @@ pub(super) struct Tracing {
     pub state: TraceState,
 }
 
-/// Watch `key` until told to stop, logging each change found with the
-/// process behind it when tracing is on.
+/// A watch already armed, with the reading it starts from.
+pub(super) struct Prepared {
+    watch: Box<dyn KeyWatch>,
+    since: u64,
+    last: Snapshot,
+}
+
+/// Arm the watch and read the key, on the calling thread, so the baseline
+/// is the key as it was when the watch was started and a change made as
+/// soon as it returns is not lost while the watch thread waits to run.
+pub(super) fn prepare(system: &dyn System, key: &RegPath) -> Result<Prepared> {
+    // Armed before the reading: a change made during it is signalled, and
+    // the next reading finds it.
+    let watch = system
+        .watch_key(key)
+        .map_err(|source| Error::registry("watch", key, source))?;
+    let since = now();
+    let last = snapshot(system, key)?;
+    Ok(Prepared { watch, since, last })
+}
+
+/// Watch `key` from `prepared` until told to stop, logging each change found
+/// with the process behind it when tracing is on.
 pub(super) fn follow(
     system: &dyn System,
     key: &RegPath,
     stop: &AtomicBool,
     log: &Mutex<Log>,
     tracing: &Mutex<Tracing>,
+    prepared: Prepared,
 ) -> Result<()> {
-    let mut watch = system
-        .watch_key(key)
-        .map_err(|source| Error::registry("watch", key, source))?;
-    let mut since = now();
-    let mut last = snapshot(system, key)?;
+    let Prepared {
+        mut watch,
+        mut since,
+        mut last,
+    } = prepared;
     let mut seen = HashSet::new();
     // Writes left for a later reading: read again at the next poll even
     // when Windows signals nothing more.

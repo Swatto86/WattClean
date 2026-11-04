@@ -75,7 +75,7 @@ pub struct WatchView {
     pub problem: Option<String>,
 }
 
-use follow::{Tracing, follow};
+use follow::{Tracing, follow, prepare};
 use log::Log;
 
 struct Watch {
@@ -307,8 +307,15 @@ impl Watcher {
         let system = Arc::clone(&self.system);
         let flag = Arc::clone(&stop);
         let tracing = Arc::clone(&self.tracing);
+        // Armed and read before this returns, so a change made as soon as a
+        // watch is started or resumed is logged: the thread may not run for
+        // a while, and Windows would signal a change it never armed for.
+        let prepared = prepare(system.as_ref(), &key);
         let thread = std::thread::spawn(move || {
-            if let Err(error) = follow(system.as_ref(), &key, &flag, &log, &tracing) {
+            let result = prepared.and_then(|prepared| {
+                follow(system.as_ref(), &key, &flag, &log, &tracing, prepared)
+            });
+            if let Err(error) = result {
                 lock(&log).problem = Some(error.to_string());
             }
         });
