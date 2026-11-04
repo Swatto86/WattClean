@@ -92,7 +92,7 @@ jobs:
       # evidence about the tag if anything landed between them.
       - name: Gate
         shell: bash
-        run: ./scripts/verify.sh
+        run: bash scripts/verify.sh
 
       # Default features only: the fake platform is test-only and verify.sh
       # asserts it is not a default feature.
